@@ -22,16 +22,20 @@ Sem esses 5, o workflow falha (build ou deploy).
 
 ---
 
-## 2. Vercel: ignorar build automático
+## 2. Vercel: não rodar build (não tem Flutter)
 
-A Vercel não tem Flutter. Se ela tentar buildar sozinha no push, dá erro. Por isso desligamos o build dela.
+A Vercel **não tem Flutter**. O build é feito no GitHub Actions; a Vercel só deve publicar os arquivos. Faça as duas coisas:
 
-1. Vercel → projeto **mapa-politico** → **Settings** → **General**.
-2. Em **Build & Development**, ache **Ignored Build Step**.
-3. Ative e no comando coloque: **`exit 0`**.
-4. Salve.
+**A) Build Command vazio**  
+1. Vercel → projeto **mapa-politico** → **Settings** → **General**.  
+2. Em **Build & Development**, em **Build Command** apague qualquer comando (flutter, npm run build, etc.) e deixe **em branco**. Salve.  
+3. **Framework Preset** pode ficar em **Other**.  
+4. **Output Directory** pode ficar em branco ou `.` (o deploy via CLI já envia a pasta pronta).
 
-Assim, push no GitHub **não** dispara build na Vercel; só a nossa Action faz o deploy.
+**B) Ignored Build Step** (quando o deploy vier do Git)  
+1. Na mesma página, em **Ignored Build Step**, ative e use: **`exit 0`**. Salve.
+
+Assim a Vercel não tenta rodar `flutter` e o site usa só o que a Action envia.
 
 ---
 

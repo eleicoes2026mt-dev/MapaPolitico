@@ -47,4 +47,5 @@ jobs:
           echo "vercel-url=${DEPLOY_URL:-https://mapa-politico.vercel.app}" >> $GITHUB_OUTPUT
 
       - name: URL em produção
-        run: echo "Site: ${{ steps.vercel.outputs.vercel-url }}"
+        run: |
+          echo "Site: ${{ steps.vercel.outputs.vercel-url }}"

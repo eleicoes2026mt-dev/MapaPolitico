@@ -1,0 +1,41 @@
+# CampanhaMT - Supabase CLI
+# Gere com: supabase init (ou use este arquivo após instalar o CLI)
+# Depois: supabase login e supabase link --project-ref mjmqadpqcatwgskywisk
+
+project_id = "mapapolitico"
+
+[api]
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54324
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000", "http://localhost:*"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[storage]
+file_size_limit = "50MiB"
+
+# Gateway não valida JWT; a própria função valida (getClaims/getUser) para evitar 401 com novos signing keys
+[functions.convidar-assessor]
+verify_jwt = false
+[functions.promover-candidato]
+verify_jwt = false

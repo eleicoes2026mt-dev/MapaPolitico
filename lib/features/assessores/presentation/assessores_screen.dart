@@ -1,0 +1,342 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../features/auth/providers/auth_provider.dart';
+import '../../../models/assessor.dart';
+import '../providers/assessores_provider.dart';
+
+class AssessoresScreen extends ConsumerStatefulWidget {
+  const AssessoresScreen({super.key});
+
+  @override
+  ConsumerState<AssessoresScreen> createState() => _AssessoresScreenState();
+}
+
+class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
+  String _query = '';
+  bool _promovendo = false;
+
+  void _openNovoAssessorDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _NovoAssessorDialog(
+        onSuccess: () {
+          ref.invalidate(assessoresListProvider);
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final profile = ref.watch(profileProvider).valueOrNull;
+    final isCandidato = profile?.isCandidato ?? false;
+    final list = ref.watch(assessoresListProvider);
+    final filtered = list.valueOrNull?.where((a) => a.nome.toLowerCase().contains(_query.toLowerCase())).toList() ?? [];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Assessores', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Text(AppConstants.ufLabel, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: const InputDecoration(
+                    hintText: 'Buscar assessor...',
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ),
+              if (isCandidato) ...[
+                const SizedBox(width: 16),
+                FilledButton.icon(
+                  onPressed: () => _openNovoAssessorDialog(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Novo Assessor'),
+                ),
+              ],
+            ],
+          ),
+          if (isCandidato)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Nível 2: convide assessores por e-mail. Eles poderão gerir dados e convidar apoiadores.',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
+          if (!isCandidato) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'O botão "Novo Assessor" só aparece para o Candidato (Nível 1 – Admin Master).',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Se você é o candidato da campanha, ative seu acesso para poder convidar assessores:',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: _promovendo
+                          ? null
+                          : () async {
+                              setState(() => _promovendo = true);
+                              try {
+                                await promoverACandidato();
+                                ref.invalidate(profileProvider);
+                                ref.invalidate(assessoresListProvider);
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Acesso Candidato ativado. Você já pode convidar assessores.')),
+                                );
+                              } catch (e) {
+                                if (!mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString())),
+                                );
+                              } finally {
+                                if (mounted) setState(() => _promovendo = false);
+                              }
+                            },
+                      icon: _promovendo ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.admin_panel_settings_outlined),
+                      label: Text(_promovendo ? 'Ativando...' : 'Sou o Candidato – Ativar acesso'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          list.when(
+            data: (_) => LayoutBuilder(
+              builder: (_, c) {
+                return Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  children: filtered.map((a) => _AssessorCard(assessor: a)).toList(),
+                );
+              },
+            ),
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Text('Erro: $e'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dialog para convidar novo assessor (nome, e-mail, telefone). Só candidato vê o botão que abre este dialog.
+class _NovoAssessorDialog extends ConsumerStatefulWidget {
+  const _NovoAssessorDialog({required this.onSuccess});
+
+  final VoidCallback onSuccess;
+
+  @override
+  ConsumerState<_NovoAssessorDialog> createState() => _NovoAssessorDialogState();
+}
+
+class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nomeController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _telefoneController = TextEditingController();
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _emailController.dispose();
+    _telefoneController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _error = null;
+      _loading = true;
+    });
+    if (!_formKey.currentState!.validate()) {
+      setState(() => _loading = false);
+      return;
+    }
+    try {
+      await convidarAssessor(
+        nome: _nomeController.text,
+        email: _emailController.text,
+        telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
+      );
+      if (!mounted) return;
+      widget.onSuccess();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Convite enviado! O assessor receberá um e-mail para definir a senha.')),
+      );
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Convidar assessor'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'O assessor receberá um e-mail para criar a senha e acessar o sistema (nível 2: gerir dados e convidar apoiadores).',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _nomeController,
+                decoration: const InputDecoration(
+                  labelText: 'Nome',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+                textCapitalization: TextCapitalization.words,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'E-mail',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Informe o e-mail';
+                  if (!v.contains('@')) return 'E-mail inválido';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _telefoneController,
+                decoration: const InputDecoration(
+                  labelText: 'Telefone (opcional)',
+                  prefixIcon: Icon(Icons.phone_outlined),
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(_error!, style: TextStyle(color: theme.colorScheme.error, fontSize: 12)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _submit,
+          child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Enviar convite'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AssessorCard extends StatelessWidget {
+  const _AssessorCard({required this.assessor});
+
+  final Assessor assessor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final width = MediaQuery.sizeOf(context).width > 700 ? 320.0 : (MediaQuery.sizeOf(context).width > 500 ? 260.0 : double.infinity);
+    return SizedBox(
+      width: width,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    child: Text(assessor.initial, style: TextStyle(color: theme.colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(assessor.nome, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Chip(
+                          label: Text(assessor.ativo ? 'ativo' : 'inativo', style: theme.textTheme.labelSmall),
+                          backgroundColor: assessor.ativo ? Colors.green.shade100 : theme.colorScheme.surfaceContainerHighest,
+                          padding: EdgeInsets.zero,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (assessor.telefone != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.phone, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Text(assessor.telefone!, style: theme.textTheme.bodySmall),
+                  ],
+                ),
+              ],
+              if (assessor.email != null) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(Icons.email, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(assessor.email!, style: theme.textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

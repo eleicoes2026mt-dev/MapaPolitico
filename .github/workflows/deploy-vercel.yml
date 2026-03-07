@@ -1,5 +1,5 @@
-# Build Flutter Web e deploy na Vercel (a Vercel não tem Flutter no servidor).
-# Em cada push na branch main: build com Flutter no GitHub e envia build/web para a Vercel.
+# Único job: build Flutter Web no GitHub e envia build/web para a Vercel.
+# A Vercel não tem Flutter; o deploy é só upload dos arquivos estáticos.
 
 name: Build e Deploy na Vercel
 
@@ -12,27 +12,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Instalar Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.1'
-          channel: 'stable'
+          channel: stable
+          flutter-version: '3.24.0'
 
-      - name: Build Flutter Web
+      - name: Build web
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
         run: |
-          flutter --version
-          flutter clean
           flutter pub get
           flutter build web --release \
             --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
 
-      - name: Copiar vercel.json para build/web
+      - name: Incluir vercel.json no build
         run: cp vercel.json build/web/
 
       - name: Deploy na Vercel
@@ -45,6 +42,5 @@ jobs:
           working-directory: build/web
           vercel-args: '--prod'
 
-      - name: URL do deploy
-        run: |
-          echo "✅ Deploy concluído. Site em produção: ${{ steps.vercel.outputs.vercel-url }}"
+      - name: URL em produção
+        run: echo "Site: ${{ steps.vercel.outputs.vercel-url }}"

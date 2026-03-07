@@ -70,3 +70,39 @@ Assim o build roda no GitHub (com Flutter) e a Vercel só recebe os arquivos est
 3. Dê um **push** na **main** ou rode o workflow em **Actions** → **Build e Deploy na Vercel** → **Run workflow**.
 
 O deploy deve concluir e o site ficar em **https://mapa-politico-....vercel.app** (ou no domínio que você configurou).
+
+---
+
+## 6. Verificar o site em produção
+
+1. **Abrir o URL do projeto**
+   - Vercel → **Dashboard** → projeto **mapa-politico** → aba **Deployments**.
+   - No último deploy com status **Ready**, clique em **Visit** (ou no domínio exibido).
+   - Ou use o domínio que você configurou (ex.: `mapa-politico.vercel.app` ou domínio customizado).
+
+2. **Checklist rápido**
+   - [ ] A página inicial carrega (tela de login ou home do CampanhaMT).
+   - [ ] Ao recarregar em uma rota (ex.: `/perfil` ou `/assessores`), não aparece 404 (graças ao `vercel.json`).
+   - [ ] Login com Supabase funciona (as variáveis `SUPABASE_URL` e `SUPABASE_ANON_KEY` foram usadas no build).
+   - [ ] Navegação entre telas e dados do Supabase respondem normalmente.
+
+Se algo falhar (ex.: tela em branco ou erro de rede), confira no navegador **F12 → Console** e, na Vercel, **Deployments → último deploy → Function Logs / Build Logs** (se aplicável).
+
+---
+
+## 7. Nenhum deploy com status "Ready"
+
+Se na Vercel todos os deploys aparecem como **Error** ou **Canceled**:
+
+1. **Quem realmente publica o site é a GitHub Action**  
+   O deploy que sobe o `build/web` é o passo **"Deploy na Vercel"** da Action. A URL de produção sai no log da Action, no passo **"URL do deploy"** (ex.: `https://mapa-politico-xxx.vercel.app`). Use essa URL para abrir o site, mesmo que no dashboard não apareça um deploy "Ready".
+
+2. **Confirme o Ignored Build Step**  
+   Vercel → **mapa-politico** → **Settings** → **General** → **Ignored Build Step** = **`exit 0`**.  
+   Assim o push no Git não dispara um build na Vercel (que falharia em 4s sem Flutter). Os deploys "Error" em 4s costumam ser esse build automático falhando.
+
+3. **Confirme os secrets do projeto certo**  
+   **VERCEL_ORG_ID** e **VERCEL_PROJECT_ID** no GitHub devem ser do projeto **mapa-politico** onde você quer o site (Settings → General do projeto e do time). Se forem de outro projeto, o site vai para o lugar errado e o mapa-politico pode nunca ficar "Ready".
+
+4. **Rode a Action de novo e pegue a URL**  
+   GitHub → **Actions** → **Build e Deploy na Vercel** → **Run workflow** → espere terminar → abra a run → no passo **"URL do deploy"** aparece o link de produção. Abra esse link para testar o site.

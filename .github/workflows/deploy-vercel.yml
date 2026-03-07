@@ -32,6 +32,7 @@ jobs:
         run: cp vercel.json build/web/
 
       - name: Deploy na Vercel
+        id: vercel
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -39,3 +40,7 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           working-directory: build/web
           vercel-args: '--prod'
+
+      - name: URL do deploy
+        run: |
+          echo "✅ Deploy concluído. Site em produção: ${{ steps.vercel.outputs.vercel-url }}"

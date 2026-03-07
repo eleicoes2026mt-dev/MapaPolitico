@@ -57,7 +57,7 @@ class DadosTseScreen extends ConsumerWidget {
           Center(
             child: Column(
               children: [
-                Icon(Icons.bar_chart, size: 80, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+                Icon(Icons.bar_chart, size: 80, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.4)),
                 const SizedBox(height: 16),
                 Text('Nenhum dado TSE importado', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),

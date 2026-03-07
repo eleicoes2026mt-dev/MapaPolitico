@@ -97,7 +97,7 @@ class _Cards extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: e.color.withValues(alpha: 0.2),
+                        color: e.color.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(e.icon, color: e.color, size: 28),

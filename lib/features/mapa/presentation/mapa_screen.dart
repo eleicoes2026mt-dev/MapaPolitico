@@ -29,7 +29,7 @@ class MapaScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.map, size: 80, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                    Icon(Icons.map, size: 80, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5)),
                     const SizedBox(height: 16),
                     Text('Mapa interativo MT com 5 Polos (Google Maps)', style: theme.textTheme.titleMedium),
                     Text('Configure Google Maps API para exibir heatmap e bolhas por performance.', style: theme.textTheme.bodySmall),

@@ -40,7 +40,7 @@ class MensagensScreen extends ConsumerWidget {
           Center(
             child: Column(
               children: [
-                Icon(Icons.send, size: 64, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                Icon(Icons.send, size: 64, color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5)),
                 const SizedBox(height: 16),
                 Text('Nenhuma mensagem', style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),

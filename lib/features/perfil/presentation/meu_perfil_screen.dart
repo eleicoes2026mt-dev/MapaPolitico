@@ -259,7 +259,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5),
+                            .withOpacity(0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -279,7 +279,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String?>(
-                      initialValue: _cargo ?? profile?.cargo,
+                      value: _cargo ?? profile?.cargo,
                       decoration: const InputDecoration(
                         labelText: 'Cargo',
                         prefixIcon: Icon(Icons.work_outline),
@@ -316,7 +316,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5),
+                            .withOpacity(0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(

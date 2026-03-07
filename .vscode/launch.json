@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CampanhaMT (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--web-port=8080"]
+    },
+    {
+      "name": "CampanhaMT (Web Server)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "web-server", "--web-port=8080"]
+    }
+  ]
+}

@@ -36,14 +36,15 @@ jobs:
 
       - name: Deploy na Vercel
         id: vercel
-        uses: amondnet/vercel-action@v25.2.0
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: build/web
-          vercel-args: '--prod'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          cd build/web
+          npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy.log
+          DEPLOY_URL=$(grep -oE 'https://[^[:space:]]+\.vercel\.app' deploy.log | tail -1)
+          echo "vercel-url=${DEPLOY_URL:-https://mapa-politico.vercel.app}" >> $GITHUB_OUTPUT
 
       - name: URL em produção
-        run: |
-          echo "Site: ${{ steps.vercel.outputs.vercel-url }}"
+        run: echo "Site: ${{ steps.vercel.outputs.vercel-url }}"

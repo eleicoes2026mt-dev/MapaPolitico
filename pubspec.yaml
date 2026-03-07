@@ -22,7 +22,7 @@ dependencies:
   go_router: ^13.0.0
 
   # UI e utilitários
-  intl: ^0.19.0
+  intl: ^0.20.2
   flutter_local_notifications: ^17.0.0
   url_launcher: ^6.2.4
   qr_flutter: ^4.1.0

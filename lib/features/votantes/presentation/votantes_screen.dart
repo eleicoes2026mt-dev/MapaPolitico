@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/votante.dart';
 import '../providers/votantes_provider.dart';
 
@@ -34,7 +34,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Votantes', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              Text(AppConstants.ufLabel, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const EstadoMTBadge(compact: true),
             ],
           ),
           const SizedBox(height: 16),

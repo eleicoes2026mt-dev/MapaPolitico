@@ -15,4 +15,10 @@ class EnvConfig {
     defaultValue:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qbXFhZHBxY2F0d2dza3l3aXNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNDI4NDMsImV4cCI6MjA4NzgxODg0M30.0YTch1mkk0Ik_GVvE5oPKMxdYb6zRzBPcLnj_O-Uv2M',
   );
+
+  /// Chave da API Google Maps (Web: configurar também no web/index.html).
+  static const String googleMapsApiKey = String.fromEnvironment(
+    'GOOGLE_MAPS_API_KEY',
+    defaultValue: '',
+  );
 }

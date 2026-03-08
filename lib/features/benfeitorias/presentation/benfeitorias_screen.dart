@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/benfeitoria.dart';
 import '../providers/benfeitorias_provider.dart';
 
@@ -33,7 +33,7 @@ class _BenfeitoriasScreenState extends ConsumerState<BenfeitoriasScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Benfeitorias', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              Text(AppConstants.ufLabel, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const EstadoMTBadge(compact: true),
             ],
           ),
           const SizedBox(height: 16),

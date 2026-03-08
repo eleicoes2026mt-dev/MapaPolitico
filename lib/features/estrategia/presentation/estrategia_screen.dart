@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/estado_mt_badge.dart';
 import 'tabs/performance_tab.dart';
 import 'tabs/mapa_regional_tab.dart';
 import 'tabs/metas_tab.dart';
@@ -41,7 +41,7 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Estratégia', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              Text(AppConstants.ufLabel, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const EstadoMTBadge(compact: true),
             ],
           ),
           const SizedBox(height: 24),

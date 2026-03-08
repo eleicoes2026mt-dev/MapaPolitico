@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
 import '../providers/assessores_provider.dart';
@@ -44,7 +44,7 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Assessores', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              Text(AppConstants.ufLabel, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const EstadoMTBadge(compact: true),
             ],
           ),
           const SizedBox(height: 16),
@@ -99,18 +99,19 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
                       onPressed: _promovendo
                           ? null
                           : () async {
+                              final messenger = ScaffoldMessenger.of(context);
                               setState(() => _promovendo = true);
                               try {
                                 await promoverACandidato();
                                 ref.invalidate(profileProvider);
                                 ref.invalidate(assessoresListProvider);
                                 if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   const SnackBar(content: Text('Acesso Candidato ativado. Você já pode convidar assessores.')),
                                 );
                               } catch (e) {
                                 if (!mounted) return;
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   SnackBar(content: Text(e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString())),
                                 );
                               } finally {

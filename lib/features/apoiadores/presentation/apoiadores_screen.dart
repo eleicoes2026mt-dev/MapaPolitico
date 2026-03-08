@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/apoiador.dart';
 import '../providers/apoiadores_provider.dart';
+
+const _perfisOpcoes = ['Prefeitural', 'Vereador(a)', 'Líder Religional', 'Empresarial'];
 
 class ApoiadoresScreen extends ConsumerStatefulWidget {
   const ApoiadoresScreen({super.key});
@@ -14,6 +16,15 @@ class ApoiadoresScreen extends ConsumerStatefulWidget {
 class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
   String _query = '';
   String _perfilFilter = 'Todos os Perfis';
+
+  Future<void> _abrirNovoApoiador() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _NovoApoiadorDialog(
+        onCreate: () => Navigator.of(ctx).pop(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +47,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Apoiadores', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              Text(AppConstants.ufLabel, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const EstadoMTBadge(compact: true),
             ],
           ),
           const SizedBox(height: 16),
@@ -51,11 +62,15 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
               const SizedBox(width: 12),
               DropdownButton<String>(
                 value: _perfilFilter,
-                items: ['Todos os Perfis', 'Prefeitural', 'Vereador(a)', 'Líder Religional', 'Empresarial'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                items: ['Todos os Perfis', ..._perfisOpcoes].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
                 onChanged: (v) => setState(() => _perfilFilter = v ?? 'Todos os Perfis'),
               ),
               const SizedBox(width: 12),
-              FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.add), label: const Text('Novo Apoiador')),
+              FilledButton.icon(
+                onPressed: _abrirNovoApoiador,
+                icon: const Icon(Icons.add),
+                label: const Text('Novo Apoiador'),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -74,6 +89,142 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _NovoApoiadorDialog extends ConsumerStatefulWidget {
+  const _NovoApoiadorDialog({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  ConsumerState<_NovoApoiadorDialog> createState() => _NovoApoiadorDialogState();
+}
+
+class _NovoApoiadorDialogState extends ConsumerState<_NovoApoiadorDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _nomeController = TextEditingController();
+  final _telefoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _estimativaController = TextEditingController(text: '0');
+  String _tipo = 'PF';
+  String? _perfil;
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nomeController.dispose();
+    _telefoneController.dispose();
+    _emailController.dispose();
+    _estimativaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _salvar() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final criar = ref.read(criarApoiadorProvider);
+      await criar(NovoApoiadorParams(
+        nome: _nomeController.text,
+        tipo: _tipo,
+        perfil: _perfil,
+        telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
+        email: _emailController.text.isEmpty ? null : _emailController.text,
+        estimativaVotos: int.tryParse(_estimativaController.text) ?? 0,
+      ));
+      widget.onCreate();
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return AlertDialog(
+      title: const Text('Novo Apoiador'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: _nomeController,
+                decoration: const InputDecoration(
+                  labelText: 'Nome *',
+                  hintText: 'Nome completo ou razão social',
+                ),
+                textCapitalization: TextCapitalization.words,
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _tipo,
+                decoration: const InputDecoration(labelText: 'Tipo'),
+                items: const [
+                  DropdownMenuItem(value: 'PF', child: Text('Pessoa Física')),
+                  DropdownMenuItem(value: 'PJ', child: Text('Pessoa Jurídica')),
+                ],
+                onChanged: (v) => setState(() => _tipo = v ?? 'PF'),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String?>(
+                value: _perfil,
+                decoration: const InputDecoration(labelText: 'Perfil (opcional)'),
+                items: [const DropdownMenuItem<String?>(value: null, child: Text('Nenhum')), ..._perfisOpcoes.map((s) => DropdownMenuItem<String?>(value: s, child: Text(s)))],
+                onChanged: (v) => setState(() => _perfil = v),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _telefoneController,
+                decoration: const InputDecoration(labelText: 'Telefone (opcional)', hintText: '(65) 99999-9999'),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(labelText: 'E-mail (opcional)'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _estimativaController,
+                decoration: const InputDecoration(labelText: 'Votos estimados'),
+                keyboardType: TextInputType.number,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _salvar,
+          child: _loading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Cadastrar'),
+        ),
+      ],
     );
   }
 }

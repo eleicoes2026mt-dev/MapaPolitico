@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/estado_mt_badge.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../providers/perfil_provider.dart';
 
 /// Cargos (dropdown) conforme solicitado.
@@ -133,8 +134,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
     return profileAsync.when(
       data: (profile) {
         if (currentUser == null) {
-          return const Center(
-              child: Text('Faça login para editar seu perfil.'));
+          return const Center(child: Text('Faça login para editar seu perfil.'));
         }
         final email = profile?.email ?? currentUser.email ?? '';
         final role = profile?.role ?? 'votante';
@@ -150,12 +150,15 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
             _phoneController.text = profile?.phone ?? '';
             _partidoController.text = profile?.partido ?? '';
             _numeroController.text = profile?.numeroCandidato ?? '';
-            if (_cargo == null && profile?.cargo != null)
+            if (_cargo == null && profile?.cargo != null) {
               setState(() => _cargo = profile?.cargo);
-            if (_dataNascimento == null && profile?.dataNascimento != null)
+            }
+            if (_dataNascimento == null && profile?.dataNascimento != null) {
               setState(() => _dataNascimento = profile?.dataNascimento);
-            if (_avatarUrl == null && profile?.avatarUrl != null)
+            }
+            if (_avatarUrl == null && profile?.avatarUrl != null) {
               setState(() => _avatarUrl = profile?.avatarUrl);
+            }
           });
         }
         return SingleChildScrollView(
@@ -172,12 +175,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(
-                    AppConstants.ufLabel,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+                  const EstadoMTBadge(compact: true),
                 ],
               ),
               const SizedBox(height: 8),
@@ -252,31 +250,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       textCapitalization: TextCapitalization.characters,
                     ),
                     const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerHighest
-                            .withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.location_on_outlined,
-                            size: 20,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Estado: ${AppConstants.ufLabel}',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
+                    const EstadoMTBadge(),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String?>(
                       value: _cargo ?? profile?.cargo,
@@ -307,6 +281,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                         keyboardType: TextInputType.number,
                         maxLength: 5,
                       ),
+                      const SizedBox(height: 16),
+                      _NmVotavelTseField(),
                     ],
                     const SizedBox(height: 16),
                     Container(
@@ -316,7 +292,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.surfaceContainerHighest
-                            .withOpacity(0.5),
+                            .withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -495,6 +471,44 @@ class _ImagemPerfilField extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _NmVotavelTseField extends ConsumerWidget {
+  const _NmVotavelTseField();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final opcoes = ref.watch(tseDistinctNmVotavelProvider);
+    final selected = ref.watch(tseNmVotavelSelectedProvider);
+
+    return opcoes.when(
+      data: (list) {
+        if (list.isEmpty) {
+          return Text(
+            'Importe um CSV em Dados TSE para selecionar seu nome na coluna NM_VOTAVEL.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          );
+        }
+        final current = selected.valueOrNull;
+        return DropdownButtonFormField<String?>(
+          value: list.contains(current) ? current : null,
+          decoration: const InputDecoration(
+            labelText: 'Meu nome no arquivo TSE (NM_VOTAVEL)',
+            hintText: 'Selecione como seu nome aparece no CSV',
+            prefixIcon: Icon(Icons.badge_outlined),
+          ),
+          items: [
+            const DropdownMenuItem<String?>(value: null, child: Text('Não selecionado')),
+            ...list.map((s) => DropdownMenuItem<String?>(value: s, child: Text(s, overflow: TextOverflow.ellipsis))),
+          ],
+          onChanged: (v) => ref.read(tseNmVotavelSelectedProvider.notifier).setSelected(v),
+        );
+      },
+      loading: () => const SizedBox(height: 56, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/widgets/estado_mt_badge.dart';
 import '../providers/dashboard_provider.dart';
+
+/// Breakpoints para responsividade
+class _Breakpoint {
+  static const double mobile = 600;
+  static const double tablet = 900;
+}
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -11,52 +17,37 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(dashboardStatsProvider);
     final theme = Theme.of(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final padding = width < _Breakpoint.mobile ? 16.0 : 24.0;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Dashboard', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              Text(AppConstants.ufLabel, style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ],
-          ),
-          const SizedBox(height: 24),
+          _Header(padding: padding),
+          SizedBox(height: padding),
           stats.when(
-            data: (s) => _Cards(stats: s),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Erro: $e'),
-          ),
-          const SizedBox(height: 24),
-          stats.when(
-            data: (s) => Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: _VotosPorCidadeChart(items: s.votosPorCidade),
-                ),
-                const SizedBox(width: 24),
-                Expanded(child: _AniversariantesHoje(count: s.aniversariantesHoje)),
-              ],
+            data: (s) => _StatsCards(stats: s),
+            loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
+            error: (e, _) => Padding(
+              padding: EdgeInsets.all(padding),
+              child: Text('Erro ao carregar: $e', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)),
             ),
+          ),
+          SizedBox(height: padding),
+          stats.when(
+            data: (s) => _MiddleSection(votosPorCidade: s.votosPorCidade, aniversariantesHoje: s.aniversariantesHoje),
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: padding),
           stats.when(
-            data: (s) => Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: _ApoiadoresPorPerfilChart(items: s.apoiadoresPorPerfil)),
-                const SizedBox(width: 24),
-                Expanded(child: _BenfeitoriasCard(total: s.totalBenfeitorias, count: s.benfeitoriasCount)),
-                const SizedBox(width: 24),
-                Expanded(child: _MensagensCard(count: s.mensagensCount)),
-              ],
+            data: (s) => _BottomSection(
+              apoiadoresPorPerfil: s.apoiadoresPorPerfil,
+              totalBenfeitorias: s.totalBenfeitorias,
+              benfeitoriasCount: s.benfeitoriasCount,
+              mensagensCount: s.mensagensCount,
             ),
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
@@ -67,49 +58,66 @@ class DashboardScreen extends ConsumerWidget {
   }
 }
 
-class _Cards extends StatelessWidget {
-  const _Cards({required this.stats});
+class _Header extends StatelessWidget {
+  const _Header({required this.padding});
+
+  final double padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final isCompact = width < _Breakpoint.mobile;
+
+    return Padding(
+      padding: EdgeInsets.only(top: isCompact ? 8 : 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Text(
+              'Dashboard',
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const EstadoMTBadge(compact: true),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatsCards extends StatelessWidget {
+  const _StatsCards({required this.stats});
 
   final DashboardStats stats;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final crossCount = width > _Breakpoint.tablet ? 4 : (width > _Breakpoint.mobile ? 2 : 1);
+    final spacing = width < _Breakpoint.mobile ? 12.0 : 16.0;
+
     final cards = [
       _CardData('Assessores', stats.assessores, Icons.people, const Color(0xFF1565C0)),
       _CardData('Apoiadores', stats.apoiadores, Icons.person_add, const Color(0xFF7B1FA2)),
       _CardData('Votantes', stats.votantes, Icons.checklist, const Color(0xFF2E7D32)),
       _CardData('Est. Votos', stats.estimativaVotos, Icons.show_chart, const Color(0xFFE65100)),
     ];
+
     return LayoutBuilder(
-      builder: (_, c) {
-        final crossCount = c.maxWidth > 900 ? 4 : (c.maxWidth > 600 ? 2 : 1);
+      builder: (_, constraints) {
+        final cardWidth = crossCount == 1
+            ? constraints.maxWidth
+            : (constraints.maxWidth - spacing * (crossCount - 1)) / crossCount;
         return Wrap(
-          spacing: 16,
-          runSpacing: 16,
+          spacing: spacing,
+          runSpacing: spacing,
           children: cards.map((e) => SizedBox(
-            width: crossCount == 1 ? double.infinity : (c.maxWidth / crossCount - 16 * (crossCount - 1) / crossCount).clamp(120.0, 280.0),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: e.color.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(e.icon, color: e.color, size: 28),
-                    ),
-                    const SizedBox(width: 16),
-                    Text('${e.value}', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    Flexible(child: Text(e.label, style: theme.textTheme.bodyMedium)),
-                  ],
-                ),
-              ),
-            ),
+            width: cardWidth,
+            child: _StatCard(data: e),
           )).toList(),
         );
       },
@@ -125,6 +133,96 @@ class _CardData {
   final Color color;
 }
 
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.data});
+
+  final _CardData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isCompact = MediaQuery.sizeOf(context).width < _Breakpoint.mobile;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(isCompact ? 16 : 20),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: data.color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(data.icon, color: data.color, size: isCompact ? 24 : 28),
+            ),
+            SizedBox(width: isCompact ? 12 : 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${data.value}',
+                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    data.label,
+                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiddleSection extends StatelessWidget {
+  const _MiddleSection({
+    required this.votosPorCidade,
+    required this.aniversariantesHoje,
+  });
+
+  final List<MapEntry<String, int>> votosPorCidade;
+  final int aniversariantesHoje;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isColumn = width < _Breakpoint.tablet;
+    const spacing = 24.0;
+
+    final chart = _VotosPorCidadeChart(items: votosPorCidade);
+    final aniv = _AniversariantesHoje(count: aniversariantesHoje);
+
+    if (isColumn) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          chart,
+          const SizedBox(height: spacing),
+          aniv,
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 2, child: chart),
+        const SizedBox(width: spacing),
+        Expanded(child: aniv),
+      ],
+    );
+  }
+}
+
 class _VotosPorCidadeChart extends StatelessWidget {
   const _VotosPorCidadeChart({required this.items});
 
@@ -133,51 +231,126 @@ class _VotosPorCidadeChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bars = items.take(8).map((e) => FlSpot(items.indexOf(e).toDouble(), e.value.toDouble())).toList();
+    final isCompact = MediaQuery.sizeOf(context).width < _Breakpoint.mobile;
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompact ? 16 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Votos por Cidade (Top 8)', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'Votos por Cidade (Top 8)',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 220,
-              child: BarChart(
-                BarChartData(
-                  alignment: BarChartAlignment.spaceAround,
-                  maxY: (items.isEmpty ? 1 : items.map((e) => e.value).reduce((a, b) => a > b ? a : b).toDouble()) * 1.1,
-                  barTouchData: BarTouchData(enabled: false),
-                  titlesData: FlTitlesData(
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32)),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        getTitlesWidget: (v, _) => Text(
-                          v.toInt() < items.length ? items[v.toInt()].key : '',
-                          style: theme.textTheme.labelSmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+            if (items.isEmpty)
+              _EmptyChartPlaceholder(
+                message: 'Nenhum voto por cidade ainda.',
+                height: 200,
+              )
+            else
+              SizedBox(
+                height: isCompact ? 180 : 220,
+                child: BarChart(
+                  BarChartData(
+                    alignment: BarChartAlignment.spaceAround,
+                    maxY: (items.map((e) => e.value).reduce((a, b) => a > b ? a : b).toDouble()) * 1.1,
+                    barTouchData: BarTouchData(enabled: false),
+                    titlesData: FlTitlesData(
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: isCompact ? 28 : 36,
+                          getTitlesWidget: (v, meta) => Text(
+                            v.toInt().toString(),
+                            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          ),
                         ),
-                        reservedSize: 28,
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (v, _) => Text(
+                            v.toInt() < items.length ? items[v.toInt()].key : '',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: isCompact ? 10 : 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                          reservedSize: isCompact ? 36 : 44,
+                        ),
+                      ),
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    ),
+                    gridData: FlGridData(
+                      show: true,
+                      getDrawingHorizontalLine: (v) => FlLine(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        strokeWidth: 1,
+                      ),
+                      drawVerticalLine: false,
+                    ),
+                    borderData: FlBorderData(show: false),
+                    barGroups: List.generate(
+                      items.length,
+                      (i) => BarChartGroupData(
+                        x: i,
+                        barRods: [
+                          BarChartRodData(
+                            toY: items[i].value.toDouble(),
+                            color: theme.colorScheme.primary,
+                            width: isCompact ? 12 : 16,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          ),
+                        ],
+                        showingTooltipIndicators: [0],
                       ),
                     ),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
-                  gridData: const FlGridData(show: true),
-                  borderData: FlBorderData(show: false),
-                  barGroups: List.generate(bars.length, (i) => BarChartGroupData(
-                    x: i,
-                    barRods: [BarChartRodData(toY: bars[i].y, color: theme.colorScheme.primary, width: 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(4)))],
-                    showingTooltipIndicators: [0],
-                  )),
                 ),
               ),
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EmptyChartPlaceholder extends StatelessWidget {
+  const _EmptyChartPlaceholder({required this.message, required this.height});
+
+  final String message;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      height: height,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.bar_chart_outlined, size: 48, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
@@ -191,17 +364,27 @@ class _AniversariantesHoje extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isCompact = MediaQuery.sizeOf(context).width < _Breakpoint.mobile;
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompact ? 16 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.cake, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('Aniversariantes Hoje', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Icon(Icons.cake_outlined, color: theme.colorScheme.primary, size: isCompact ? 20 : 24),
+                SizedBox(width: isCompact ? 8 : 12),
+                Flexible(
+                  child: Text(
+                    'Aniversariantes Hoje',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -216,6 +399,68 @@ class _AniversariantesHoje extends StatelessWidget {
   }
 }
 
+class _BottomSection extends StatelessWidget {
+  const _BottomSection({
+    required this.apoiadoresPorPerfil,
+    required this.totalBenfeitorias,
+    required this.benfeitoriasCount,
+    required this.mensagensCount,
+  });
+
+  final List<MapEntry<String, int>> apoiadoresPorPerfil;
+  final double totalBenfeitorias;
+  final int benfeitoriasCount;
+  final int mensagensCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final spacing = width < _Breakpoint.mobile ? 12.0 : 24.0;
+
+    if (width < _Breakpoint.mobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ApoiadoresPorPerfilChart(items: apoiadoresPorPerfil),
+          SizedBox(height: spacing),
+          _BenfeitoriasCard(total: totalBenfeitorias, count: benfeitoriasCount),
+          SizedBox(height: spacing),
+          _MensagensCard(count: mensagensCount),
+        ],
+      );
+    }
+
+    if (width < _Breakpoint.tablet) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _ApoiadoresPorPerfilChart(items: apoiadoresPorPerfil)),
+              SizedBox(width: spacing),
+              Expanded(child: _BenfeitoriasCard(total: totalBenfeitorias, count: benfeitoriasCount)),
+            ],
+          ),
+          SizedBox(height: spacing),
+          _MensagensCard(count: mensagensCount),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _ApoiadoresPorPerfilChart(items: apoiadoresPorPerfil)),
+        SizedBox(width: spacing),
+        Expanded(child: _BenfeitoriasCard(total: totalBenfeitorias, count: benfeitoriasCount)),
+        SizedBox(width: spacing),
+        Expanded(child: _MensagensCard(count: mensagensCount)),
+      ],
+    );
+  }
+}
+
 class _ApoiadoresPorPerfilChart extends StatelessWidget {
   const _ApoiadoresPorPerfilChart({required this.items});
 
@@ -225,42 +470,72 @@ class _ApoiadoresPorPerfilChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final total = items.fold<int>(0, (a, e) => a + e.value);
+    final isCompact = MediaQuery.sizeOf(context).width < _Breakpoint.mobile;
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompact ? 16 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Apoiadores por Perfil', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'Apoiadores por Perfil',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
             const SizedBox(height: 16),
             if (total == 0)
-              Text('Nenhum dado', style: theme.textTheme.bodySmall)
+              _EmptyChartPlaceholder(
+                message: 'Nenhum dado de apoiadores ainda.',
+                height: 140,
+              )
             else
               SizedBox(
-                height: 160,
+                height: isCompact ? 140 : 160,
                 child: PieChart(
                   PieChartData(
                     sectionsSpace: 2,
-                    centerSpaceRadius: 40,
+                    centerSpaceRadius: isCompact ? 32 : 40,
                     sections: [
-                      PieChartSectionData(value: 1, color: theme.colorScheme.primary, showTitle: false),
-                      PieChartSectionData(value: 1, color: theme.colorScheme.secondary, showTitle: false),
-                      PieChartSectionData(value: 1, color: Colors.orange, showTitle: false),
-                      PieChartSectionData(value: 1, color: Colors.purple, showTitle: false),
-                    ].asMap().entries.take(items.length).map((e) {
-                      final i = e.key;
-                      final v = items[i].value.toDouble();
-                      final colors = [theme.colorScheme.primary, theme.colorScheme.secondary, Colors.orange, Colors.purple];
-                      return PieChartSectionData(
-                        value: v,
-                        color: colors[i % colors.length],
-                        title: '${items[i].key} (${items[i].value})',
-                        titleStyle: theme.textTheme.labelSmall!,
-                      );
-                    }).toList(),
+                      for (var i = 0; i < items.length; i++)
+                        PieChartSectionData(
+                          value: items[i].value.toDouble(),
+                          color: [theme.colorScheme.primary, theme.colorScheme.secondary, Colors.orange, Colors.deepPurple][i % 4],
+                          title: '${items[i].value}',
+                          titleStyle: theme.textTheme.labelSmall!.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                          radius: 24,
+                        ),
+                    ],
                   ),
                 ),
               ),
+            if (total > 0) ...[
+              const SizedBox(height: 8),
+              ...items.map((e) => Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: [theme.colorScheme.primary, theme.colorScheme.secondary, Colors.orange, Colors.deepPurple][items.indexOf(e) % 4],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${e.key}: ${e.value}',
+                        style: theme.textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+            ],
           ],
         ),
       ),
@@ -277,24 +552,38 @@ class _BenfeitoriasCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isCompact = MediaQuery.sizeOf(context).width < _Breakpoint.mobile;
     final formatted = 'R\$ ${total.toStringAsFixed(2).replaceFirst('.', ',')}';
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompact ? 16 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.favorite, color: Colors.green.shade700),
-                const SizedBox(width: 8),
-                Text('Benfeitorias', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Icon(Icons.favorite_border, color: Colors.green.shade700, size: isCompact ? 20 : 24),
+                SizedBox(width: isCompact ? 8 : 12),
+                Text(
+                  'Benfeitorias',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(formatted, style: theme.textTheme.titleLarge?.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.bold)),
-            Text('$count registros no total', style: theme.textTheme.bodySmall),
-            TextButton(onPressed: () {}, child: const Text('Ver todas →')),
+            Text(
+              formatted,
+              style: theme.textTheme.titleLarge?.copyWith(color: Colors.green.shade700, fontWeight: FontWeight.bold),
+            ),
+            Text('$count registros no total', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            TextButton(
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32)),
+              onPressed: () {},
+              child: const Text('Ver todas →'),
+            ),
           ],
         ),
       ),
@@ -310,22 +599,39 @@ class _MensagensCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isCompact = MediaQuery.sizeOf(context).width < _Breakpoint.mobile;
+
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isCompact ? 16 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('Mensagens Recentes', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Icon(Icons.chat_bubble_outline, color: theme.colorScheme.primary, size: isCompact ? 20 : 24),
+                SizedBox(width: isCompact ? 8 : 12),
+                Flexible(
+                  child: Text(
+                    'Mensagens Recentes',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(count == 0 ? 'Nenhuma mensagem' : '$count mensagem(ns)', style: theme.textTheme.bodyMedium),
-            TextButton(onPressed: () {}, child: const Text('Ver todas →')),
+            Text(
+              count == 0 ? 'Nenhuma mensagem' : '$count mensagem(ns)',
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 32)),
+              onPressed: () {},
+              child: const Text('Ver todas →'),
+            ),
           ],
         ),
       ),

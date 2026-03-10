@@ -61,71 +61,97 @@ class _Sidebar extends StatelessWidget {
     final loc = GoRouterState.of(context).uri.path;
     final theme = Theme.of(context);
 
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isDrawer = screenWidth < 800;
+    final sidebarWidth = isDrawer ? (screenWidth * 0.85).clamp(240.0, 260.0) : 260.0;
+
     return Container(
-      width: 260,
+      width: sidebarWidth,
       color: theme.colorScheme.surfaceContainerHighest,
-      child: Column(
-        children: [
-          const SizedBox(height: 24),
-          Icon(Icons.how_to_vote, size: 48, color: theme.colorScheme.primary),
-          const SizedBox(height: 8),
-          Text(
-            AppConstants.appName,
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          Text(
-            AppConstants.appSubtitle,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (profile != null) ...[
-            const SizedBox(height: 16),
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 24),
+            Icon(Icons.how_to_vote, size: 48, color: theme.colorScheme.primary),
+            const SizedBox(height: 8),
             Text(
-              profile.fullName ?? profile.email ?? 'Usuário',
-              style: theme.textTheme.bodyMedium,
-              overflow: TextOverflow.ellipsis,
+              AppConstants.appName,
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
             ),
-            Text(
-              (profile.role as String?)?.toUpperCase() ?? 'USER',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (profile.cargo != null && profile.cargo!.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(
-                profile.cargo!,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                AppConstants.appSubtitle,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w500,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),
+            ),
+            if (profile != null) ...[
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  children: [
+                    Text(
+                      profile.fullName ?? profile.email ?? 'Usuário',
+                      style: theme.textTheme.bodyMedium,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                    Text(
+                      (profile.role as String?)?.toUpperCase() ?? 'USER',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    if (profile.cargo != null && profile.cargo!.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        profile.cargo!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ],
+            const SizedBox(height: 24),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    ..._items.map((e) {
+                      final selected = loc == e.path || (e.path == '/' && loc == '/');
+                      return ListTile(
+                        leading: Icon(e.icon, size: 22),
+                        title: Text(e.title, overflow: TextOverflow.ellipsis),
+                        selected: selected,
+                        onTap: () => context.go(e.path),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Sair'),
+              onTap: () {
+                onSignOut();
+                context.go('/login');
+              },
+            ),
+            const SizedBox(height: 16),
           ],
-          const SizedBox(height: 24),
-          ..._items.map((e) {
-            final selected = loc == e.path || (e.path == '/' && loc == '/');
-            return ListTile(
-              leading: Icon(e.icon, size: 22),
-              title: Text(e.title),
-              selected: selected,
-              onTap: () => context.go(e.path),
-            );
-          }),
-          const Spacer(),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Sair'),
-            onTap: () {
-              onSignOut();
-              context.go('/login');
-            },
-          ),
-          const SizedBox(height: 16),
-        ],
+        ),
       ),
     );
   }

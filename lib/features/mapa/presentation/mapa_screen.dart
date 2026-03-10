@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
+import '../../estrategia/providers/regioes_fundidas_provider.dart';
 import 'widgets/mapa_regional_widget.dart';
 
 class MapaScreen extends ConsumerWidget {
@@ -11,28 +12,37 @@ class MapaScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final votosPorMunicipio = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
+    final regioesFundidas = ref.watch(regioesFundidasParaMapaProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final height = MediaQuery.sizeOf(context).height;
+    final padding = width < 600 ? 16.0 : 24.0;
+    final mapHeight = (height * 0.5).clamp(320.0, 560.0);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Mapa Regional',
-                style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              Flexible(
+                child: Text(
+                  'Mapa Regional',
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const EstadoMTBadge(compact: true),
             ],
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: padding),
           Card(
             clipBehavior: Clip.antiAlias,
             child: MapaRegionalWidget(
-              height: 480,
+              height: mapHeight,
               votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
+              regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,
             ),
           ),
           const SizedBox(height: 12),

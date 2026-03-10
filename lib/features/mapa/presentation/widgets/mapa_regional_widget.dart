@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../../../core/constants/regioes_fundidas.dart';
 import '../../data/geo_loader.dart';
 import '../../data/mt_municipios_coords.dart';
 
@@ -27,12 +28,16 @@ class MapaRegionalWidget extends StatefulWidget {
   const MapaRegionalWidget({
     super.key,
     this.height = 400,
-    /// Votos por município (NM_MUNICIPIO -> QT_VOTOS) para exibir marcadores no mapa.
     this.votosPorMunicipio,
+    this.regioesFundidas,
+    /// Se retornar true, o diálogo de editar nome não será aberto (ex.: Ctrl+clique para seleção).
+    this.onRegionTap,
   });
 
   final double height;
   final Map<String, int>? votosPorMunicipio;
+  final List<RegiaoFundida>? regioesFundidas;
+  final bool Function(String id, String nome, String? cdRgint)? onRegionTap;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();
@@ -74,12 +79,12 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     return true;
   }
 
-  (String id, String nome)? _findRegionAt(LatLng p) {
+  (String id, String nome, String? cdRgint)? _findRegionAt(LatLng p) {
     final list = _regioesMTList;
     if (list == null) return null;
     for (final regiao in list) {
       for (final geo in regiao.polygons) {
-        if (_pointInGeoPolygon(p, geo)) return (regiao.id, regiao.nome);
+        if (_pointInGeoPolygon(p, geo)) return (regiao.id, regiao.nome, regiao.cdRgint);
       }
     }
     return null;
@@ -87,6 +92,14 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
 
   String _displayName(String id, String originalNome) =>
       _customRegionNames[id] ?? originalNome;
+
+  String _nomeParaTooltip(String id, String originalNome, String? cdRgint) {
+    final fundidas = widget.regioesFundidas;
+    if (fundidas != null && fundidas.isNotEmpty && cdRgint != null) {
+      return nomeRegiaoPorCdRgint(cdRgint, fundidas);
+    }
+    return _displayName(id, originalNome);
+  }
 
   /// Polos + marcadores de cidades com votos TSE (quando votosPorMunicipio fornecido).
   Set<Marker> get _allMarkers {
@@ -273,6 +286,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
             consumeTapEvents: true,
             onTap: () {
               if (!mounted) return;
+              if (widget.onRegionTap != null && widget.onRegionTap!(regionId, nomeOriginal, regiao.cdRgint)) return;
               _showEditRegionNameDialog(context, regionId, nomeOriginal);
             },
           ),
@@ -305,7 +319,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
             setState(() {
               if (found != null) {
                 _hoveredRegionId = found.$1;
-                _hoveredRegionName = found.$2;
+                _hoveredRegionName = _nomeParaTooltip(found.$1, found.$2, found.$3);
               } else {
                 _hoveredRegionId = null;
                 _hoveredRegionName = null;
@@ -360,7 +374,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Text(
-                      'Região: ${_displayName(_hoveredRegionId!, _hoveredRegionName!)}',
+                      'Região: $_hoveredRegionName',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),

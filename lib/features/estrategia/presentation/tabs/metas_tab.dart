@@ -1,21 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/constants/regioes_fundidas.dart';
+import '../../providers/regioes_fundidas_provider.dart';
 
-class MetasTab extends StatefulWidget {
+class MetasTab extends ConsumerStatefulWidget {
   const MetasTab({super.key});
 
   @override
-  State<MetasTab> createState() => _MetasTabState();
+  ConsumerState<MetasTab> createState() => _MetasTabState();
 }
 
-class _MetasTabState extends State<MetasTab> {
-  double cuiaba = 30, rondonopolis = 18, sinop = 25, barra = 15, caceres = 12;
+class _MetasTabState extends ConsumerState<MetasTab> {
   static const metaEstadual = 50000;
+  final Map<String, double> _percentuaisPorRegiao = {
+    '5101': 30,
+    '5102': 12,
+    '5103': 25,
+    '5104': 15,
+    '5105': 18,
+  };
 
-  double get total => cuiaba + rondonopolis + sinop + barra + caceres;
+  double _total(List<RegiaoEfetiva> efetivas, Map<String, double> percentuais) {
+    double t = 0;
+    for (final r in efetivas) {
+      t += percentuais[r.id] ?? (100 / efetivas.length);
+    }
+    return t;
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final efetivas = ref.watch(regioesEfetivasProvider);
+    final total = _total(efetivas, _percentuaisPorRegiao);
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,13 +57,16 @@ class _MetasTabState extends State<MetasTab> {
             ],
           ),
           const SizedBox(height: 24),
-          Text('Distribuição por Polo (%)', style: theme.textTheme.titleMedium),
+          Text('Distribuição por Região (%)', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          _SliderRow(label: 'Polo Cuiabá', value: cuiaba, onChanged: (v) => setState(() => cuiaba = v)),
-          _SliderRow(label: 'Polo Rondonópolis', value: rondonopolis, onChanged: (v) => setState(() => rondonopolis = v)),
-          _SliderRow(label: 'Polo Sinop', value: sinop, onChanged: (v) => setState(() => sinop = v)),
-          _SliderRow(label: 'Polo Barra do Garças', value: barra, onChanged: (v) => setState(() => barra = v)),
-          _SliderRow(label: 'Polo Cáceres', value: caceres, onChanged: (v) => setState(() => caceres = v)),
+          ...efetivas.map((r) {
+            final value = _percentuaisPorRegiao[r.id] ?? (efetivas.isEmpty ? 0.0 : 100 / efetivas.length);
+            return _SliderRow(
+              label: 'Região ${r.nome}',
+              value: value,
+              onChanged: (v) => setState(() => _percentuaisPorRegiao[r.id] = v),
+            );
+          }),
           const SizedBox(height: 16),
           Row(
             children: [

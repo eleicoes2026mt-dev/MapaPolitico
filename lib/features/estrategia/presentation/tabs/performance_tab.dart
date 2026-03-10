@@ -61,8 +61,26 @@ class _Card extends StatelessWidget {
   final String sub;
   final Color? color;
 
+  /// Cor do texto com bom contraste sobre o fundo do cartão.
+  static Color _textColorOnBackground(Color background) {
+    return ThemeData.estimateBrightnessForColor(background) == Brightness.light
+        ? const Color(0xFF1A1A1A)
+        : const Color(0xFFF5F5F5);
+  }
+
+  static Color _secondaryTextColorOnBackground(Color background) {
+    return ThemeData.estimateBrightnessForColor(background) == Brightness.light
+        ? const Color(0xFF424242)
+        : const Color(0xFFE0E0E0);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    final useContrast = color != null;
+    final primary = useContrast ? _textColorOnBackground(color!) : null;
+    final secondary = useContrast ? _secondaryTextColorOnBackground(color!) : null;
+
     return Card(
       color: color,
       child: Padding(
@@ -72,9 +90,25 @@ class _Card extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: Theme.of(context).textTheme.labelMedium),
-              Text(value, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              if (sub.isNotEmpty) Text(sub, style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                label,
+                style: theme.labelMedium?.copyWith(
+                  color: secondary ?? primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                value,
+                style: theme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: primary,
+                ),
+              ),
+              if (sub.isNotEmpty)
+                Text(
+                  sub,
+                  style: theme.bodySmall?.copyWith(color: secondary ?? primary),
+                ),
             ],
           ),
         ),

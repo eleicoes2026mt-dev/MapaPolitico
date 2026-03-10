@@ -5,6 +5,7 @@ import 'tabs/performance_tab.dart';
 import 'tabs/mapa_regional_tab.dart';
 import 'tabs/metas_tab.dart';
 import 'tabs/responsaveis_tab.dart';
+import 'tabs/regioes_tab.dart';
 
 class EstrategiaScreen extends ConsumerStatefulWidget {
   const EstrategiaScreen({super.key});
@@ -19,7 +20,7 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -31,32 +32,46 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final width = MediaQuery.sizeOf(context).width;
+    final height = MediaQuery.sizeOf(context).height;
+    final padding = width < 600 ? 16.0 : 24.0;
+    final isNarrow = width < 600;
+    final tabViewHeight = (height * 0.55).clamp(400.0, 700.0);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Estratégia', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Flexible(
+                child: Text(
+                  'Estratégia',
+                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const EstadoMTBadge(compact: true),
             ],
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: padding),
           TabBar(
             controller: _tabController,
+            isScrollable: isNarrow,
+            tabAlignment: isNarrow ? TabAlignment.start : TabAlignment.fill,
             tabs: const [
               Tab(icon: Icon(Icons.show_chart), text: 'Performance'),
               Tab(icon: Icon(Icons.map), text: 'Mapa Regional'),
               Tab(icon: Icon(Icons.flag), text: 'Metas'),
               Tab(icon: Icon(Icons.people), text: 'Responsáveis'),
+              Tab(icon: Icon(Icons.merge_type), text: 'Regiões'),
             ],
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 600,
+            height: tabViewHeight,
             child: TabBarView(
               controller: _tabController,
               children: const [
@@ -64,6 +79,7 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
                 MapaRegionalTab(),
                 MetasTab(),
                 ResponsaveisTab(),
+                RegioesTab(),
               ],
             ),
           ),

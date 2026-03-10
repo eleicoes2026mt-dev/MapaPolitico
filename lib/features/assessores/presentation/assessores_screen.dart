@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
-import '../providers/assessores_provider.dart';
+import '../providers/assessores_provider.dart' show assessoresListProvider, convidarAssessor, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException;
 
 class AssessoresScreen extends ConsumerStatefulWidget {
   const AssessoresScreen({super.key});
@@ -133,7 +133,11 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
                 return Wrap(
                   spacing: 16,
                   runSpacing: 16,
-                  children: filtered.map((a) => _AssessorCard(assessor: a)).toList(),
+                  children: filtered.map((a) => _AssessorCard(
+                    assessor: a,
+                    isCandidato: isCandidato,
+                    onRefresh: () => ref.invalidate(assessoresListProvider),
+                  )).toList(),
                 );
               },
             ),
@@ -274,14 +278,83 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
   }
 }
 
-class _AssessorCard extends StatelessWidget {
-  const _AssessorCard({required this.assessor});
+class _AssessorCard extends ConsumerStatefulWidget {
+  const _AssessorCard({
+    required this.assessor,
+    required this.isCandidato,
+    required this.onRefresh,
+  });
 
   final Assessor assessor;
+  final bool isCandidato;
+  final VoidCallback onRefresh;
+
+  @override
+  ConsumerState<_AssessorCard> createState() => _AssessorCardState();
+}
+
+class _AssessorCardState extends ConsumerState<_AssessorCard> {
+  bool _reenviando = false;
+  bool _removendo = false;
+
+  Future<void> _reenviarConvite() async {
+    setState(() => _reenviando = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await reenviarConviteAssessor(widget.assessor);
+      if (!mounted) return;
+      widget.onRefresh();
+      messenger.showSnackBar(const SnackBar(content: Text('Convite reenviado por e-mail.')));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(messageFromException(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _reenviando = false);
+    }
+  }
+
+  Future<void> _confirmarRemover() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover assessor'),
+        content: Text(
+          'Remover ${widget.assessor.nome}? O assessor perderá o acesso ao sistema.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    setState(() => _removendo = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await removerAssessor(widget.assessor.id);
+      if (!mounted) return;
+      widget.onRefresh();
+      messenger.showSnackBar(const SnackBar(content: Text('Assessor removido.')));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(messageFromException(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _removendo = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final assessor = widget.assessor;
     final width = MediaQuery.sizeOf(context).width > 700 ? 320.0 : (MediaQuery.sizeOf(context).width > 500 ? 260.0 : double.infinity);
     return SizedBox(
       width: width,
@@ -290,47 +363,116 @@ class _AssessorCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
+              // Cabeçalho: avatar + nome + status
               Row(
                 children: [
                   CircleAvatar(
                     backgroundColor: theme.colorScheme.primaryContainer,
-                    child: Text(assessor.initial, style: TextStyle(color: theme.colorScheme.onPrimaryContainer, fontWeight: FontWeight.w600)),
+                    radius: 24,
+                    child: Text(
+                      assessor.initial,
+                      style: TextStyle(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(assessor.nome, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Text(
+                          assessor.nome,
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
                         Chip(
-                          label: Text(assessor.ativo ? 'ativo' : 'inativo', style: theme.textTheme.labelSmall),
+                          label: Text(
+                            assessor.ativo ? 'Ativo' : 'Inativo',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: assessor.ativo ? Colors.green.shade800 : theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                           backgroundColor: assessor.ativo ? Colors.green.shade100 : theme.colorScheme.surfaceContainerHighest,
-                          padding: EdgeInsets.zero,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              if (assessor.telefone != null) ...[
+              // Contato
+              if (assessor.email != null || assessor.telefone != null) ...[
+                const SizedBox(height: 14),
+                Divider(height: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(Icons.phone, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Text(assessor.telefone!, style: theme.textTheme.bodySmall),
-                  ],
-                ),
+                if (assessor.email != null)
+                  Row(
+                    children: [
+                      Icon(Icons.email_outlined, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          assessor.email!,
+                          style: theme.textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                if (assessor.email != null && assessor.telefone != null) const SizedBox(height: 6),
+                if (assessor.telefone != null)
+                  Row(
+                    children: [
+                      Icon(Icons.phone_outlined, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 10),
+                      Text(assessor.telefone!, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
               ],
-              if (assessor.email != null) ...[
-                const SizedBox(height: 4),
-                Row(
+              // Ações (candidato)
+              if (widget.isCandidato) ...[
+                const SizedBox(height: 14),
+                Divider(height: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
                   children: [
-                    Icon(Icons.email, size: 18, color: theme.colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(assessor.email!, style: theme.textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
+                    TextButton.icon(
+                      onPressed: _reenviando ? null : _reenviarConvite,
+                      icon: _reenviando
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.email_outlined, size: 18),
+                      label: const Text('Reenviar convite'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _removendo ? null : _confirmarRemover,
+                      icon: _removendo
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Remover'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
                   ],
                 ),
               ],

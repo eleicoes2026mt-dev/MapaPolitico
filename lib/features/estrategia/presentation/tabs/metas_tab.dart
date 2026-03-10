@@ -36,7 +36,7 @@ class _MetasTabState extends ConsumerState<MetasTab> {
 
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Editor de Metas Estratégicas', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 24),
@@ -58,6 +58,11 @@ class _MetasTabState extends ConsumerState<MetasTab> {
           ),
           const SizedBox(height: 24),
           Text('Distribuição por Região (%)', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Regiões de MT. Ajuste o percentual de votos por região.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 8),
           ...efetivas.map((r) {
             final value = _percentuaisPorRegiao[r.id] ?? (efetivas.isEmpty ? 0.0 : 100 / efetivas.length);
@@ -96,10 +101,12 @@ class _SliderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(width: 180, child: Text(label)),
+          SizedBox(width: 220, child: Text(label, style: const TextStyle(fontSize: 15))),
+          const SizedBox(width: 16),
           Expanded(
             child: Slider(
               value: value,
@@ -110,9 +117,10 @@ class _SliderRow extends StatelessWidget {
               onChanged: onChanged,
             ),
           ),
+          const SizedBox(width: 12),
           SizedBox(
-            width: 48,
-            child: Text('${value.toStringAsFixed(1)}%'),
+            width: 56,
+            child: Text('${value.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 15)),
           ),
         ],
       ),

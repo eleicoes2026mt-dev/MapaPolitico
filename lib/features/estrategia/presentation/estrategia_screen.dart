@@ -33,17 +33,15 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
-    final height = MediaQuery.sizeOf(context).height;
     final padding = width < 600 ? 16.0 : 24.0;
     final isNarrow = width < 600;
-    final tabViewHeight = (height * 0.55).clamp(400.0, 700.0);
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(padding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(padding, padding, padding, 0),
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
@@ -56,8 +54,11 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
               const EstadoMTBadge(compact: true),
             ],
           ),
-          SizedBox(height: padding),
-          TabBar(
+        ),
+        SizedBox(height: padding),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: padding),
+          child: TabBar(
             controller: _tabController,
             isScrollable: isNarrow,
             tabAlignment: isNarrow ? TabAlignment.start : TabAlignment.fill,
@@ -69,9 +70,11 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
               Tab(icon: Icon(Icons.merge_type), text: 'Regiões'),
             ],
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: tabViewHeight,
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(padding, 0, padding, padding),
             child: TabBarView(
               controller: _tabController,
               children: const [
@@ -83,8 +86,8 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
               ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

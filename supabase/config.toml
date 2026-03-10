@@ -37,5 +37,7 @@ file_size_limit = "50MiB"
 # Gateway não valida JWT; a própria função valida (getClaims/getUser) para evitar 401 com novos signing keys
 [functions.convidar-assessor]
 verify_jwt = false
+[functions.reenviar-convite-assessor]
+verify_jwt = false
 [functions.promover-candidato]
 verify_jwt = false

@@ -11,25 +11,29 @@ const _prefsKeyRegionNames = 'mapa_regioes_nomes';
 /// Centro de Mato Grosso (Cuiabá)
 const mtCenterLatLng = LatLng(-15.6014, -56.0979);
 
-/// Coordenadas dos 5 polos regionais MT.
+/// Coordenadas das cidades-sede das regiões intermediárias de MT (marcadores no mapa).
 const polosMT = [
-  ('Polo Cuiabá', LatLng(-15.6014, -56.0979)),
-  ('Polo Rondonópolis', LatLng(-16.4677, -54.6362)),
-  ('Polo Sinop', LatLng(-11.8642, -55.5094)),
-  ('Polo Barra do Garças', LatLng(-15.8896, -52.2569)),
-  ('Polo Tangará da Serra', LatLng(-14.6229, -57.4933)),
+  ('Cuiabá', LatLng(-15.6014, -56.0979)),
+  ('Rondonópolis', LatLng(-16.4677, -54.6362)),
+  ('Sinop', LatLng(-11.8642, -55.5094)),
+  ('Barra do Garças', LatLng(-15.8896, -52.2569)),
+  ('Tangará da Serra', LatLng(-14.6229, -57.4933)),
 ];
 
 /// Nome do estado do candidato (para destacar no mapa).
 const nomeEstadoCandidato = 'Mato Grosso';
 
-/// Widget reutilizável: mapa Google com demarcação Brasil/estados, polos e votos TSE por cidade.
+/// Widget reutilizável: mapa Google com demarcação Brasil/estados, cidades e votos TSE por município.
 class MapaRegionalWidget extends StatefulWidget {
   const MapaRegionalWidget({
     super.key,
     this.height = 400,
     this.votosPorMunicipio,
     this.regioesFundidas,
+    /// Nomes editados pelo usuário (por cdRgint); quando definido, prevalece em todo o app.
+    this.nomesCustomizados,
+    /// Salva nome da região (cdRgint) para persistir em todo o app.
+    this.onSaveNomeRegiao,
     /// Se retornar true, o diálogo de editar nome não será aberto (ex.: Ctrl+clique para seleção).
     this.onRegionTap,
   });
@@ -37,6 +41,8 @@ class MapaRegionalWidget extends StatefulWidget {
   final double height;
   final Map<String, int>? votosPorMunicipio;
   final List<RegiaoFundida>? regioesFundidas;
+  final Map<String, String>? nomesCustomizados;
+  final void Function(String cdRgint, String nome)? onSaveNomeRegiao;
   final bool Function(String id, String nome, String? cdRgint)? onRegionTap;
 
   @override
@@ -95,13 +101,18 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
 
   String _nomeParaTooltip(String id, String originalNome, String? cdRgint) {
     final fundidas = widget.regioesFundidas;
-    if (fundidas != null && fundidas.isNotEmpty && cdRgint != null) {
-      return nomeRegiaoPorCdRgint(cdRgint, fundidas);
+    final nomes = widget.nomesCustomizados;
+    if (cdRgint != null) {
+      return nomeRegiaoPorCdRgint(
+        cdRgint,
+        fundidas ?? [],
+        nomesCustomizados: nomes,
+      );
     }
-    return _displayName(id, originalNome);
+    return nomes != null ? originalNome : _displayName(id, originalNome);
   }
 
-  /// Polos + marcadores de cidades com votos TSE (quando votosPorMunicipio fornecido).
+  /// Marcadores das cidades-sede + cidades com votos TSE (quando votosPorMunicipio fornecido).
   Set<Marker> get _allMarkers {
     final set = Set<Marker>.from(_markers);
     final votos = widget.votosPorMunicipio;
@@ -143,8 +154,25 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     await prefs.setString(_prefsKeyRegionNames, jsonEncode(_customRegionNames));
   }
 
-  Future<void> _showEditRegionNameDialog(BuildContext context, String regionId, String currentName) async {
-    final controller = TextEditingController(text: _displayName(regionId, currentName));
+  String _currentDisplayNameForEdit(String regionId, String nomeOriginal, String? cdRgint) {
+    if (cdRgint != null) {
+      return nomeRegiaoPorCdRgint(
+        cdRgint,
+        widget.regioesFundidas ?? [],
+        nomesCustomizados: widget.nomesCustomizados,
+      );
+    }
+    return _displayName(regionId, nomeOriginal);
+  }
+
+  Future<void> _showEditRegionNameDialog(
+    BuildContext context,
+    String regionId,
+    String nomeOriginal,
+    String? cdRgint,
+  ) async {
+    final currentName = _currentDisplayNameForEdit(regionId, nomeOriginal, cdRgint);
+    final controller = TextEditingController(text: currentName);
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -171,10 +199,13 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
         ],
       ),
     );
-    if (saved == true && mounted && controller.text.trim().isNotEmpty) {
-      setState(() {
-        _customRegionNames[regionId] = controller.text.trim();
-      });
+    if (saved != true || !mounted) return;
+    final nome = controller.text.trim();
+    if (nome.isEmpty) return;
+    if (widget.onSaveNomeRegiao != null && cdRgint != null) {
+      widget.onSaveNomeRegiao!(cdRgint, nome);
+    } else {
+      setState(() => _customRegionNames[regionId] = nome);
       await _saveCustomNames();
     }
   }
@@ -193,7 +224,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       );
     }
     _loadGeo();
-    _loadCustomNames();
+    if (widget.onSaveNomeRegiao == null) _loadCustomNames();
   }
 
   static Color _getColorForRegiao(String id) {
@@ -287,7 +318,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
             onTap: () {
               if (!mounted) return;
               if (widget.onRegionTap != null && widget.onRegionTap!(regionId, nomeOriginal, regiao.cdRgint)) return;
-              _showEditRegionNameDialog(context, regionId, nomeOriginal);
+              _showEditRegionNameDialog(context, regionId, nomeOriginal, regiao.cdRgint);
             },
           ),
         );

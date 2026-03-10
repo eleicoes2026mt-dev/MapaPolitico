@@ -17,7 +17,7 @@ class PerformanceTab extends ConsumerWidget {
         final pct = meta > 0 ? (cobertura / meta * 100) : 0.0;
         return SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Wrap(
                 spacing: 16,

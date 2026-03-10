@@ -20,7 +20,7 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
 
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             'Regiões e nomenclatura',
@@ -69,7 +69,7 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
               }
               if (fundidas.isEmpty) {
                 return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
                       'Nenhuma fusão. As 5 regiões intermediárias são exibidas separadamente no mapa, Metas e Responsáveis.',

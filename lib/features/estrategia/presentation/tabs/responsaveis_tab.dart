@@ -11,9 +11,14 @@ class ResponsaveisTab extends ConsumerWidget {
     final efetivas = ref.watch(regioesEfetivasProvider);
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('Atribuição de Responsáveis Regionais', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text(
+            'Regiões de MT. Atribua um responsável a cada região.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 24),
           ...efetivas.map((r) => Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -26,7 +31,7 @@ class ResponsaveisTab extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  title: Text(r.nome),
+                  title: Text('Região ${r.nome}'),
                   subtitle: Text(r.descricao, maxLines: 2, overflow: TextOverflow.ellipsis),
                   trailing: DropdownButton<String>(
                     value: 'Sem responsável',

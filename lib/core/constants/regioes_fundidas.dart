@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'regioes_mt.dart';
 
 const _prefsKeyRegioesFundidas = 'mapa_regioes_fundidas';
+const _prefsKeyNomesCustomizados = 'mapa_regioes_nomes_custom';
 
 /// Região fundida: várias regiões intermediárias agrupadas sob um único nome.
 class RegiaoFundida {
@@ -55,11 +56,17 @@ class RegiaoEfetiva {
   }
 }
 
-/// Retorna o nome de exibição para um cdRgint (5101, 5102, ...) considerando fusões.
-String nomeRegiaoPorCdRgint(String cdRgint, List<RegiaoFundida> fundidas) {
+/// Retorna o nome de exibição para um cdRgint (5101, 5102, ...) considerando fusões e nomes customizados.
+String nomeRegiaoPorCdRgint(
+  String cdRgint,
+  List<RegiaoFundida> fundidas, {
+  Map<String, String>? nomesCustomizados,
+}) {
   for (final f in fundidas) {
     if (f.ids.contains(cdRgint)) return f.nome;
   }
+  final custom = nomesCustomizados?[cdRgint];
+  if (custom != null && custom.isNotEmpty) return custom;
   final r = regioesIntermediariasMT.where((e) => e.id == cdRgint).firstOrNull;
   return r?.nome ?? cdRgint;
 }
@@ -87,8 +94,32 @@ Future<void> saveRegioesFundidas(List<RegiaoFundida> list) async {
   );
 }
 
+/// Carrega nomes customizados por cdRgint (editados pelo usuário no mapa).
+Future<Map<String, String>> loadNomesCustomizados() async {
+  final prefs = await SharedPreferences.getInstance();
+  final json = prefs.getString(_prefsKeyNomesCustomizados);
+  if (json == null || json.isEmpty) return {};
+  try {
+    final map = jsonDecode(json) as Map<String, dynamic>?;
+    if (map == null) return {};
+    return map.map((k, v) => MapEntry(k.toString(), v is String ? v : v.toString()));
+  } catch (_) {
+    return {};
+  }
+}
+
+/// Salva nomes customizados por cdRgint.
+Future<void> saveNomesCustomizados(Map<String, String> map) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_prefsKeyNomesCustomizados, jsonEncode(map));
+}
+
 /// Calcula as regiões efetivas: fusões primeiro, depois regiões que não estão em nenhuma fusão.
-List<RegiaoEfetiva> computeRegioesEfetivas(List<RegiaoFundida> fundidas) {
+/// [nomesCustomizados] aplica os nomes editados pelo usuário no mapa (por cdRgint).
+List<RegiaoEfetiva> computeRegioesEfetivas(
+  List<RegiaoFundida> fundidas, {
+  Map<String, String> nomesCustomizados = const {},
+}) {
   final covered = <String>{};
   for (final f in fundidas) {
     for (final id in f.ids) {
@@ -118,9 +149,12 @@ List<RegiaoEfetiva> computeRegioesEfetivas(List<RegiaoFundida> fundidas) {
 
   for (final r in regioesIntermediariasMT) {
     if (covered.contains(r.id)) continue;
+    final nomeExibicao = nomesCustomizados[r.id]?.trim().isNotEmpty == true
+        ? nomesCustomizados[r.id]!
+        : r.nome;
     result.add(RegiaoEfetiva(
       id: r.id,
-      nome: r.nome,
+      nome: nomeExibicao,
       ids: [r.id],
       cor: r.cor,
       descricao: r.descricao,

@@ -63,11 +63,12 @@ class RegioesFundidasNotifier extends AsyncNotifier<RegioesFundidasState> {
   }
 }
 
-/// Regiões efetivas (fusões + regiões não fundidas) para uso em Metas, Responsáveis e mapa.
+/// Regiões efetivas (fusões + regiões não fundidas + nomes customizados) para uso em Metas, Responsáveis e mapa.
 final regioesEfetivasProvider = Provider<List<RegiaoEfetiva>>((ref) {
   final state = ref.watch(regioesFundidasProvider).valueOrNull;
   final list = state?.list ?? [];
-  return computeRegioesEfetivas(list);
+  final nomes = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
+  return computeRegioesEfetivas(list, nomesCustomizados: nomes);
 });
 
 /// Lista de fusões para o mapa (resolver nome por cdRgint).
@@ -81,3 +82,31 @@ final canUndoRegioesFundidasProvider = Provider<bool>((ref) {
   final state = ref.watch(regioesFundidasProvider).valueOrNull;
   return (state?.undoCount ?? 0) > 0;
 });
+
+/// Nomes customizados por cdRgint (editados no mapa); usados em todo o app.
+final nomesCustomizadosProvider =
+    AsyncNotifierProvider<NomesCustomizadosNotifier, Map<String, String>>(NomesCustomizadosNotifier.new);
+
+class NomesCustomizadosNotifier extends AsyncNotifier<Map<String, String>> {
+  @override
+  Future<Map<String, String>> build() async {
+    return await loadNomesCustomizados();
+  }
+
+  Future<void> setNome(String cdRgint, String nome) async {
+    final map = Map<String, String>.from(state.valueOrNull ?? await loadNomesCustomizados());
+    final trimmed = nome.trim();
+    if (trimmed.isEmpty) {
+      map.remove(cdRgint);
+    } else {
+      map[cdRgint] = trimmed;
+    }
+    await saveNomesCustomizados(map);
+    state = AsyncData(map);
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = AsyncData(await loadNomesCustomizados());
+  }
+}

@@ -75,37 +75,40 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
   Widget build(BuildContext context) {
     final votosPorMunicipio = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
     final regioesFundidas = ref.watch(regioesFundidasParaMapaProvider);
+    final nomesCustomizados = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
     final theme = Theme.of(context);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxHeight = constraints.maxHeight;
-        final mapHeight = (maxHeight > 0 ? (maxHeight - 120).clamp(280.0, 500.0) : 400.0);
-        final selecionadas = _selectedCdRgints.length;
+    final selecionadas = _selectedCdRgints.length;
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Mapa Interativo — Regiões de MT',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Clique em uma região para editar o nome. Segure Ctrl (ou Cmd) e clique em duas ou mais regiões para fundi-las.'
-                '${votosPorMunicipio.isEmpty ? '' : ' Marcadores com votos por cidade (TSE).'}',
-                style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 16),
-              Stack(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Mapa Interativo — Regiões de MT',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Clique em uma região para editar o nome. Segure Ctrl (ou Cmd) e clique em duas ou mais regiões para fundi-las.'
+          '${votosPorMunicipio.isEmpty ? '' : ' Marcadores com votos por cidade (TSE).'}',
+          style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final mapHeight = constraints.maxHeight.clamp(280.0, double.infinity);
+              return Stack(
                 clipBehavior: Clip.none,
                 children: [
                   MapaRegionalWidget(
                     height: mapHeight,
                     votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
                     regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,
+                    nomesCustomizados: nomesCustomizados.isEmpty ? null : nomesCustomizados,
+                    onSaveNomeRegiao: (cdRgint, nome) {
+                      ref.read(nomesCustomizadosProvider.notifier).setNome(cdRgint, nome);
+                    },
                     onRegionTap: _onRegionTap,
                   ),
                   if (selecionadas >= 2) ...[
@@ -165,11 +168,11 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                     ),
                   ],
                 ],
-              ),
-            ],
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }

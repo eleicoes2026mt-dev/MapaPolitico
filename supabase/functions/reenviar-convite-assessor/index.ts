@@ -101,7 +101,7 @@ serve(async (req) => {
       });
     }
 
-    const redirectTo = Deno.env.get('REDIRECT_URL') || undefined;
+    const redirectTo = (body?.redirect_to && String(body.redirect_to).trim()) || Deno.env.get('REDIRECT_URL') || undefined;
     const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: { full_name: nome },
       redirectTo,

@@ -2,6 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "CampanhaMT (Windows)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "windows"]
+    },
+    {
       "name": "CampanhaMT (Chrome)",
       "request": "launch",
       "type": "dart",
@@ -14,6 +21,12 @@
       "type": "dart",
       "program": "lib/main.dart",
       "args": ["-d", "web-server", "--web-port=8080"]
+    },
+    {
+      "name": "Test",
+      "request": "launch",
+      "type": "dart",
+      "program": "test/widget_test.dart"
     }
   ]
 }

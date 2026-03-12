@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../estrategia/providers/regioes_fundidas_provider.dart';
+import '../../estrategia/providers/responsavel_regiao_provider.dart';
+import '../../assessores/providers/assessores_provider.dart';
 import '../providers/dashboard_provider.dart';
 
 /// Breakpoints para responsividade
@@ -52,8 +55,128 @@ class DashboardScreen extends ConsumerWidget {
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
+          SizedBox(height: padding),
+          _ResponsaveisRegiaoSection(),
         ],
       ),
+    );
+  }
+}
+
+class _ResponsaveisRegiaoSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final responsaveisAsync = ref.watch(responsavelRegiaoProvider);
+    final regioes = ref.watch(regioesEfetivasProvider);
+    final assessoresAsync = ref.watch(assessoresListProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final isCompact = width < _Breakpoint.mobile;
+
+    return responsaveisAsync.when(
+      data: (responsaveis) {
+        return assessoresAsync.when(
+          data: (assessores) {
+            final assessorById = {for (final a in assessores) a.id: a.nome};
+            final comResponsavel = regioes.where((r) => responsaveis[r.id] != null).toList();
+            if (comResponsavel.isEmpty) {
+              return Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: EdgeInsets.all(isCompact ? 16 : 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.assignment_ind_outlined, color: theme.colorScheme.primary, size: isCompact ? 20 : 24),
+                          SizedBox(width: isCompact ? 8 : 12),
+                          Text(
+                            'Responsáveis por região',
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Nenhuma região com responsável atribuído. Atribua em Estratégia > Responsáveis.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: EdgeInsets.all(isCompact ? 16 : 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.assignment_ind_outlined, color: theme.colorScheme.primary, size: isCompact ? 20 : 24),
+                        SizedBox(width: isCompact ? 8 : 12),
+                        Text(
+                          'Responsáveis por região',
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...comResponsavel.take(10).map((r) {
+                      final nomeAssessor = assessorById[responsaveis[r.id]] ?? '—';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 4,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: r.cor,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                r.nome,
+                                style: theme.textTheme.bodyMedium,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              nomeAssessor,
+                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    if (comResponsavel.length > 10)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '+ ${comResponsavel.length - 10} região(ões)',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }
@@ -107,20 +230,44 @@ class _StatsCards extends StatelessWidget {
       _CardData('Est. Votos', stats.estimativaVotos, Icons.show_chart, const Color(0xFFE65100)),
     ];
 
-    return LayoutBuilder(
-      builder: (_, constraints) {
-        final cardWidth = crossCount == 1
-            ? constraints.maxWidth
-            : (constraints.maxWidth - spacing * (crossCount - 1)) / crossCount;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: cards.map((e) => SizedBox(
-            width: cardWidth,
-            child: _StatCard(data: e),
-          )).toList(),
-        );
-      },
+    if (crossCount == 1) {
+      return Column(
+        children: List.generate(cards.length, (i) => Padding(
+          padding: EdgeInsets.only(bottom: i < cards.length - 1 ? spacing : 0),
+          child: _StatCard(data: cards[i]),
+        )),
+      );
+    }
+
+    if (crossCount == 4) {
+      return Row(
+        children: [
+          for (var i = 0; i < 4; i++) ...[
+            if (i > 0) SizedBox(width: spacing),
+            Expanded(child: _StatCard(data: cards[i])),
+          ],
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(child: _StatCard(data: cards[0])),
+            SizedBox(width: spacing),
+            Expanded(child: _StatCard(data: cards[1])),
+          ],
+        ),
+        SizedBox(height: spacing),
+        Row(
+          children: [
+            Expanded(child: _StatCard(data: cards[2])),
+            SizedBox(width: spacing),
+            Expanded(child: _StatCard(data: cards[3])),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -212,13 +359,15 @@ class _MiddleSection extends StatelessWidget {
       );
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(flex: 2, child: chart),
-        const SizedBox(width: spacing),
-        Expanded(child: aniv),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 2, child: chart),
+          const SizedBox(width: spacing),
+          Expanded(flex: 1, child: aniv),
+        ],
+      ),
     );
   }
 }
@@ -435,11 +584,11 @@ class _BottomSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _ApoiadoresPorPerfilChart(items: apoiadoresPorPerfil)),
+              Expanded(flex: 2, child: _ApoiadoresPorPerfilChart(items: apoiadoresPorPerfil)),
               SizedBox(width: spacing),
-              Expanded(child: _BenfeitoriasCard(total: totalBenfeitorias, count: benfeitoriasCount)),
+              Expanded(flex: 1, child: _BenfeitoriasCard(total: totalBenfeitorias, count: benfeitoriasCount)),
             ],
           ),
           SizedBox(height: spacing),
@@ -451,11 +600,22 @@ class _BottomSection extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(child: _ApoiadoresPorPerfilChart(items: apoiadoresPorPerfil)),
+        Expanded(
+          flex: 2,
+          child: _ApoiadoresPorPerfilChart(items: apoiadoresPorPerfil),
+        ),
         SizedBox(width: spacing),
-        Expanded(child: _BenfeitoriasCard(total: totalBenfeitorias, count: benfeitoriasCount)),
-        SizedBox(width: spacing),
-        Expanded(child: _MensagensCard(count: mensagensCount)),
+        Expanded(
+          flex: 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _BenfeitoriasCard(total: totalBenfeitorias, count: benfeitoriasCount),
+              SizedBox(height: spacing),
+              _MensagensCard(count: mensagensCount),
+            ],
+          ),
+        ),
       ],
     );
   }

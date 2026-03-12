@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/constants/regioes_mt.dart';
+import '../../../apoiadores/providers/apoiadores_provider.dart';
 import '../../../dados_tse/providers/dados_tse_provider.dart';
 import '../../../mapa/presentation/widgets/mapa_regional_widget.dart';
 import '../../providers/regioes_fundidas_provider.dart';
@@ -71,27 +72,116 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
     }
   }
 
+  void _mostrarRegioesMapeadas(BuildContext context) {
+    final theme = Theme.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Regiões mapeadas'),
+        content: SizedBox(
+          width: 320,
+          child: Consumer(
+            builder: (ctx, ref, _) {
+              final asyncRegioes = ref.watch(regioesMapeadasMTProvider);
+              return asyncRegioes.when(
+                data: (regioes) {
+                  if (regioes.isEmpty) {
+                    return const Text('Nenhuma região carregada.');
+                  }
+                  return SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '${regioes.length} regiões do arquivo (GeoJSON), na ordem do mapa:',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 12),
+                        ...regioes.map((r) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 4,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: r.cor,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Text(r.nome, style: const TextStyle(fontSize: 15))),
+                                ],
+                              ),
+                            )),
+                      ],
+                    ),
+                  );
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (e, _) => Text('Erro ao carregar: $e', style: TextStyle(color: theme.colorScheme.error)),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Fechar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final votosPorMunicipio = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
+    final cidadesComApoiador = ref.watch(cidadesComApoiadorProvider);
     final regioesFundidas = ref.watch(regioesFundidasParaMapaProvider);
     final nomesCustomizados = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
+    final coresCustomizadas = ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
     final theme = Theme.of(context);
+    final isAdmin = ref.watch(isAdminProvider);
 
     final selecionadas = _selectedCdRgints.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
-          'Mapa Interativo — Regiões de MT',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Clique em uma região para editar o nome. Segure Ctrl (ou Cmd) e clique em duas ou mais regiões para fundi-las.'
-          '${votosPorMunicipio.isEmpty ? '' : ' Marcadores com votos por cidade (TSE).'}',
-          style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Mapa Interativo — Regiões de MT',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isAdmin
+                        ? 'Clique em uma região para editar o nome. Segure Ctrl (ou Cmd) e clique em duas ou mais regiões para fundi-las.'
+                          '${votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores.'}'
+                        : 'Mapa das regiões de MT.'
+                          '${votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores.'}',
+                    style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _mostrarRegioesMapeadas(context),
+              icon: const Icon(Icons.list_alt, size: 20),
+              label: const Text('Ver regiões mapeadas'),
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -102,16 +192,30 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                 clipBehavior: Clip.none,
                 children: [
                   MapaRegionalWidget(
-                    height: mapHeight,
-                    votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
-                    regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,
-                    nomesCustomizados: nomesCustomizados.isEmpty ? null : nomesCustomizados,
-                    onSaveNomeRegiao: (cdRgint, nome) {
-                      ref.read(nomesCustomizadosProvider.notifier).setNome(cdRgint, nome);
-                    },
-                    onRegionTap: _onRegionTap,
-                  ),
-                  if (selecionadas >= 2) ...[
+                      height: mapHeight,
+                      votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
+                      cidadesComApoiador: cidadesComApoiador.isEmpty ? null : cidadesComApoiador,
+                      regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,
+                      nomesCustomizados: nomesCustomizados.isEmpty ? null : nomesCustomizados,
+                      coresCustomizadas: coresCustomizadas.isEmpty ? null : coresCustomizadas,
+                      onSaveNomeRegiao: isAdmin
+                          ? (cdRgint, nome) {
+                              ref.read(nomesCustomizadosProvider.notifier).setNome(cdRgint, nome);
+                            }
+                          : null,
+                      onRemoverDaFusao: isAdmin
+                          ? (cdRgint) {
+                              ref.read(regioesFundidasProvider.notifier).removeCdRgintFromFusion(cdRgint);
+                            }
+                          : null,
+                      onSaveCorRegiao: isAdmin
+                          ? (cdRgint, hexCor) {
+                              ref.read(coresCustomizadasProvider.notifier).setCor(cdRgint, hexCor);
+                            }
+                          : null,
+                      onRegionTap: isAdmin ? _onRegionTap : null,
+                    ),
+                  if (isAdmin && selecionadas >= 2) ...[
                     Positioned(
                       left: 0,
                       right: 0,

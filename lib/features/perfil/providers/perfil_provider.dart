@@ -10,6 +10,7 @@ typedef UpdateProfileParams = ({
   String? numeroCandidato,
   DateTime? dataNascimento,
   String? avatarUrl,
+  int? sqCandidatoTse2022,
 });
 
 final updateProfileProvider =
@@ -18,12 +19,12 @@ final updateProfileProvider =
   return (UpdateProfileParams params) async {
     final user = ref.read(currentUserProvider);
     if (user == null) throw Exception('Usuário não logado');
+    final profile = await ref.read(profileProvider.future);
     final userId = user.id;
     final map = <String, dynamic>{
       'id': userId,
       'full_name': params.fullName ?? user.email ?? '',
       'email': user.email ?? '',
-      'role': 'votante',
       'phone': params.phone,
       'cargo': params.cargo,
       'partido': params.partido,
@@ -31,7 +32,11 @@ final updateProfileProvider =
       if (params.dataNascimento != null)
         'data_nascimento': params.dataNascimento!.toIso8601String().split('T').first,
       if (params.avatarUrl != null) 'avatar_url': params.avatarUrl,
+      'sq_candidato_tse_2022': params.sqCandidatoTse2022,
     };
+    if (profile != null && profile.role.isNotEmpty) {
+      map['role'] = profile.role;
+    }
     await client.from('profiles').upsert(map, onConflict: 'id');
     ref.invalidate(profileProvider);
   };

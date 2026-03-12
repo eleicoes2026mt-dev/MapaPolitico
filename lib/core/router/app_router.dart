@@ -11,7 +11,6 @@ import '../../features/apoiadores/presentation/apoiadores_screen.dart';
 import '../../features/votantes/presentation/votantes_screen.dart';
 import '../../features/mensagens/presentation/mensagens_screen.dart';
 import '../../features/benfeitorias/presentation/benfeitorias_screen.dart';
-import '../../features/dados_tse/presentation/dados_tse_screen.dart';
 import '../../features/estrategia/presentation/estrategia_screen.dart';
 import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
@@ -88,10 +87,6 @@ GoRouter createAppRouter({String? initialLocation}) {
           GoRoute(
             path: '/benfeitorias',
             pageBuilder: (_, state) => const NoTransitionPage(child: BenfeitoriasScreen()),
-          ),
-          GoRoute(
-            path: '/dados-tse',
-            pageBuilder: (_, state) => const NoTransitionPage(child: DadosTseScreen()),
           ),
           GoRoute(
             path: '/estrategia',

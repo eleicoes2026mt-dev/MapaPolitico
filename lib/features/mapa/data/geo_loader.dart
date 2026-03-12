@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../core/geo/lat_lng.dart';
 
 /// Um polígono para desenhar no mapa (anel exterior; furos opcionais).
 class GeoPolygon {
@@ -11,6 +11,31 @@ class GeoPolygon {
   });
   final List<LatLng> points;
   final List<List<LatLng>> holes;
+}
+
+/// Verifica se o ponto está dentro do polígono (ray-casting). Considera apenas o anel exterior.
+bool pointInPolygon(LatLng point, GeoPolygon polygon) {
+  final pts = polygon.points;
+  if (pts.length < 3) return false;
+  final px = point.longitude;
+  final py = point.latitude;
+  var crossings = 0;
+  for (var i = 0; i < pts.length; i++) {
+    final p0 = pts[i];
+    final p1 = pts[(i + 1) % pts.length];
+    if ((p0.latitude > py) == (p1.latitude > py)) continue;
+    final x = p0.longitude + (py - p0.latitude) / (p1.latitude - p0.latitude) * (p1.longitude - p0.longitude);
+    if (x > px) crossings++;
+  }
+  return crossings.isOdd;
+}
+
+/// Retorna true se o ponto está dentro de algum dos polígonos da região.
+bool pointInRegion(LatLng point, List<GeoPolygon> polygons) {
+  for (final poly in polygons) {
+    if (pointInPolygon(point, poly)) return true;
+  }
+  return false;
 }
 
 /// Região com nome (ex.: estado "Mato Grosso") e um ou mais polígonos.
@@ -54,7 +79,10 @@ List<GeoPolygon> _parseGeometry(Map<String, dynamic> geometry) {
       if (rings.isEmpty) continue;
       final exterior = _ringToLatLngs(rings[0] as List<dynamic>);
       final holes = rings.length > 1
-          ? rings.skip(1).map((r) => _ringToLatLngs(r as List<dynamic>)).toList()
+          ? rings
+              .skip(1)
+              .map((r) => _ringToLatLngs(r as List<dynamic>))
+              .toList()
           : <List<LatLng>>[];
       result.add(GeoPolygon(points: exterior, holes: holes));
     }
@@ -101,6 +129,7 @@ class RegiaoIntermediariaMT {
   final String id;
   final String nome;
   final List<GeoPolygon> polygons;
+
   /// Código da região intermediária (ex.: 5101) para colorir por polo.
   final String? cdRgint;
 }
@@ -122,7 +151,9 @@ List<Map<String, dynamic>> _parseRegioesMTInIsolate(String data) {
     if (geometry == null || properties == null) continue;
 
     final id = properties['CD_RGINT']?.toString() ?? 'unknown';
-    final nome = properties['NM_RGINT'] as String? ?? properties['name'] as String? ?? 'Região $id';
+    final nome = properties['NM_RGINT'] as String? ??
+        properties['name'] as String? ??
+        'Região $id';
     final polygons = _parseGeometryToTransferable(geometry);
     if (polygons.isEmpty) continue;
 
@@ -132,8 +163,20 @@ List<Map<String, dynamic>> _parseRegioesMTInIsolate(String data) {
   return result;
 }
 
+/// Mantém até [maxPoints] pontos por anel para contornos mais suaves (150 = linhas menos tortas).
+List<List<double>> _simplifyRing(List<List<double>> ring,
+    {int maxPoints = 150}) {
+  if (ring.length <= maxPoints) return ring;
+  final step = (ring.length / maxPoints).ceil().clamp(2, 5);
+  final out = <List<double>>[];
+  for (var i = 0; i < ring.length; i += step) out.add(ring[i]);
+  if (ring.length > 1 && out.last != ring.last) out.add(ring.last);
+  return out;
+}
+
 /// Converte geometry para lista de mapas { points: [[lat,lng],...], holes: [...] } (transferível).
-List<Map<String, dynamic>> _parseGeometryToTransferable(Map<String, dynamic> geometry) {
+List<Map<String, dynamic>> _parseGeometryToTransferable(
+    Map<String, dynamic> geometry) {
   final type = geometry['type'] as String?;
   final coords = geometry['coordinates'];
   if (coords == null) return [];
@@ -141,21 +184,26 @@ List<Map<String, dynamic>> _parseGeometryToTransferable(Map<String, dynamic> geo
   List<Map<String, dynamic>> toPolygon(dynamic rings) {
     final r = rings as List<dynamic>;
     if (r.isEmpty) return [];
-    final exterior = (r[0] as List<dynamic>).map<List<double>>((e) {
-      final list = e as List<dynamic>;
-      final lng = (list[0] as num).toDouble();
-      final lat = (list[1] as num).toDouble();
-      return [lat, lng];
-    }).toList();
+    List<List<double>> toPoints(List<dynamic> list) {
+      final pts = list.map<List<double>>((e) {
+        final l = e as List<dynamic>;
+        final lng = (l[0] as num).toDouble();
+        final lat = (l[1] as num).toDouble();
+        return [lat, lng];
+      }).toList();
+      return _simplifyRing(pts);
+    }
+
+    final exterior = toPoints(r[0] as List<dynamic>);
     final holes = r.length > 1
-        ? (r.skip(1).map<List<List<double>>>((ring) => (ring as List<dynamic>).map<List<double>>((e) {
-              final list = e as List<dynamic>;
-              final lng = (list[0] as num).toDouble();
-              final lat = (list[1] as num).toDouble();
-              return [lat, lng];
-            }).toList()).toList())
+        ? (r
+            .skip(1)
+            .map<List<List<double>>>((ring) => toPoints(ring as List<dynamic>))
+            .toList())
         : <List<List<double>>>[];
-    return [{'points': exterior, 'holes': holes}];
+    return [
+      {'points': exterior, 'holes': holes}
+    ];
   }
 
   if (type == 'Polygon') return toPolygon(coords);
@@ -186,12 +234,42 @@ List<Map<String, dynamic>> _parseRegioesImediatasMTInIsolate(String data) {
     if (geometry == null || properties == null) continue;
 
     final id = properties['CD_RGI']?.toString() ?? 'unknown';
-    final nome = properties['NM_RGI'] as String? ?? properties['name'] as String? ?? 'Região $id';
+    final nome = properties['NM_RGI'] as String? ??
+        properties['name'] as String? ??
+        'Região $id';
     final cdRgint = properties['CD_RGINT']?.toString();
     final polygons = _parseGeometryToTransferable(geometry);
     if (polygons.isEmpty) continue;
 
-    result.add({'id': id, 'nome': nome, 'cdRgint': cdRgint, 'polygons': polygons});
+    result.add(
+        {'id': id, 'nome': nome, 'cdRgint': cdRgint, 'polygons': polygons});
+  }
+
+  return result;
+}
+
+/// Formato transferível para delimitação dos estados (properties.id, properties.name).
+/// Usado como fonte que prevalece no mapa (assets/geo/delimitacao_estados.json).
+List<Map<String, dynamic>> _parseDelimitacaoEstadosInIsolate(String data) {
+  final map = jsonDecode(data) as Map<String, dynamic>;
+  final type = map['type'] as String?;
+  if (type != 'FeatureCollection') return [];
+
+  final features = map['features'] as List<dynamic>? ?? [];
+  final result = <Map<String, dynamic>>[];
+
+  for (final f in features) {
+    final feature = f as Map<String, dynamic>;
+    final geometry = feature['geometry'] as Map<String, dynamic>?;
+    final properties = feature['properties'] as Map<String, dynamic>?;
+    if (geometry == null || properties == null) continue;
+
+    final id = properties['id']?.toString() ?? 'unknown';
+    final nome = properties['name'] as String? ?? 'Região $id';
+    final polygons = _parseGeometryToTransferable(geometry);
+    if (polygons.isEmpty) continue;
+
+    result.add({'id': id, 'nome': nome, 'cdRgint': null, 'polygons': polygons});
   }
 
   return result;
@@ -222,15 +300,37 @@ List<RegiaoIntermediariaMT> _rawToRegioesMT(List<Map<String, dynamic>> raw) {
 }
 
 /// Carrega GeoJSON de regiões intermediárias de MT em isolate (evita travar a UI).
-Future<List<RegiaoIntermediariaMT>> loadRegioesMTFromAsset(String assetPath) async {
+Future<List<RegiaoIntermediariaMT>> loadRegioesMTFromAsset(
+    String assetPath) async {
   final data = await rootBundle.loadString(assetPath);
   final raw = await compute(_parseRegioesMTInIsolate, data);
   return _rawToRegioesMT(raw);
 }
 
 /// Carrega GeoJSON de regiões imediatas de MT (CD_RGI, NM_RGI, CD_RGINT) em isolate.
-Future<List<RegiaoIntermediariaMT>> loadRegioesImediatasMTFromAsset(String assetPath) async {
+Future<List<RegiaoIntermediariaMT>> loadRegioesImediatasMTFromAsset(
+    String assetPath) async {
   final data = await rootBundle.loadString(assetPath);
   final raw = await compute(_parseRegioesImediatasMTInIsolate, data);
+  return _rawToRegioesMT(raw);
+}
+
+/// Asset da delimitação dos estados (fonte que prevalece no mapa).
+const String kDelimitacaoEstadosAsset = 'assets/geo/delimitacao_estados.json';
+
+/// Regiões imediatas de MT (IBGE 2024). Fonte que prevalece para as delimitações dentro de MT.
+const String kMTRegioesImediatas2024Asset =
+    'assets/geo/mt_regioes_imediatas_2024.geojson';
+
+/// Regiões intermediárias de MT (5 polos: Cuiabá, Cáceres, Sinop, Barra do Garças, Rondonópolis).
+/// Usado no ranking do mapa web para agrupar cidades por polo.
+const String kMTRegioesIntermediariasAsset =
+    'assets/geo/mt_regioes_intermediarias.geojson';
+
+/// Carrega GeoJSON de delimitação dos estados em isolate. Retorna regiões com id/nome por estado.
+/// Esta é a fonte que prevalece para desenhar os polígonos do mapa.
+Future<List<RegiaoIntermediariaMT>> loadDelimitacaoEstadosFromAsset() async {
+  final data = await rootBundle.loadString(kDelimitacaoEstadosAsset);
+  final raw = await compute(_parseDelimitacaoEstadosInIsolate, data);
   return _rawToRegioesMT(raw);
 }

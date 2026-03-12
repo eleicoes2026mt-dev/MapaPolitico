@@ -12,6 +12,7 @@ class Profile {
   final String? partido;
   final String? numeroCandidato;
   final DateTime? dataNascimento;
+  final int? sqCandidatoTse2022;
 
   const Profile({
     required this.id,
@@ -27,6 +28,7 @@ class Profile {
     this.partido,
     this.numeroCandidato,
     this.dataNascimento,
+    this.sqCandidatoTse2022,
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -46,6 +48,7 @@ class Profile {
       dataNascimento: json['data_nascimento'] != null
           ? DateTime.tryParse(json['data_nascimento'].toString())
           : null,
+      sqCandidatoTse2022: (json['sq_candidato_tse_2022'] as num?)?.toInt(),
     );
   }
 

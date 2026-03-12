@@ -27,17 +27,21 @@ dependencies:
   qr_flutter: ^4.1.0
   share_plus: ^7.2.2
 
-  # Mapas
-  google_maps_flutter: ^2.5.3
-  google_maps_flutter_web: ^0.5.4+1
+  # Mapas (ArcGIS no mobile; flutter_map na web)
+  arcgis_maps: ^200.8.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
 
   # Gráficos e tabelas
   fl_chart: ^0.66.0
   data_table_2: ^2.5.15
 
+  # Rede
+  http: ^1.2.0
+
   # Formulários e storage
   image_picker: ^1.0.7
-  file_picker: ^6.1.1
+  file_picker: ^8.1.7
   csv: ^6.0.0
   path_provider: ^2.1.2
   shared_preferences: ^2.2.2
@@ -59,3 +63,5 @@ flutter:
   assets:
     - assets/
     - assets/geo/
+    - assets/geo/mt_regioes_imediatas_2024.geojson
+    - assets/images/

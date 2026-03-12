@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/constants/regioes_mt.dart';
 import '../../../../core/constants/regioes_fundidas.dart';
 import '../../providers/regioes_fundidas_provider.dart';
+import '../../widgets/edit_regiao_nome_dialog.dart';
 
 class RegioesTab extends ConsumerStatefulWidget {
   const RegioesTab({super.key});
@@ -17,6 +17,7 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
     final theme = Theme.of(context);
     final fundidasAsync = ref.watch(regioesFundidasProvider);
     final efetivas = ref.watch(regioesEfetivasProvider);
+    final isAdmin = ref.watch(isAdminProvider);
 
     return SingleChildScrollView(
       child: Column(
@@ -28,33 +29,40 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Fundir regiões intermediárias em uma única região com novo nome. No mapa, Metas e Responsáveis será usada esta nomenclatura.',
+            'Fundir regiões em uma única região com novo nome. No mapa, Metas e Responsáveis será usada esta nomenclatura.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _showFundirDialog(context),
-                icon: const Icon(Icons.merge_type),
-                label: const Text('Fundir regiões'),
-              ),
-              Consumer(
-                builder: (context, ref, _) {
-                  final canUndo = ref.watch(canUndoRegioesFundidasProvider);
-                  return OutlinedButton.icon(
-                    onPressed: canUndo ? () => _desfazer(context) : null,
-                    icon: const Icon(Icons.undo),
-                    label: const Text('Desfazer'),
-                  );
-                },
-              ),
-            ],
-          ),
+          if (isAdmin) ...[
+            const SizedBox(height: 24),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _showFundirDialog(context),
+                  icon: const Icon(Icons.merge_type),
+                  label: const Text('Fundir regiões'),
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final canUndo = ref.watch(canUndoRegioesFundidasProvider);
+                    return OutlinedButton.icon(
+                      onPressed: canUndo ? () => _desfazer(context) : null,
+                      icon: const Icon(Icons.undo),
+                      label: const Text('Desfazer'),
+                    );
+                  },
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _restaurarNomesPadrao(context),
+                  icon: const Icon(Icons.restore),
+                  label: const Text('Restaurar nomes padrão'),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 24),
           Text('Regiões em uso', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
@@ -72,17 +80,17 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Nenhuma fusão. As 5 regiões intermediárias são exibidas separadamente no mapa, Metas e Responsáveis.',
+                      'Nenhuma fusão. As ${efetivas.length} regiões são exibidas separadamente no mapa, Metas e Responsáveis.',
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 12),
-                    ...efetivas.map((r) => _buildRegiaoCard(context, theme, r)),
+                    ...efetivas.map((r) => _buildRegiaoCard(context, theme, r, isAdmin)),
                   ],
                 );
               }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: efetivas.map((r) => _buildRegiaoCard(context, theme, r)).toList(),
+                children: efetivas.map((r) => _buildRegiaoCard(context, theme, r, isAdmin)).toList(),
               );
             },
             loading: () => const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
@@ -93,7 +101,7 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
     );
   }
 
-  Widget _buildRegiaoCard(BuildContext context, ThemeData theme, RegiaoEfetiva r) {
+  Widget _buildRegiaoCard(BuildContext context, ThemeData theme, RegiaoEfetiva r, bool isAdmin) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
@@ -105,13 +113,37 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        title: Text(r.nome),
+        title: InkWell(
+          onTap: isAdmin
+              ? () async {
+                  final ok = await showEditRegiaoNomeDialog(context, ref, r);
+                  if (ok && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nome da região atualizado.')));
+                  }
+                }
+              : null,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(r.nome, overflow: TextOverflow.ellipsis),
+                ),
+                if (isAdmin) ...[
+                  const SizedBox(width: 4),
+                  Icon(Icons.edit_outlined, size: 18, color: theme.colorScheme.primary),
+                ],
+              ],
+            ),
+          ),
+        ),
         subtitle: Text(
           r.descricao,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        trailing: r.eFundida
+        trailing: isAdmin && r.eFundida
             ? IconButton(
                 icon: const Icon(Icons.close),
                 tooltip: 'Remover fusão',
@@ -129,7 +161,8 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
     for (final f in fundidas) {
       for (final id in f.ids) covered.add(id);
     }
-    final disponiveis = regioesIntermediariasMT.where((r) => true).toList();
+    final base = ref.read(regioesMapeadasMTProvider).valueOrNull ?? [];
+    final disponiveis = base.where((r) => true).toList();
 
     final selecionados = <String>{};
     final nomeController = TextEditingController();
@@ -217,6 +250,29 @@ class _RegioesTabState extends ConsumerState<RegioesTab> {
     final ok = await ref.read(regioesFundidasProvider.notifier).undo();
     if (context.mounted && ok) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Última ação desfeita.')));
+    }
+  }
+
+  Future<void> _restaurarNomesPadrao(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Restaurar nomes padrão'),
+        content: const Text(
+          'Todos os nomes editados das regiões serão removidos. O mapa e as telas Metas, Responsáveis e Regiões passarão a exibir apenas os nomes padrão (do mapa). Deseja continuar?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Restaurar')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await ref.read(nomesCustomizadosProvider.notifier).restoreNomesPadrao();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nomes restaurados para o padrão do mapa.')),
+      );
     }
   }
 

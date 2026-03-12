@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/assessor.dart';
 import '../../../core/supabase/supabase_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 
 /// Extrai mensagem de erro amigável de Exception (incluindo FunctionException).
 String messageFromException(Object e) {
@@ -19,7 +21,13 @@ String messageFromException(Object e) {
 
 final assessoresListProvider = FutureProvider<List<Assessor>>((ref) async {
   final res = await supabase.from('assessores').select().order('nome');
-  return (res as List).map((e) => Assessor.fromJson(e as Map<String, dynamic>)).toList();
+  final list = (res as List).map((e) => Assessor.fromJson(e as Map<String, dynamic>)).toList();
+  final userId = ref.watch(currentUserProvider)?.id;
+  final profile = await ref.watch(profileProvider.future);
+  if (userId != null && profile?.role == 'candidato') {
+    return list.where((a) => a.profileId != userId).toList();
+  }
+  return list;
 });
 
 /// Convidar novo assessor (apenas candidato). A pessoa recebe convite por e-mail para criar senha e acessar o sistema.
@@ -32,15 +40,16 @@ Future<void> convidarAssessor({
   // Garantir sessão válida (evita 401 Invalid JWT por token expirado)
   await supabase.auth.refreshSession();
 
-  final res = await supabase.functions.invoke(
-    'convidar-assessor',
-    body: {
-      'nome': nome.trim(),
-      'email': email.trim().toLowerCase(),
-      if (telefone != null && telefone.isNotEmpty) 'telefone': telefone.trim(),
-      if (municipioId != null && municipioId.isNotEmpty) 'municipio_id': municipioId,
-    },
-  );
+  final body = <String, dynamic>{
+    'nome': nome.trim(),
+    'email': email.trim().toLowerCase(),
+    if (telefone != null && telefone.isNotEmpty) 'telefone': telefone.trim(),
+    if (municipioId != null && municipioId.isNotEmpty) 'municipio_id': municipioId,
+  };
+  if (kIsWeb && Uri.base.hasAuthority) {
+    body['redirect_to'] = Uri.base.origin;
+  }
+  final res = await supabase.functions.invoke('convidar-assessor', body: body);
   if (res.status == 401) {
     throw Exception(
       'Sessão expirada. Faça logout, entre novamente e tente enviar o convite.',
@@ -62,10 +71,11 @@ Future<void> convidarAssessor({
 Future<void> reenviarConviteAssessor(Assessor assessor) async {
   await supabase.auth.refreshSession();
   try {
-    final res = await supabase.functions.invoke(
-      'reenviar-convite-assessor',
-      body: {'assessor_id': assessor.id},
-    );
+    final body = <String, dynamic>{'assessor_id': assessor.id};
+    if (kIsWeb && Uri.base.hasAuthority) {
+      body['redirect_to'] = Uri.base.origin;
+    }
+    final res = await supabase.functions.invoke('reenviar-convite-assessor', body: body);
     if (res.status == 401) {
       throw Exception('Sessão expirada. Faça logout e entre novamente.');
     }

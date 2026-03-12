@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'regioes_mt.dart';
 
 const _prefsKeyRegioesFundidas = 'mapa_regioes_fundidas';
-const _prefsKeyNomesCustomizados = 'mapa_regioes_nomes_custom';
 
 /// Região fundida: várias regiões intermediárias agrupadas sob um único nome.
 class RegiaoFundida {
@@ -42,6 +41,7 @@ class RegiaoEfetiva {
     required this.cor,
     required this.descricao,
     this.eFundida = false,
+    this.baseRegioes,
   });
 
   final String id;
@@ -50,9 +50,12 @@ class RegiaoEfetiva {
   final Color cor;
   final String descricao;
   final bool eFundida;
+  /// Quando fornecido (regiões mapeadas), nomesOriginais usa esta lista em vez de regioesIntermediariasMT.
+  final List<RegiaoMT>? baseRegioes;
 
   String get nomesOriginais {
-    return ids.map((id) => regioesIntermediariasMT.where((r) => r.id == id).firstOrNull?.nome ?? id).join(' + ');
+    final base = baseRegioes ?? regioesIntermediariasMT;
+    return ids.map((id) => base.where((r) => r.id == id).firstOrNull?.nome ?? id).join(' + ');
   }
 }
 
@@ -94,32 +97,27 @@ Future<void> saveRegioesFundidas(List<RegiaoFundida> list) async {
   );
 }
 
-/// Carrega nomes customizados por cdRgint (editados pelo usuário no mapa).
-Future<Map<String, String>> loadNomesCustomizados() async {
-  final prefs = await SharedPreferences.getInstance();
-  final json = prefs.getString(_prefsKeyNomesCustomizados);
-  if (json == null || json.isEmpty) return {};
-  try {
-    final map = jsonDecode(json) as Map<String, dynamic>?;
-    if (map == null) return {};
-    return map.map((k, v) => MapEntry(k.toString(), v is String ? v : v.toString()));
-  } catch (_) {
-    return {};
-  }
-}
-
-/// Salva nomes customizados por cdRgint.
-Future<void> saveNomesCustomizados(Map<String, String> map) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString(_prefsKeyNomesCustomizados, jsonEncode(map));
-}
+/// Nomes e cores customizados do mapa são persistidos no Supabase (mapa_regioes_custom) para todos os usuários; ver estrategia/data/mapa_custom_repository.dart.
 
 /// Calcula as regiões efetivas: fusões primeiro, depois regiões que não estão em nenhuma fusão.
-/// [nomesCustomizados] aplica os nomes editados pelo usuário no mapa (por cdRgint).
+/// [baseRegioes] quando fornecido (ex.: regiões mapeadas do GeoJSON 2024), usa esta lista em vez das 5 intermediárias.
+/// Resolve o nome de exibição de uma região: mesmo critério do mapa (id ou partKey "id#índice").
+String nomeExibicaoRegiao(String id, String nomeOriginal, Map<String, String> nomesCustomizados) {
+  final direct = nomesCustomizados[id]?.trim();
+  if (direct != null && direct.isNotEmpty) return direct;
+  for (final e in nomesCustomizados.entries) {
+    if (e.key.startsWith('$id#') && e.value.trim().isNotEmpty) return e.value.trim();
+  }
+  return nomeOriginal;
+}
+
+/// [nomesCustomizados] aplica os nomes editados pelo usuário no mapa (por id ou partKey "id#índice").
 List<RegiaoEfetiva> computeRegioesEfetivas(
   List<RegiaoFundida> fundidas, {
+  List<RegiaoMT>? baseRegioes,
   Map<String, String> nomesCustomizados = const {},
 }) {
+  final base = baseRegioes ?? regioesIntermediariasMT;
   final covered = <String>{};
   for (final f in fundidas) {
     for (final id in f.ids) {
@@ -132,11 +130,11 @@ List<RegiaoEfetiva> computeRegioesEfetivas(
   for (final f in fundidas) {
     if (f.ids.isEmpty) continue;
     final firstId = f.ids.first;
-    final base = regioesIntermediariasMT.where((r) => r.id == firstId).firstOrNull;
-    final cor = base?.cor ?? Colors.grey;
+    final baseReg = base.where((r) => r.id == firstId).firstOrNull;
+    final cor = baseReg?.cor ?? Colors.grey;
     final desc = f.ids.length > 1
-        ? '${f.ids.length} regiões fundidas: ${f.ids.map((id) => regioesIntermediariasMT.where((r) => r.id == id).firstOrNull?.nome ?? id).join(", ")}'
-        : (base?.descricao ?? '');
+        ? '${f.ids.length} regiões fundidas: ${f.ids.map((id) => base.where((r) => r.id == id).firstOrNull?.nome ?? id).join(", ")}'
+        : (baseReg?.descricao ?? '');
     result.add(RegiaoEfetiva(
       id: f.id,
       nome: f.nome,
@@ -144,14 +142,13 @@ List<RegiaoEfetiva> computeRegioesEfetivas(
       cor: cor,
       descricao: desc,
       eFundida: f.ids.length > 1,
+      baseRegioes: baseRegioes,
     ));
   }
 
-  for (final r in regioesIntermediariasMT) {
+  for (final r in base) {
     if (covered.contains(r.id)) continue;
-    final nomeExibicao = nomesCustomizados[r.id]?.trim().isNotEmpty == true
-        ? nomesCustomizados[r.id]!
-        : r.nome;
+    final nomeExibicao = nomeExibicaoRegiao(r.id, r.nome, nomesCustomizados);
     result.add(RegiaoEfetiva(
       id: r.id,
       nome: nomeExibicao,
@@ -159,6 +156,7 @@ List<RegiaoEfetiva> computeRegioesEfetivas(
       cor: r.cor,
       descricao: r.descricao,
       eFundida: false,
+      baseRegioes: baseRegioes,
     ));
   }
 

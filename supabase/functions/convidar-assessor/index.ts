@@ -84,8 +84,8 @@ serve(async (req) => {
     const telefone = (body?.telefone ?? '').trim() || null;
     const municipioId = body?.municipio_id ?? null;
 
-    // redirectTo: URL onde o convidado abre o app (ex.: https://seu-dominio.com ou campanhamt://auth)
-    const redirectTo = Deno.env.get('REDIRECT_URL') || undefined;
+    // redirectTo: URL onde o convidado abre o app. Prioridade: body (app envia a URL pública) > env REDIRECT_URL
+    const redirectTo = (body?.redirect_to && String(body.redirect_to).trim()) || Deno.env.get('REDIRECT_URL') || undefined;
     const { data: invited, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: { full_name: nome },
       redirectTo,

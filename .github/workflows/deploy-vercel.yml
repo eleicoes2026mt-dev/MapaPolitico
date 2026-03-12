@@ -1,5 +1,4 @@
-# Único job: build Flutter Web no GitHub e envia build/web para a Vercel.
-# A Vercel não tem Flutter; o deploy é só upload dos arquivos estáticos.
+# Build Flutter Web e deploy dos arquivos estáticos na Vercel.
 
 name: Build e Deploy na Vercel
 
@@ -44,8 +43,9 @@ jobs:
           cd build/web
           npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy.log
           DEPLOY_URL=$(grep -oE 'https://[^[:space:]]+\.vercel\.app' deploy.log | tail -1)
-          echo "vercel-url=${DEPLOY_URL:-https://mapa-politico.vercel.app}" >> $GITHUB_OUTPUT
+          echo "vercel-url=${DEPLOY_URL:-}" >> $GITHUB_OUTPUT
 
       - name: URL em produção
         run: |
           echo "Site: ${{ steps.vercel.outputs.vercel-url }}"
+          if [ -n "${{ steps.vercel.outputs.vercel-url }}" ]; then echo "Deploy concluído."; fi

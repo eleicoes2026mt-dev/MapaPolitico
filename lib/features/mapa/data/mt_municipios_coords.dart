@@ -1,4 +1,4 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../../../core/geo/lat_lng.dart';
 
 /// Normaliza nome do município para busca (remove acentos, maiúsculas).
 String _norm(String s) {
@@ -10,6 +10,9 @@ String _norm(String s) {
   }
   return r;
 }
+
+/// Normalização pública (mesma lógica de getCoordsMunicipioMT) para agrupar cidades.
+String normalizarNomeMunicipioMT(String s) => _norm(s);
 
 /// Coordenadas aproximadas (centro/sede) de municípios de MT.
 final _coords = <String, LatLng>{
@@ -155,4 +158,37 @@ final _coords = <String, LatLng>{
 
 LatLng? getCoordsMunicipioMT(String nomeMunicipio) {
   return _coords[_norm(nomeMunicipio)];
+}
+
+/// Lista de nomes normalizados (uppercase, sem acento) dos municípios de MT, ordenada.
+List<String> get listCidadesMTNomesNormalizados {
+  final keys = _coords.keys.toList();
+  keys.sort();
+  return keys;
+}
+
+/// Converte nome normalizado para exibição (ex.: VARZEA GRANDE -> Várzea Grande).
+String displayNomeCidadeMT(String nomeNormalizado) {
+  const map = {
+    'AGUA BOA': 'Água Boa',
+    'ALTO GARÇAS': 'Alto Garças',
+    'ARAGUAIANA': 'Araguaiana',
+    'BARRA DO GARCAS': 'Barra do Garças',
+    'CACERES': 'Cáceres',
+    'CAMPO NOVO DO PARECIS': 'Campo Novo do Parecis',
+    'CONFRESA': 'Confresa',
+    'CUIABA': 'Cuiabá',
+    'CURVELANDIA': 'Curvelândia',
+    'FIGUEIROPOLIS D\'OESTE': 'Figueirópolis D\'Oeste',
+    'GUARANTA DO NORTE': 'Guarantã do Norte',
+    'JACIARA': 'Jaciara',
+    'MIRASSOL D\'OESTE': 'Mirassol D\'Oeste',
+    'NOSSA SENHORA DO LIVRAMENTO': 'Nossa Senhora do Livramento',
+    'POCONE': 'Poconé',
+    'SAO JOSE DOS QUATRO MARCOS': 'São José dos Quatro Marcos',
+    'VARZEA GRANDE': 'Várzea Grande',
+  };
+  final upper = nomeNormalizado.trim().toUpperCase();
+  if (map.containsKey(upper)) return map[upper]!;
+  return upper.split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}').join(' ');
 }

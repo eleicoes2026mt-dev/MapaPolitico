@@ -1,3 +1,6 @@
+# ArcGIS Maps SDK (binários nativos)
+arcgis_maps_core
+
 # Miscellaneous
 *.class
 *.log

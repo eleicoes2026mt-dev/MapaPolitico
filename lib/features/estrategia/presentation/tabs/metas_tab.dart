@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/regioes_fundidas.dart';
 import '../../providers/regioes_fundidas_provider.dart';
+import '../../widgets/edit_regiao_nome_dialog.dart';
 
 class MetasTab extends ConsumerStatefulWidget {
   const MetasTab({super.key});
@@ -12,13 +13,7 @@ class MetasTab extends ConsumerStatefulWidget {
 
 class _MetasTabState extends ConsumerState<MetasTab> {
   static const metaEstadual = 50000;
-  final Map<String, double> _percentuaisPorRegiao = {
-    '5101': 30,
-    '5102': 12,
-    '5103': 25,
-    '5104': 15,
-    '5105': 18,
-  };
+  final Map<String, double> _percentuaisPorRegiao = {};
 
   double _total(List<RegiaoEfetiva> efetivas, Map<String, double> percentuais) {
     double t = 0;
@@ -32,6 +27,19 @@ class _MetasTabState extends ConsumerState<MetasTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final efetivas = ref.watch(regioesEfetivasProvider);
+    final isAdmin = ref.watch(isAdminProvider);
+    if (efetivas.isNotEmpty && _percentuaisPorRegiao.length != efetivas.length) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final defaultPct = 100.0 / efetivas.length;
+        for (final r in efetivas) {
+          if (!_percentuaisPorRegiao.containsKey(r.id)) {
+            _percentuaisPorRegiao[r.id] = defaultPct;
+          }
+        }
+        setState(() {});
+      });
+    }
     final total = _total(efetivas, _percentuaisPorRegiao);
 
     return SingleChildScrollView(
@@ -67,9 +75,15 @@ class _MetasTabState extends ConsumerState<MetasTab> {
           ...efetivas.map((r) {
             final value = _percentuaisPorRegiao[r.id] ?? (efetivas.isEmpty ? 0.0 : 100 / efetivas.length);
             return _SliderRow(
-              label: 'Região ${r.nome}',
+              regiao: r,
               value: value,
               onChanged: (v) => setState(() => _percentuaisPorRegiao[r.id] = v),
+              onEditNome: isAdmin
+                  ? () async {
+                      final ok = await showEditRegiaoNomeDialog(context, ref, r);
+                      if (ok && mounted) setState(() {});
+                    }
+                  : null,
             );
           }),
           const SizedBox(height: 16),
@@ -92,11 +106,17 @@ class _MetasTabState extends ConsumerState<MetasTab> {
 }
 
 class _SliderRow extends StatelessWidget {
-  const _SliderRow({required this.label, required this.value, required this.onChanged});
+  const _SliderRow({
+    required this.regiao,
+    required this.value,
+    required this.onChanged,
+    this.onEditNome,
+  });
 
-  final String label;
+  final RegiaoEfetiva regiao;
   final double value;
   final ValueChanged<double> onChanged;
+  final VoidCallback? onEditNome;
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +125,31 @@ class _SliderRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(width: 220, child: Text(label, style: const TextStyle(fontSize: 15))),
+          SizedBox(
+            width: 220,
+            child: InkWell(
+              onTap: onEditNome,
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Região ${regiao.nome}',
+                        style: const TextStyle(fontSize: 15),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (onEditNome != null) ...[
+                      const SizedBox(width: 4),
+                      Icon(Icons.edit_outlined, size: 16, color: Theme.of(context).colorScheme.primary),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Slider(

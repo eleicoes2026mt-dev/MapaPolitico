@@ -33,6 +33,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
   String? _cargo;
   DateTime? _dataNascimento;
   String? _avatarUrl;
+  int? _sqCandidatoTse2022;
   bool _loading = false;
   bool _uploadingImage = false;
   String? _error;
@@ -78,6 +79,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
               : _numeroController.text.trim(),
           dataNascimento: _dataNascimento,
           avatarUrl: _avatarUrl,
+          sqCandidatoTse2022: _sqCandidatoTse2022,
         ),
       );
       if (mounted) {
@@ -158,6 +160,9 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
             }
             if (_avatarUrl == null && profile?.avatarUrl != null) {
               setState(() => _avatarUrl = profile?.avatarUrl);
+            }
+            if (_sqCandidatoTse2022 == null && profile?.sqCandidatoTse2022 != null) {
+              setState(() => _sqCandidatoTse2022 = profile?.sqCandidatoTse2022);
             }
           });
         }
@@ -280,6 +285,11 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                         ),
                         keyboardType: TextInputType.number,
                         maxLength: 5,
+                      ),
+                      const SizedBox(height: 16),
+                      _CandidatoTse2022Field(
+                        value: _sqCandidatoTse2022,
+                        onChanged: (v) => setState(() => _sqCandidatoTse2022 = v),
                       ),
                       const SizedBox(height: 16),
                       _NmVotavelTseField(),
@@ -475,6 +485,164 @@ class _ImagemPerfilField extends StatelessWidget {
   }
 }
 
+/// Campo para o candidato escolher quem é na eleição 2022 (dados da tabela votacao_secao no Supabase).
+/// Abre diálogo com pesquisa para filtrar a lista de nomes.
+class _CandidatoTse2022Field extends ConsumerWidget {
+  const _CandidatoTse2022Field({this.value, required this.onChanged});
+
+  final int? value;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final candidatosAsync = ref.watch(candidatos2022MtProvider);
+
+    return candidatosAsync.when(
+      data: (list) {
+        if (list.isEmpty) {
+          return Text(
+            'Não há candidatos da eleição 2022 (MT) na base. Verifique a carga na tabela votacao_secao.',
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          );
+        }
+        final selected = list.where((c) => c.sqCandidato == value).firstOrNull;
+        return InkWell(
+          onTap: () => _showCandidato2022Picker(context, list, value, onChanged),
+          child: InputDecorator(
+            decoration: const InputDecoration(
+              labelText: 'Quem sou eu na eleição 2022 (TSE)',
+              hintText: 'Toque para pesquisar e selecionar seu nome',
+              prefixIcon: Icon(Icons.how_to_vote_outlined),
+            ),
+            isEmpty: selected == null,
+            child: selected != null
+                ? Text(selected.nmVotavel, overflow: TextOverflow.ellipsis)
+                : null,
+          ),
+        );
+      },
+      loading: () => const SizedBox(height: 56, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+      error: (e, _) => Text(
+        'Erro ao carregar candidatos 2022: $e. Confira se a tabela votacao_secao tem a coluna nm_votavel com os nomes (equivalente ao NM_VOTAVEL do CSV). Após importar, rode no SQL do Supabase: REFRESH MATERIALIZED VIEW candidatos_2022_mt;',
+        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+      ),
+    );
+  }
+}
+
+void _showCandidato2022Picker(
+  BuildContext context,
+  List<({int sqCandidato, String nmVotavel})> list,
+  int? currentValue,
+  ValueChanged<int?> onChanged,
+) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => _Candidato2022SearchDialog(
+      list: list,
+      currentValue: currentValue,
+      onSelected: (sq) {
+        onChanged(sq);
+        Navigator.of(ctx).pop();
+      },
+    ),
+  );
+}
+
+class _Candidato2022SearchDialog extends StatefulWidget {
+  const _Candidato2022SearchDialog({
+    required this.list,
+    required this.currentValue,
+    required this.onSelected,
+  });
+
+  final List<({int sqCandidato, String nmVotavel})> list;
+  final int? currentValue;
+  final void Function(int?) onSelected;
+
+  @override
+  State<_Candidato2022SearchDialog> createState() => _Candidato2022SearchDialogState();
+}
+
+class _Candidato2022SearchDialogState extends State<_Candidato2022SearchDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _searchFocus.requestFocus());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  List<({int sqCandidato, String nmVotavel})> get _filtered {
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isEmpty) return widget.list;
+    return widget.list.where((c) => c.nmVotavel.toLowerCase().contains(q)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered;
+
+    return AlertDialog(
+      title: const Text('Selecione seu nome (eleição 2022)'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _searchController,
+              focusNode: _searchFocus,
+              decoration: const InputDecoration(
+                hintText: 'Pesquisar nome...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: filtered.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return ListTile(
+                      leading: const Icon(Icons.clear_outlined),
+                      title: const Text('Não selecionado'),
+                      selected: widget.currentValue == null,
+                      onTap: () => widget.onSelected(null),
+                    );
+                  }
+                  final c = filtered[index - 1];
+                  return ListTile(
+                    title: Text(c.nmVotavel, overflow: TextOverflow.ellipsis),
+                    selected: widget.currentValue == c.sqCandidato,
+                    onTap: () => widget.onSelected(c.sqCandidato),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NmVotavelTseField extends ConsumerWidget {
   const _NmVotavelTseField();
 
@@ -488,7 +656,7 @@ class _NmVotavelTseField extends ConsumerWidget {
       data: (list) {
         if (list.isEmpty) {
           return Text(
-            'Importe um CSV em Dados TSE para selecionar seu nome na coluna NM_VOTAVEL.',
+            'Selecione acima (Eleição 2022) para vincular seu candidato. O campo NM_VOTAVEL é opcional para importação de CSV.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           );
         }

@@ -21,4 +21,11 @@ class EnvConfig {
     'GOOGLE_MAPS_API_KEY',
     defaultValue: '',
   );
+
+  /// URL pública do app (usada no link do e-mail de convite para assessores).
+  /// Em produção use --dart-define=APP_URL=https://seu-dominio.vercel.app
+  static const String appUrl = String.fromEnvironment(
+    'APP_URL',
+    defaultValue: 'https://web-liart-iota-22.vercel.app',
+  );
 }

@@ -1,0 +1,8 @@
+# Ignorar pastas pesadas no upload (build é feito na Vercel)
+.dart_tool/
+.idea/
+*.iml
+.vscode/
+build/
+*.log
+.DS_Store

@@ -1,8 +1,8 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/assessor.dart';
 import '../../../core/supabase/supabase_provider.dart';
+import '../../../core/config/env_config.dart';
 import '../../auth/providers/auth_provider.dart';
 
 /// Extrai mensagem de erro amigável de Exception (incluindo FunctionException).
@@ -46,9 +46,8 @@ Future<void> convidarAssessor({
     if (telefone != null && telefone.isNotEmpty) 'telefone': telefone.trim(),
     if (municipioId != null && municipioId.isNotEmpty) 'municipio_id': municipioId,
   };
-  if (kIsWeb && Uri.base.hasAuthority) {
-    body['redirect_to'] = Uri.base.origin;
-  }
+  // Sempre usar URL do app em produção no convite (evita link localhost no e-mail)
+  body['redirect_to'] = EnvConfig.appUrl;
   final res = await supabase.functions.invoke('convidar-assessor', body: body);
   if (res.status == 401) {
     throw Exception(
@@ -71,10 +70,10 @@ Future<void> convidarAssessor({
 Future<void> reenviarConviteAssessor(Assessor assessor) async {
   await supabase.auth.refreshSession();
   try {
-    final body = <String, dynamic>{'assessor_id': assessor.id};
-    if (kIsWeb && Uri.base.hasAuthority) {
-      body['redirect_to'] = Uri.base.origin;
-    }
+    final body = <String, dynamic>{
+      'assessor_id': assessor.id,
+      'redirect_to': EnvConfig.appUrl,
+    };
     final res = await supabase.functions.invoke('reenviar-convite-assessor', body: body);
     if (res.status == 401) {
       throw Exception('Sessão expirada. Faça logout e entre novamente.');

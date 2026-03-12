@@ -101,7 +101,9 @@ serve(async (req) => {
       });
     }
 
-    const redirectTo = (body?.redirect_to && String(body.redirect_to).trim()) || Deno.env.get('REDIRECT_URL') || undefined;
+    const rawRedirect = (body?.redirect_to && String(body.redirect_to).trim()) || '';
+    const isLocalhost = rawRedirect.includes('localhost') || rawRedirect.includes('127.0.0.1');
+    const redirectTo = !isLocalhost && rawRedirect ? rawRedirect : (Deno.env.get('REDIRECT_URL') || undefined);
     const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
       data: { full_name: nome },
       redirectTo,

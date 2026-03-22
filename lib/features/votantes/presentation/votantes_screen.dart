@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../../models/apoiador.dart';
+import '../../../models/municipio.dart';
 import '../../../models/votante.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -303,6 +305,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   String _abrangencia = 'Individual';
   String? _apoiadorOpcionalId;
   bool _loading = false;
+  /// Apoiador criando votante: true = escolher outra cidade no dropdown.
+  bool _usarOutroMunicipio = false;
+  bool _municipioPadraoApoiadorAplicado = false;
 
   @override
   void initState() {
@@ -315,6 +320,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _municipioId = v?.municipioId;
     _abrangencia = v?.abrangencia ?? 'Individual';
     _apoiadorOpcionalId = v?.apoiadorId;
+    if (v != null) {
+      _municipioPadraoApoiadorAplicado = true;
+    }
   }
 
   @override
@@ -378,6 +386,114 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     }
   }
 
+  String _nomeMunicipioParaExibir(List<Municipio> municipios, String municipioId, String? cidadeNomeFallback) {
+    for (final m in municipios) {
+      if (m.id == municipioId) return displayNomeCidadeMT(m.nome);
+    }
+    if (cidadeNomeFallback != null && cidadeNomeFallback.trim().isNotEmpty) {
+      return displayNomeCidadeMT(normalizarNomeMunicipioMT(cidadeNomeFallback));
+    }
+    return 'Município';
+  }
+
+  /// Novo votante como apoiador: padrão = cidade do cadastro do apoiador; opção de outro município.
+  List<Widget> _camposMunicipioApoiador(ThemeData theme, List<Municipio> municipios) {
+    return ref.watch(meuApoiadorProvider).when(
+          loading: () => [
+            Text(
+              'Carregando seu município de cadastro...',
+              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(),
+          ],
+          error: (e, _) => [
+            Text(
+              'Erro ao carregar seu cadastro: $e',
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+          ],
+          data: (meuAp) {
+            final midAp = meuAp?.municipioId?.trim();
+            final temCidadeCadastro = midAp != null && midAp.isNotEmpty;
+
+            if (!temCidadeCadastro) {
+              return [
+                Text(
+                  'Seu cadastro de apoiador não tem município. Escolha a cidade do votante abaixo ou defina o município em Meu perfil (via assessor/candidato).',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _municipioId != null && municipios.any((m) => m.id == _municipioId)
+                      ? _municipioId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Município (MT) *'),
+                  items: municipios
+                      .map((m) => DropdownMenuItem(value: m.id, child: Text(displayNomeCidadeMT(m.nome))))
+                      .toList(),
+                  onChanged: (v) => setState(() => _municipioId = v),
+                  validator: (v) => v == null || v.isEmpty ? 'Selecione' : null,
+                ),
+              ];
+            }
+
+            final out = <Widget>[];
+            if (!_usarOutroMunicipio) {
+              out.add(
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Município (MT) *',
+                    helperText: 'Padrão: mesma cidade do seu cadastro de apoiador',
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      _nomeMunicipioParaExibir(municipios, midAp, meuAp?.cidadeNome),
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                  ),
+                ),
+              );
+            } else {
+              out.add(
+                DropdownButtonFormField<String>(
+                  value: _municipioId != null && municipios.any((m) => m.id == _municipioId)
+                      ? _municipioId
+                      : null,
+                  decoration: const InputDecoration(labelText: 'Município (MT) *'),
+                  items: municipios
+                      .map((m) => DropdownMenuItem(value: m.id, child: Text(displayNomeCidadeMT(m.nome))))
+                      .toList(),
+                  onChanged: (v) => setState(() => _municipioId = v),
+                  validator: (v) => v == null || v.isEmpty ? 'Selecione' : null,
+                ),
+              );
+            }
+            out.add(
+              CheckboxListTile(
+                value: _usarOutroMunicipio,
+                onChanged: (v) {
+                  setState(() {
+                    _usarOutroMunicipio = v ?? false;
+                    if (!_usarOutroMunicipio) {
+                      _municipioId = midAp;
+                    }
+                  });
+                },
+                title: const Text('Cadastrar em outro município'),
+                subtitle: _usarOutroMunicipio
+                    ? const Text('Desmarque para voltar à sua cidade de cadastro')
+                    : null,
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+            );
+            return out;
+          },
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -385,6 +501,24 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     final munAsync = ref.watch(municipiosMTListProvider);
     final apoiadoresAsync = ref.watch(apoiadoresListProvider);
     final mostrarApoiadorOpcional = profile?.role == 'candidato' || profile?.role == 'assessor';
+
+    ref.listen<AsyncValue<Apoiador?>>(meuApoiadorProvider, (_, next) {
+      if (widget.existente != null) return;
+      if (ref.read(profileProvider).valueOrNull?.role != 'apoiador') return;
+      next.whenData((ap) {
+        if (!mounted || _municipioPadraoApoiadorAplicado) return;
+        setState(() {
+          _municipioPadraoApoiadorAplicado = true;
+          final id = ap?.municipioId?.trim();
+          if (id != null && id.isNotEmpty) {
+            _municipioId = id;
+            _usarOutroMunicipio = false;
+          } else {
+            _usarOutroMunicipio = true;
+          }
+        });
+      });
+    });
 
     return AlertDialog(
       title: Text(widget.existente != null ? 'Editar votante' : 'Novo votante'),
@@ -423,18 +557,21 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: _municipioId != null &&
-                              municipios.any((m) => m.id == _municipioId)
-                          ? _municipioId
-                          : null,
-                      decoration: const InputDecoration(labelText: 'Município (MT) *'),
-                      items: municipios
-                          .map((m) => DropdownMenuItem(value: m.id, child: Text(displayNomeCidadeMT(m.nome))))
-                          .toList(),
-                      onChanged: (v) => setState(() => _municipioId = v),
-                      validator: (v) => v == null || v.isEmpty ? 'Selecione' : null,
-                    ),
+                    if (profile?.role == 'apoiador' && widget.existente == null)
+                      ..._camposMunicipioApoiador(theme, municipios)
+                    else ...[
+                      DropdownButtonFormField<String>(
+                        value: _municipioId != null && municipios.any((m) => m.id == _municipioId)
+                            ? _municipioId
+                            : null,
+                        decoration: const InputDecoration(labelText: 'Município (MT) *'),
+                        items: municipios
+                            .map((m) => DropdownMenuItem(value: m.id, child: Text(displayNomeCidadeMT(m.nome))))
+                            .toList(),
+                        onChanged: (v) => setState(() => _municipioId = v),
+                        validator: (v) => v == null || v.isEmpty ? 'Selecione' : null,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: _abrangencia,

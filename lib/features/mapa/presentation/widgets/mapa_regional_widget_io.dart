@@ -6,6 +6,8 @@ import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/geo/lat_lng.dart';
 import '../../data/geo_loader.dart';
 import '../../data/mt_municipios_coords.dart';
+import '../../data/tse_votos_escala.dart';
+import '../../../../models/bandeira_visual.dart';
 import '../../models/mapa_marcador_cidade.dart';
 
 const _prefsKeyRegionNames = 'mapa_regioes_nomes';
@@ -403,20 +405,37 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
 
     final votos = widget.votosPorMunicipio;
     if (votos != null && votos.isNotEmpty) {
-      for (final e in votos.entries) {
-        final coords = getCoordsMunicipioMT(e.key);
-        if (coords != null) {
+      final votosList = votos.entries
+          .map((e) => (key: e.key, v: e.value, coords: getCoordsMunicipioMT(e.key)))
+          .where((e) => e.coords != null)
+          .toList();
+      if (votosList.isNotEmpty) {
+        final mm = minMaxVotos(votos);
+        final minV = mm.minV;
+        final maxV = mm.maxV;
+        final range = (maxV - minV).clamp(1, 1 << 30).toDouble();
+        const sizeMin = 7.0;
+        const sizeMax = 17.0;
+        for (final e in votosList) {
+          final t = ((e.v - minV) / range).clamp(0.0, 1.0);
+          final size = sizeMin + (sizeMax - sizeMin) * (t * 0.5 + 0.5);
+          final tier = tierParaVotos(e.v, minV, maxV);
+          final cor = corCentroTier(tier);
           final tseSym = SimpleMarkerSymbol(
             style: SimpleMarkerSymbolStyle.circle,
-            color: Colors.red,
-            size: 10,
+            color: cor,
+            size: size,
           );
-          tseSym.outline = SimpleLineSymbol(color: Colors.white, width: 1);
+          tseSym.outline = SimpleLineSymbol(color: Colors.white.withValues(alpha: 0.95), width: 1.5);
           overlayMarkers.graphics.add(
             Graphic(
-              geometry: ArcGISPoint(x: coords.longitude, y: coords.latitude, spatialReference: _wgs84),
+              geometry: ArcGISPoint(x: e.coords!.longitude, y: e.coords!.latitude, spatialReference: _wgs84),
               symbol: tseSym,
-              attributes: {'title': e.key, 'snippet': '${e.value} votos', 'type': 'tse'},
+              attributes: {
+                'title': e.key,
+                'snippet': '${e.v} votos (TSE) — ${tier.tituloCurto}',
+                'type': 'tse',
+              },
             ),
           );
         }
@@ -424,6 +443,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     }
 
     Color marcadorCor(MapaMarcadorCidade m) {
+      final v = m.bandeiraVisual;
+      if (v != null) return v.corDominanteMapa;
       final h = m.bandeiraCorPrimariaHex;
       if (h == null || h.isEmpty) return Colors.green;
       final s = h.replaceFirst('#', '');

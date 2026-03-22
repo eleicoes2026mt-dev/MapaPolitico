@@ -9,7 +9,9 @@ import '../../estrategia/providers/regioes_fundidas_provider.dart';
 import '../data/mt_municipios_coords.dart';
 import '../providers/mapa_camadas_filtradas_provider.dart';
 import '../providers/mapa_filtros_provider.dart';
+import 'widgets/mapa_kpis_regiao_panel.dart';
 import 'widgets/mapa_regional_widget.dart';
+import 'widgets/mapa_tse_legenda.dart';
 
 /// Painel de locais de votação exibido no bloco principal (abaixo do mapa).
 class _LocaisVotacaoPanel extends StatelessWidget {
@@ -315,6 +317,12 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               ],
             ),
           ),
+          SizedBox(height: padding * 0.5),
+          if (votosAjustados.isNotEmpty) ...[
+            MapaTseLegenda(votosPorCidade: votosAjustados),
+            SizedBox(height: padding * 0.5),
+          ],
+          const MapaKpisRegiaoPanel(),
           SizedBox(height: padding * 0.5),
           Expanded(
             child: Card(

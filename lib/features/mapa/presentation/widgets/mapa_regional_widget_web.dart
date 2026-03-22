@@ -5,7 +5,9 @@ import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/geo/lat_lng.dart';
 import '../../data/geo_loader.dart';
 import '../../data/mt_municipios_coords.dart';
+import '../../data/tse_votos_escala.dart';
 import '../../models/mapa_marcador_cidade.dart';
+import 'bandeira_marcador_widget.dart';
 
 /// Mapa para **web**: OpenStreetMap + regiões de MT (flutter_map).
 /// Mesma funcionalidade de regiões, toque e tooltip que no app mobile.
@@ -229,7 +231,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     return polygons;
   }
 
-  /// Mapa de calor: marcadores com degradê transparente nas bordas (centro forte, bordas fracas).
+  /// Votos TSE: círculos com degradê (centro → transparente) e cor por faixa (vermelho … verde).
   List<Marker> _buildHeatMarkers() {
     final votos = widget.votosPorMunicipio;
     if (votos == null || votos.isEmpty) return [];
@@ -240,28 +242,28 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         .toList();
     if (entries.isEmpty) return [];
 
-    final minV = entries.map((e) => e.votos).reduce((a, b) => a < b ? a : b);
-    final maxV = entries.map((e) => e.votos).reduce((a, b) => a > b ? a : b);
-    final range = (maxV - minV).clamp(1, double.infinity).toDouble();
+    final mm = minMaxVotos(votos);
+    final minV = mm.minV;
+    final maxV = mm.maxV;
+    final range = (maxV - minV).clamp(1, 1 << 30).toDouble();
 
-    const sizeMin = 24.0;
-    const sizeMax = 80.0;
+    const sizeMin = 20.0;
+    const sizeMax = 48.0;
 
     return entries.map((e) {
-      final t = ((e.votos - minV) / range).clamp(0.0, 1.0);
-      final size = sizeMin + (sizeMax - sizeMin) * (t * 0.5 + 0.5);
-      final centerColor = Color.lerp(
-        Colors.orange.shade400,
-        Colors.deepOrange.shade800,
-        t,
-      )!.withValues(alpha: 0.75);
-      final edgeColor = centerColor.withValues(alpha: 0.0);
+      final tSize = ((e.votos - minV) / range).clamp(0.0, 1.0);
+      final size = sizeMin + (sizeMax - sizeMin) * (tSize * 0.5 + 0.5);
+      final tier = tierParaVotos(e.votos, minV, maxV);
+      final center = corCentroTier(tier).withValues(alpha: 0.88);
+      final mid = corCentroTier(tier).withValues(alpha: 0.45);
+      final edge = corCentroTier(tier).withValues(alpha: 0.0);
       return Marker(
         point: ll.LatLng(e.coords!.latitude, e.coords!.longitude),
         width: size,
         height: size,
         child: Tooltip(
-          message: '${displayNomeCidadeMT(e.nome)}: ${e.votos} votos (TSE). Toque para ver locais de votação.',
+          message:
+              '${displayNomeCidadeMT(e.nome)}: ${e.votos} votos (TSE) — ${tier.tituloCurto}. Toque para locais de votação.',
           child: GestureDetector(
             onTap: () => widget.onCityTap?.call(e.nome),
             child: Container(
@@ -270,9 +272,18 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
-                  colors: [centerColor, edgeColor],
-                  stops: const [0.0, 1.0],
+                  colors: [center, mid, edge],
+                  stops: const [0.0, 0.55, 1.0],
                 ),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.95), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.22),
+                    blurRadius: 4,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
               ),
             ),
           ),
@@ -281,7 +292,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     }).toList();
   }
 
-  /// Apenas marcadores de cidades com apoiadores (votos TSE ficam só no calor).
+  /// Marcadores de apoiadores/votantes (camada acima dos círculos TSE).
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
     final porCidade = widget.cidadesMarcadoresMapa;
@@ -299,6 +310,24 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
                   ? m.bandeiraIniciais!.trim()
                   : '${m.quantidade}');
+          final Widget marcadorChild = m.bandeiraVisual != null
+              ? BandeiraMarcadorWidget(
+                  visual: m.bandeiraVisual!,
+                  tamanho: 30,
+                  fallbackIniciais: m.quantidade > 0 ? '${m.quantidade}' : '?',
+                )
+              : (m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
+                  ? Text(label, style: const TextStyle(fontSize: 22))
+                  : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
+                      ? CircleAvatar(
+                          radius: 14,
+                          backgroundColor: cor,
+                          child: Text(
+                            label.length > 3 ? label.substring(0, 3) : label,
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        )
+                      : Icon(Icons.people, color: cor, size: 26)));
           markers.add(
             Marker(
               point: ll.LatLng(coords.latitude, coords.longitude),
@@ -308,18 +337,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                 message: '$nome: ${m.quantidade} na rede (apoiadores/votantes)',
                 child: GestureDetector(
                   onTap: () => widget.onCityTap?.call(e.key),
-                  child: m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
-                      ? Text(label, style: const TextStyle(fontSize: 22))
-                      : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
-                          ? CircleAvatar(
-                              radius: 14,
-                              backgroundColor: cor,
-                              child: Text(
-                                label.length > 3 ? label.substring(0, 3) : label,
-                                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                              ),
-                            )
-                          : Icon(Icons.people, color: cor, size: 26)),
+                  child: marcadorChild,
                 ),
               ),
             ),

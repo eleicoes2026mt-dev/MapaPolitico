@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
+import '../../../models/bandeira_visual.dart';
 import '../../../models/votante.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../votantes/providers/votantes_provider.dart';
@@ -8,9 +9,7 @@ import '../models/mapa_marcador_cidade.dart';
 
 class _MarcadorAgg {
   int count = 0;
-  String? iniciais;
-  String? corHex;
-  String? emoji;
+  BandeiraVisual? visual;
 }
 
 /// Monta mapa de marcadores por cidade (contagem + primeira bandeira encontrada por apoiador).
@@ -22,17 +21,8 @@ Map<String, MapaMarcadorCidade> buildMarcadoresCidadesMap(
   final aggs = <String, _MarcadorAgg>{};
 
   void aplicarBandeira(_MarcadorAgg g, Apoiador a) {
-    final ini = a.bandeiraIniciais?.trim();
-    if (ini != null && ini.isNotEmpty && (g.iniciais == null || g.iniciais!.isEmpty)) {
-      g.iniciais = ini.length > 3 ? ini.substring(0, 3) : ini;
-    }
-    final cor = a.bandeiraCorPrimaria?.trim();
-    if (cor != null && cor.isNotEmpty && (g.corHex == null || g.corHex!.isEmpty)) {
-      g.corHex = cor.startsWith('#') ? cor : '#$cor';
-    }
-    final em = a.bandeiraEmoji?.trim();
-    if (em != null && em.isNotEmpty && (g.emoji == null || g.emoji!.isEmpty)) {
-      g.emoji = em;
+    if (g.visual == null) {
+      g.visual = a.bandeiraVisualResolvida;
     }
   }
 
@@ -59,11 +49,18 @@ Map<String, MapaMarcadorCidade> buildMarcadoresCidadesMap(
     for (final e in aggs.entries)
       e.key: MapaMarcadorCidade(
         quantidade: e.value.count,
-        bandeiraIniciais: e.value.iniciais,
-        bandeiraCorPrimariaHex: e.value.corHex,
-        bandeiraEmoji: e.value.emoji,
+        bandeiraVisual: e.value.visual,
+        bandeiraIniciais: _trimOrNull(e.value.visual?.iniciais),
+        bandeiraCorPrimariaHex: e.value.visual?.corPrimariaHex,
+        bandeiraEmoji: _trimOrNull(e.value.visual?.emoji),
       ),
   };
+}
+
+String? _trimOrNull(String? s) {
+  final t = s?.trim();
+  if (t == null || t.isEmpty) return null;
+  return t;
 }
 
 /// Mapa completo da campanha (sem filtros da tela Mapa). Usado em Estratégia e como base.

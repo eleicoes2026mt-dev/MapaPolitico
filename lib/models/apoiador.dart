@@ -1,3 +1,5 @@
+import 'bandeira_visual.dart';
+
 class Apoiador {
   final String id;
   final String? profileId;
@@ -31,6 +33,8 @@ class Apoiador {
   final String? bandeiraCorSecundaria;
   final String? bandeiraSimbolo;
   final String? bandeiraEmoji;
+  /// JSON completo do editor visual (coluna `bandeira_visual`).
+  final Map<String, dynamic>? bandeiraVisualJson;
 
   const Apoiador({
     required this.id,
@@ -65,6 +69,7 @@ class Apoiador {
     this.bandeiraCorSecundaria,
     this.bandeiraSimbolo,
     this.bandeiraEmoji,
+    this.bandeiraVisualJson,
   });
 
   factory Apoiador.fromJson(Map<String, dynamic> json) {
@@ -103,6 +108,9 @@ class Apoiador {
       bandeiraCorSecundaria: json['bandeira_cor_secundaria'] as String?,
       bandeiraSimbolo: json['bandeira_simbolo'] as String?,
       bandeiraEmoji: json['bandeira_emoji'] as String?,
+      bandeiraVisualJson: json['bandeira_visual'] is Map
+          ? Map<String, dynamic>.from(json['bandeira_visual'] as Map)
+          : null,
     );
   }
 
@@ -139,7 +147,21 @@ class Apoiador {
         'bandeira_cor_secundaria': bandeiraCorSecundaria,
         'bandeira_simbolo': bandeiraSimbolo,
         'bandeira_emoji': bandeiraEmoji,
+        'bandeira_visual': bandeiraVisualJson,
       };
+
+  /// Configuração da bandeira: JSON novo ou campos legados.
+  BandeiraVisual get bandeiraVisualResolvida {
+    if (bandeiraVisualJson != null && bandeiraVisualJson!.isNotEmpty) {
+      return BandeiraVisual.fromJson(bandeiraVisualJson);
+    }
+    return BandeiraVisual.fromLegacy(
+      bandeiraIniciais: bandeiraIniciais,
+      bandeiraCorPrimaria: bandeiraCorPrimaria,
+      bandeiraCorSecundaria: bandeiraCorSecundaria,
+      bandeiraEmoji: bandeiraEmoji,
+    );
+  }
 
   /// Nome da cidade para exibição no mapa (cidade_nome ou derivado).
   String? get cidadeParaMapa => cidadeNome;

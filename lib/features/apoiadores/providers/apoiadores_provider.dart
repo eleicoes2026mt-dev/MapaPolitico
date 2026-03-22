@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
+import '../../../models/bandeira_visual.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../../core/config/env_config.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -213,6 +214,7 @@ class AtualizarApoiadorParams {
     this.bandeiraSimbolo,
     this.bandeiraEmoji,
     this.atualizarBandeira = false,
+    this.bandeiraVisualJson,
   });
   final String? nome;
   final String? cidadeNome;
@@ -229,6 +231,8 @@ class AtualizarApoiadorParams {
   final String? bandeiraEmoji;
   /// Se true, grava campos de bandeira (permite limpar com null nos opcionais).
   final bool atualizarBandeira;
+  /// JSON do editor visual (`bandeira_visual`); quando preenchido, grava junto com os campos legados.
+  final Map<String, dynamic>? bandeiraVisualJson;
 }
 
 final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiadorId, AtualizarApoiadorParams params)>((ref) {
@@ -242,20 +246,31 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     if (params.estimativaVotos != null) row['estimativa_votos'] = params.estimativaVotos!;
     if (params.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = params.votosPrometidosUltimaEleicao;
     if (params.atualizarBandeira) {
-      final ini = params.bandeiraIniciais?.trim() ?? '';
-      row['bandeira_iniciais'] = ini.isEmpty ? null : (ini.length > 3 ? ini.substring(0, 3) : ini);
-      row['bandeira_cor_primaria'] = params.bandeiraCorPrimaria == null || params.bandeiraCorPrimaria!.trim().isEmpty
-          ? null
-          : params.bandeiraCorPrimaria!.trim();
-      row['bandeira_cor_secundaria'] = params.bandeiraCorSecundaria == null || params.bandeiraCorSecundaria!.trim().isEmpty
-          ? null
-          : params.bandeiraCorSecundaria!.trim();
-      row['bandeira_simbolo'] = params.bandeiraSimbolo == null || params.bandeiraSimbolo!.trim().isEmpty
-          ? null
-          : params.bandeiraSimbolo!.trim();
-      row['bandeira_emoji'] = params.bandeiraEmoji == null || params.bandeiraEmoji!.trim().isEmpty
-          ? null
-          : params.bandeiraEmoji!.trim();
+      if (params.bandeiraVisualJson != null && params.bandeiraVisualJson!.isNotEmpty) {
+        row['bandeira_visual'] = params.bandeiraVisualJson;
+        final bv = BandeiraVisual.fromJson(params.bandeiraVisualJson);
+        final iniBv = bv.iniciais?.trim() ?? '';
+        row['bandeira_iniciais'] =
+            iniBv.isEmpty ? null : (iniBv.length > 3 ? iniBv.substring(0, 3) : iniBv);
+        row['bandeira_cor_primaria'] = bv.corPrimariaHex;
+        row['bandeira_cor_secundaria'] = bv.corSecundariaHex;
+        row['bandeira_emoji'] = bv.emoji?.trim().isEmpty == true ? null : bv.emoji?.trim();
+      } else {
+        final ini = params.bandeiraIniciais?.trim() ?? '';
+        row['bandeira_iniciais'] = ini.isEmpty ? null : (ini.length > 3 ? ini.substring(0, 3) : ini);
+        row['bandeira_cor_primaria'] = params.bandeiraCorPrimaria == null || params.bandeiraCorPrimaria!.trim().isEmpty
+            ? null
+            : params.bandeiraCorPrimaria!.trim();
+        row['bandeira_cor_secundaria'] = params.bandeiraCorSecundaria == null || params.bandeiraCorSecundaria!.trim().isEmpty
+            ? null
+            : params.bandeiraCorSecundaria!.trim();
+        row['bandeira_simbolo'] = params.bandeiraSimbolo == null || params.bandeiraSimbolo!.trim().isEmpty
+            ? null
+            : params.bandeiraSimbolo!.trim();
+        row['bandeira_emoji'] = params.bandeiraEmoji == null || params.bandeiraEmoji!.trim().isEmpty
+            ? null
+            : params.bandeiraEmoji!.trim();
+      }
     }
     if (row.isEmpty) return;
     await client.from('apoiadores').update(row).eq('id', apoiadorId);

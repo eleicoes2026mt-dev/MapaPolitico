@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -46,14 +48,36 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
     }
     final senha = _senhaController.text;
     try {
-      await Supabase.instance.client.auth.updateUser(UserAttributes(password: senha));
+      await Supabase.instance.client.auth
+          .updateUser(UserAttributes(password: senha))
+          .timeout(const Duration(seconds: 60));
       if (!mounted) return;
+
+      if (widget.isPasswordRecovery) {
+        // Evita travar em profileProvider (stream/RLS após recovery) e leva ao login com a nova senha.
+        clearProfileRoleCache();
+        ref.invalidate(profileProvider);
+        await Supabase.instance.client.auth.signOut();
+        if (!mounted) return;
+        context.go('/login');
+        return;
+      }
+
       clearProfileRoleCache();
       ref.invalidate(profileProvider);
-      final profile = await ref.read(profileProvider.future);
+      final profile = await ref
+          .read(profileProvider.future)
+          .timeout(const Duration(seconds: 25));
       final role = profile?.role;
       if (!mounted) return;
       context.go(homePathForProfileRole(role));
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error =
+            'A operação demorou demais. Verifique a internet e tente de novo; se a senha já tiver sido alterada, use «Voltar ao login».';
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {

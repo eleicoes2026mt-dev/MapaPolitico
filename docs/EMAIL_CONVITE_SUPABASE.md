@@ -53,3 +53,28 @@ Se quiser que a Edge Function use uma URL fixa mesmo quando o app não enviar:
 2. Crie o secret: `REDIRECT_URL` = `https://web-liart-iota-22.vercel.app` (ou a URL do seu app).
 
 Assim, se por algum motivo o app enviar localhost, o servidor usa essa URL no lugar.
+
+## 4. O e-mail de convite não chega — o que fazer
+
+O envio padrão do Supabase (sem SMTP próprio) tem **limite de taxa** e pode ir para **spam/promoções**. Para o time do deputado conseguir acesso:
+
+1. **Link copiável no app**  
+   Depois de **Convidar** ou **Reenviar convite**, o app pode abrir um diálogo com um **link longo**. Use **Copiar link** e envie pelo **WhatsApp** para o assessor — funciona como o e-mail (define senha e entra).
+
+2. **Configurar SMTP (recomendado em campanha)**  
+   No Dashboard: **Project Settings** → **Authentication** → **SMTP Settings**.  
+   Use um provedor (SendGrid, Resend, Amazon SES, etc.) com domínio verificado. Assim os convites saem do seu domínio e costumam entregar melhor.
+
+3. **Redirect URLs**  
+   A URL do app (ex.: Vercel) **precisa** estar em **Authentication** → **URL Configuration** → **Redirect URLs** (inclua `https://seu-dominio.vercel.app/**`). Se faltar, o convite pode falhar ou o link quebrar.
+
+4. **Conferir logs**  
+   **Authentication** → **Users**: veja se o usuário foi criado. **Logs** do projeto: erros de Auth ou das Edge Functions `convidar-assessor` / `reenviar-convite-assessor`.
+
+5. **Redeploy das Edge Functions**  
+   Após alterar as funções no repositório, rode no projeto:  
+   `supabase functions deploy convidar-assessor` e `supabase functions deploy reenviar-convite-assessor`.
+
+## 5. Assessores já confirmaram o e-mail
+
+Se o assessor **já definiu senha**, ele entra com e-mail + senha. Para nova senha: **Esqueci minha senha** na tela de login.

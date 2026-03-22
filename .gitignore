@@ -17,6 +17,7 @@ migrate_working_dir/
 
 # Supabase CLI (link salva project ref aqui)
 .supabase/
+supabase/.temp/
 
 # Variáveis de ambiente locais (nunca versionar)
 .env

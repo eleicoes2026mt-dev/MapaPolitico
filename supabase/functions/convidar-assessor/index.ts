@@ -150,8 +150,27 @@ serve(async (req) => {
       });
     }
 
+    // Link copiável: se o e-mail do Supabase não chegar (SMTP/spam), o candidato envia pelo WhatsApp.
+    let linkCopia: string | null = null;
+    try {
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: redirectTo ? { redirectTo } : {},
+      });
+      if (!linkErr && linkData?.properties && typeof (linkData.properties as { action_link?: string }).action_link === 'string') {
+        linkCopia = (linkData.properties as { action_link: string }).action_link;
+      }
+    } catch {
+      // ignora: convite por e-mail já foi disparado
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, message: 'Convite enviado. O assessor receberá um e-mail para definir a senha e acessar o sistema.' }),
+      JSON.stringify({
+        ok: true,
+        message: 'Convite enviado. O assessor receberá um e-mail para definir a senha e acessar o sistema.',
+        link_copia: linkCopia,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

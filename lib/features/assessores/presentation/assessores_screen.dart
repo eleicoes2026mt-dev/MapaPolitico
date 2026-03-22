@@ -1,9 +1,62 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
 import '../providers/assessores_provider.dart' show assessoresListProvider, convidarAssessor, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException;
+
+/// Link de convite para enviar por WhatsApp se o e-mail do Supabase não chegar.
+Future<void> showLinkConviteAssessorDialog(BuildContext context, String link) async {
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.link),
+          SizedBox(width: 8),
+          Expanded(child: Text('Link de acesso do assessor')),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Copie e envie pelo WhatsApp (ou outro canal). O e-mail automático às vezes cai em spam ou demora — com o link a pessoa define a senha e entra no time.',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            SelectableText(link, style: const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Fechar'),
+        ),
+        FilledButton.icon(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: link));
+            if (ctx.mounted) {
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Link copiado. Cole no WhatsApp e envie ao assessor.')),
+              );
+            }
+          },
+          icon: const Icon(Icons.copy, size: 18),
+          label: const Text('Copiar link'),
+        ),
+      ],
+    ),
+  );
+}
 
 class AssessoresScreen extends ConsumerStatefulWidget {
   const AssessoresScreen({super.key});
@@ -186,17 +239,26 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
       return;
     }
     try {
-      await convidarAssessor(
+      final linkCopia = await convidarAssessor(
         nome: _nomeController.text,
         email: _emailController.text,
         telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
       );
       if (!mounted) return;
-      widget.onSuccess();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Convite enviado! O assessor receberá um e-mail para definir a senha.')),
-      );
       Navigator.of(context).pop();
+      widget.onSuccess();
+      if (linkCopia != null && linkCopia.isNotEmpty) {
+        await showLinkConviteAssessorDialog(context, linkCopia);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Convite enviado por e-mail. Se não chegar, confira spam ou use Reenviar convite e configure SMTP no Supabase (docs).',
+            ),
+            duration: Duration(seconds: 6),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -301,10 +363,19 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
     setState(() => _reenviando = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await reenviarConviteAssessor(widget.assessor);
+      final linkCopia = await reenviarConviteAssessor(widget.assessor);
       if (!mounted) return;
       widget.onRefresh();
-      messenger.showSnackBar(const SnackBar(content: Text('Convite reenviado por e-mail.')));
+      if (linkCopia != null && linkCopia.isNotEmpty) {
+        await showLinkConviteAssessorDialog(context, linkCopia);
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Convite reenviado por e-mail. Se não chegar, confira spam ou configure SMTP no Supabase.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(

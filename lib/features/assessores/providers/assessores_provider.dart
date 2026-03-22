@@ -31,7 +31,8 @@ final assessoresListProvider = FutureProvider<List<Assessor>>((ref) async {
 });
 
 /// Convidar novo assessor (apenas candidato). A pessoa recebe convite por e-mail para criar senha e acessar o sistema.
-Future<void> convidarAssessor({
+/// Retorna [linkCopia] quando o servidor gera um link alternativo (enviar por WhatsApp se o e-mail não chegar).
+Future<String?> convidarAssessor({
   required String nome,
   required String email,
   String? telefone,
@@ -64,10 +65,16 @@ Future<void> convidarAssessor({
   if (data is Map && data.containsKey('error')) {
     throw Exception(data['error'] as String? ?? 'Erro ao convidar assessor');
   }
+  if (data is Map && data['link_copia'] is String) {
+    final s = (data['link_copia'] as String).trim();
+    if (s.isNotEmpty) return s;
+  }
+  return null;
 }
 
 /// Reenviar convite por e-mail para um assessor já cadastrado (apenas candidato).
-Future<void> reenviarConviteAssessor(Assessor assessor) async {
+/// Retorna [linkCopia] quando disponível (enviar por WhatsApp se o e-mail não chegar).
+Future<String?> reenviarConviteAssessor(Assessor assessor) async {
   await supabase.auth.refreshSession();
   try {
     final body = <String, dynamic>{
@@ -84,9 +91,15 @@ Future<void> reenviarConviteAssessor(Assessor assessor) async {
           : 'Erro ao reenviar convite';
       throw Exception(msg ?? 'Erro ao reenviar convite');
     }
-    if (res.data is Map && (res.data as Map).containsKey('error')) {
-      throw Exception((res.data as Map)['error'] as String? ?? 'Erro ao reenviar convite');
+    final data = res.data;
+    if (data is Map && data.containsKey('error')) {
+      throw Exception(data['error'] as String? ?? 'Erro ao reenviar convite');
     }
+    if (data is Map && data['link_copia'] is String) {
+      final s = (data['link_copia'] as String).trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
   } on FunctionException catch (e) {
     final msg = messageFromException(e);
     throw Exception(msg.isNotEmpty ? msg : 'Erro ao reenviar convite');

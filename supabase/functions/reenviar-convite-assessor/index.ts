@@ -125,8 +125,22 @@ serve(async (req) => {
       });
     }
 
+    let linkCopia: string | null = null;
+    try {
+      const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: redirectTo ? { redirectTo } : {},
+      });
+      if (!linkErr && linkData?.properties && typeof (linkData.properties as { action_link?: string }).action_link === 'string') {
+        linkCopia = (linkData.properties as { action_link: string }).action_link;
+      }
+    } catch {
+      // ignora
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, message: 'Convite reenviado por e-mail.' }),
+      JSON.stringify({ ok: true, message: 'Convite reenviado por e-mail.', link_copia: linkCopia }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {

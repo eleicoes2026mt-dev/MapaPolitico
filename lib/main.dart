@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
 import 'core/auth/auth_callback_url.dart';
+import 'core/auth/jwt_recovery.dart';
 import 'core/auth/supabase_auth_fragment.dart';
 import 'core/config/env_config.dart';
 import 'core/router/app_router.dart';
@@ -24,6 +25,16 @@ void main() async {
   try {
     if (kIsWeb) {
       final uri = currentUriWithFragment();
+      // PKCE (reset de senha): `?code=` é trocado no [Supabase.initialize]. O hash pode
+      // continuar `#/apoiadores` (sessão antiga / restauração) — forçar tela de nova senha.
+      final sess = Supabase.instance.client.auth.currentSession;
+      if (uri.queryParameters.containsKey('code') &&
+          sess != null &&
+          accessTokenIndicatesPasswordRecovery(sess.accessToken)) {
+        replaceBrowserPath('/redefinir-senha');
+        initialLocation = '/redefinir-senha';
+      }
+
       final frag = uri.fragment;
       if (frag.isNotEmpty) {
         final params = Uri.splitQueryString(frag);

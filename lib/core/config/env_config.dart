@@ -28,4 +28,13 @@ class EnvConfig {
     'APP_URL',
     defaultValue: 'https://web-liart-iota-22.vercel.app',
   );
+
+  /// Base sem barra final (redirects Supabase Auth).
+  static String get supabaseRedirectOrigin =>
+      appUrl.replaceAll(RegExp(r'/+$'), '');
+
+  /// Web + hash router: onde o GoRouter deve abrir após o clique no e-mail de **reset**.
+  /// Adiciona em Supabase → Authentication → URL Configuration → Redirect URLs.
+  static String get webPasswordRecoveryRedirectTo =>
+      '$supabaseRedirectOrigin/#/redefinir-senha';
 }

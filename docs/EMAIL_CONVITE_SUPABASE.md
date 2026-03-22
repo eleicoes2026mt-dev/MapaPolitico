@@ -22,8 +22,10 @@ No **Supabase Dashboard** → seu projeto **mjmqadpqcatwgskywisk** (ou o que est
    ou o domínio definitivo da campanha.
 3. **Additional Redirect URLs** → adicione (uma por linha ou com curinga, conforme o painel permitir):
    - `https://web-liart-iota-22.vercel.app/**`
+   - Para **reset de senha** na web, o app também usa URL com hash, ex.: `https://SEU_DOMINIO.vercel.app/#/redefinir-senha` (o curinga `/**` costuma cobrir).
    - Se tiver outro domínio (ex.: `www`), inclua também.
-4. Clique em **Save**.
+4. Templates de e-mail em PT-BR (reset, convite, etc.): **[SUPABASE_EMAIL_TEMPLATES_PT_BR.md](./SUPABASE_EMAIL_TEMPLATES_PT_BR.md)**.
+5. Clique em **Save**.
 
 > **Nunca** deixe **Site URL** como `http://localhost:3000` em projeto que já está em produção — isso é o que gera o e-mail errado.
 

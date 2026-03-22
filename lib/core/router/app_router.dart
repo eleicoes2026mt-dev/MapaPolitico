@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../auth/jwt_recovery.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/cadastro_screen.dart';
 import '../../features/auth/presentation/completar_cadastro_screen.dart';
@@ -45,6 +46,14 @@ GoRouter createAppRouter({String? initialLocation}) {
     redirect: (context, state) async {
       final session = Supabase.instance.client.auth.currentSession;
       final path = state.uri.path;
+
+      // Reset de senha (PKCE): JWT com amr recovery — não mandar para home do assessor.
+      if (session != null &&
+          path != '/redefinir-senha' &&
+          accessTokenIndicatesPasswordRecovery(session.accessToken)) {
+        return '/redefinir-senha';
+      }
+
       final isAuthPage = path == '/login' || path == '/cadastro';
       final isCompletarCadastro = path == '/completar-cadastro';
       final isRedefinirSenha = path == '/redefinir-senha';

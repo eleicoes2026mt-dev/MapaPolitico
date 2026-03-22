@@ -8,6 +8,7 @@ import '../../../core/router/role_home.dart';
 import '../providers/auth_provider.dart';
 
 /// Tela para o convidado (assessor/apoiador) definir senha após o convite, ou [isPasswordRecovery] após «Esqueci minha senha».
+/// Layout alinhado ao [LoginScreen] (mapa, cartão, campos).
 class CompletarCadastroScreen extends ConsumerStatefulWidget {
   const CompletarCadastroScreen({super.key, this.isPasswordRecovery = false});
 
@@ -65,88 +66,264 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final primary = theme.colorScheme.primary;
     final user = Supabase.instance.client.auth.currentUser;
+
+    InputDecoration fieldDecoration({
+      required String label,
+      required Widget prefixIcon,
+      Widget? suffixIcon,
+    }) {
+      return InputDecoration(
+        labelText: label,
+        prefixIcon: prefixIcon,
+        suffixIcon: suffixIcon,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+        filled: true,
+      );
+    }
+
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 32),
-                Icon(Icons.lock_reset, size: 64, color: theme.colorScheme.primary),
-                const SizedBox(height: 16),
-                Text(
-                  widget.isPasswordRecovery ? 'Definir nova senha' : 'Complete seu cadastro',
-                  style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  widget.isPasswordRecovery
-                      ? 'Escolha uma nova senha para voltar a acessar o ${AppConstants.ufLabel}.'
-                      : 'Você foi convidado(a) para acessar o ${AppConstants.ufLabel}. Defina uma senha para concluir. Você entrará no painel do seu perfil (assessor ou apoiador), não no do candidato.',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  textAlign: TextAlign.center,
-                ),
-                if (user?.email != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    user!.email!,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _senhaController,
-                  decoration: InputDecoration(
-                    labelText: 'Senha',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureSenha ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscureSenha = !_obscureSenha),
-                    ),
-                  ),
-                  obscureText: _obscureSenha,
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Defina uma senha';
-                    if (v.length < 6) return 'Mínimo 6 caracteres';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _confirmarSenhaController,
-                  decoration: InputDecoration(
-                    labelText: 'Confirmar senha',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirmar ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscureConfirmar = !_obscureConfirmar),
-                    ),
-                  ),
-                  obscureText: _obscureConfirmar,
-                  validator: (v) {
-                    if (v != _senhaController.text) return 'As senhas não coincidem';
-                    return null;
-                  },
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(_error!, style: TextStyle(color: theme.colorScheme.error, fontSize: 12)),
-                ],
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _loading ? null : _submit,
-                  child: _loading
-                      ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text(widget.isPasswordRecovery ? 'Salvar nova senha e entrar' : 'Criar senha e acessar'),
-                ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          color: Color(0xFF0D1117),
+          image: DecorationImage(
+            image: AssetImage('assets/images/map_base_1.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.black.withValues(alpha: 0.4),
+                Colors.black.withValues(alpha: 0.35),
+                Colors.black.withValues(alpha: 0.5),
               ],
+            ),
+          ),
+          child: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Card(
+                    elevation: isDark ? 8 : 12,
+                    shadowColor: isDark ? Colors.black54 : primary.withValues(alpha: 0.15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: primary.withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                widget.isPasswordRecovery
+                                    ? Icons.lock_reset_rounded
+                                    : Icons.how_to_vote_rounded,
+                                size: 56,
+                                color: primary,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Text(
+                              AppConstants.appName,
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: -0.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              AppConstants.appSubtitle,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              widget.isPasswordRecovery
+                                  ? 'Definir nova senha'
+                                  : 'Complete seu cadastro',
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              widget.isPasswordRecovery
+                                  ? 'Escolha uma nova senha para voltar a acessar o ${AppConstants.ufLabel}.'
+                                  : 'Você foi convidado(a) para acessar o ${AppConstants.ufLabel}. Defina uma senha para concluir. Você entrará no painel do seu perfil (assessor ou apoiador), não no do candidato.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            if (user?.email != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                user!.email!,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                            const SizedBox(height: 28),
+                            TextFormField(
+                              controller: _senhaController,
+                              decoration: fieldDecoration(
+                                label: 'Senha',
+                                prefixIcon: Icon(
+                                  Icons.lock_outline_rounded,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscureSenha ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  onPressed: () => setState(() => _obscureSenha = !_obscureSenha),
+                                ),
+                              ),
+                              obscureText: _obscureSenha,
+                              textInputAction: TextInputAction.next,
+                              validator: (v) {
+                                if (v == null || v.isEmpty) return 'Defina uma senha';
+                                if (v.length < 6) return 'Mínimo 6 caracteres';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _confirmarSenhaController,
+                              decoration: fieldDecoration(
+                                label: 'Confirmar senha',
+                                prefixIcon: Icon(
+                                  Icons.lock_outline_rounded,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                suffixIcon: IconButton(
+                                  icon: Icon(
+                                    _obscureConfirmar
+                                        ? Icons.visibility_off_outlined
+                                        : Icons.visibility_outlined,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  onPressed: () => setState(() => _obscureConfirmar = !_obscureConfirmar),
+                                ),
+                              ),
+                              obscureText: _obscureConfirmar,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) {
+                                if (_formKey.currentState?.validate() ?? false) {
+                                  _submit();
+                                }
+                              },
+                              validator: (v) {
+                                if (v != _senhaController.text) return 'As senhas não coincidem';
+                                return null;
+                              },
+                            ),
+                            if (_error != null) ...[
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline_rounded,
+                                      size: 20,
+                                      color: theme.colorScheme.error,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        _error!,
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: theme.colorScheme.error,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 28),
+                            FilledButton(
+                              onPressed: _loading ? null : _submit,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 52),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: _loading
+                                  ? SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: theme.colorScheme.onPrimary,
+                                      ),
+                                    )
+                                  : Text(
+                                      widget.isPasswordRecovery
+                                          ? 'Salvar nova senha e entrar'
+                                          : 'Criar senha e acessar',
+                                    ),
+                            ),
+                            if (widget.isPasswordRecovery) ...[
+                              const SizedBox(height: 20),
+                              TextButton(
+                                onPressed: _loading ? null : () => context.go('/login'),
+                                child: Text(
+                                  'Voltar ao login',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: primary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),

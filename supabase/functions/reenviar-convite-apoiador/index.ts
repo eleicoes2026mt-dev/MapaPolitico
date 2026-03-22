@@ -2,54 +2,12 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { assertCanManageApoiador, type ApoiadorRow } from '../_shared/apoiador-gate.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-type ApoiadorRow = {
-  id: string;
-  assessor_id: string;
-  profile_id: string | null;
-  nome: string;
-  email: string | null;
-};
-
-async function assertCanManageApoiador(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  callerId: string,
-  apoiador: ApoiadorRow
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const { data: caller, error: ce } = await supabaseAdmin.from('profiles').select('role').eq('id', callerId).single();
-  if (ce || !caller) return { ok: false, status: 403, error: 'Perfil não encontrado' };
-
-  const role = (caller as { role: string }).role;
-  const assessorIdOfApoiador = apoiador.assessor_id;
-
-  if (role === 'candidato') {
-    const { data: inv } = await supabaseAdmin.from('profiles').select('id').eq('invited_by', callerId);
-    const ids = [callerId, ...((inv ?? []) as { id: string }[]).map((x) => x.id)];
-    const { data: row } = await supabaseAdmin
-      .from('assessores')
-      .select('id')
-      .eq('id', assessorIdOfApoiador)
-      .in('profile_id', ids)
-      .maybeSingle();
-    if (!row) return { ok: false, status: 403, error: 'Este apoiador não pertence à sua campanha' };
-    return { ok: true };
-  }
-
-  if (role === 'assessor') {
-    const { data: a } = await supabaseAdmin.from('assessores').select('id').eq('profile_id', callerId).maybeSingle();
-    if (!a || (a as { id: string }).id !== assessorIdOfApoiador) {
-      return { ok: false, status: 403, error: 'Apenas o assessor responsável pode reenviar o convite' };
-    }
-    return { ok: true };
-  }
-
-  return { ok: false, status: 403, error: 'Apenas candidato ou assessor podem reenviar convite' };
-}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -123,7 +81,10 @@ serve(async (req) => {
     }
 
     const apoiador = apoiadorRaw as ApoiadorRow;
-    const gate = await assertCanManageApoiador(supabaseAdmin, callerId, apoiador);
+    const gate = await assertCanManageApoiador(supabaseAdmin, callerId, apoiador, {
+      strictAssessorMessage: 'Apenas o assessor responsável pode reenviar o convite',
+      forbiddenRoleMessage: 'Apenas candidato ou assessor podem reenviar convite',
+    });
     if (!gate.ok) {
       return new Response(JSON.stringify({ error: gate.error }), {
         status: gate.status,

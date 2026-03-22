@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/auth/auth_callback_url.dart';
 import '../../../core/constants/app_constants.dart';
 import '../data/login_preferences.dart';
 import '../providers/auth_provider.dart';
@@ -24,6 +25,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void initState() {
     super.initState();
     _loadSavedLogin();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final msg = takePendingAuthErrorMessage();
+      if (msg != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _loadSavedLogin() async {

@@ -90,6 +90,15 @@ Se quiser que a Edge Function use uma URL fixa mesmo quando o app não enviar:
 
 Assim, se por algum motivo o app enviar localhost, o servidor usa essa URL no lugar.
 
+## 4.1 Link «Aceitar convite» expirou (`otp_expired`)
+
+No painel do Supabase / e-mail, o link de convite tem **validade limitada**. Se aparecer *Email link is invalid or has expired*:
+
+1. No app, use **Reenviar convite** (assessor ou apoiador) e abra o **novo** link logo em seguida.
+2. Na **web**, o app redireciona para o **login** com mensagem em português em vez de «Page Not Found» (o fragmento `#error=...` deixa de ser tratado como rota).
+
+---
+
 ## 4. O e-mail de convite não chega — o que fazer
 
 O envio padrão do Supabase (sem SMTP próprio) tem **limite de taxa** e pode ir para **spam/promoções**. Para o time do deputado conseguir acesso:

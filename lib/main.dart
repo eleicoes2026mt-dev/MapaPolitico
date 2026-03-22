@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
+import 'core/auth/auth_callback_url.dart';
+import 'core/auth/supabase_auth_fragment.dart';
 import 'core/config/env_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
@@ -16,19 +18,45 @@ void main() async {
     anonKey: EnvConfig.supabaseAnonKey,
   );
 
-  // Se o app abriu pelo link do convite por e-mail, recuperar sessão e ir para completar cadastro
+  /// Convite / magic link: na **web** o Supabase coloca tokens ou erros em `#fragmento`.
+  /// Se não limparmos o fragmento, o GoRouter trata `error=access_denied&...` como rota → "Page Not Found".
   String? initialLocation;
   try {
-    final Uri? uri = kIsWeb ? Uri.base : await AppLinks().getInitialLink();
-    if (uri != null) {
-      final s = uri.toString();
-      if (s.contains('access_token') || s.contains('type=invite') || s.contains('refresh_token')) {
-        await Supabase.instance.client.auth.getSessionFromUrl(uri);
-        initialLocation = '/completar-cadastro';
+    if (kIsWeb) {
+      final uri = currentUriWithFragment();
+      final frag = uri.fragment;
+      if (frag.isNotEmpty) {
+        final params = Uri.splitQueryString(frag);
+        if (params.containsKey('error')) {
+          final msg = messageForSupabaseAuthFragment(params);
+          storePendingAuthErrorMessage(msg);
+          replaceBrowserPath('/login');
+          initialLocation = '/login';
+        } else if (frag.contains('access_token') || frag.contains('refresh_token')) {
+          await Supabase.instance.client.auth.getSessionFromUrl(uri);
+          replaceBrowserPath('/completar-cadastro');
+          initialLocation = '/completar-cadastro';
+        }
+      }
+    } else {
+      final Uri? uri = await AppLinks().getInitialLink();
+      if (uri != null) {
+        final s = uri.toString();
+        if (s.contains('access_token') || s.contains('type=invite') || s.contains('refresh_token')) {
+          await Supabase.instance.client.auth.getSessionFromUrl(uri);
+          initialLocation = '/completar-cadastro';
+        }
       }
     }
-  } catch (_) {
-    // Ignora erro ao processar link (ex.: link expirado)
+  } catch (e, st) {
+    debugPrint('Falha ao processar link de auth: $e\n$st');
+    if (kIsWeb) {
+      storePendingAuthErrorMessage(
+        'Não foi possível concluir o acesso por este link. Tente entrar com e-mail e senha ou peça um novo convite.',
+      );
+      replaceBrowserPath('/login');
+      initialLocation = '/login';
+    }
   }
 
   final router = createAppRouter(initialLocation: initialLocation);

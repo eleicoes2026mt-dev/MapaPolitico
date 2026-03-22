@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/profile.dart';
 import '../../../core/supabase/supabase_provider.dart';
+import '../../../core/router/profile_role_cache.dart';
 
 final authStateProvider = StreamProvider<User?>((ref) {
   return supabase.auth.onAuthStateChange.map((e) => e.session?.user);
@@ -45,12 +46,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
   }
 
   Future<void> signIn(String email, String password) async {
+    clearProfileRoleCache();
     await _client.auth.signInWithPassword(email: email, password: password);
     final user = _client.auth.currentUser;
     if (user != null) await _loadProfile(user.id);
   }
 
   Future<void> signUp(String email, String password, {String? fullName}) async {
+    clearProfileRoleCache();
     await _client.auth.signUp(
       email: email,
       password: password,
@@ -61,6 +64,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
   }
 
   Future<void> signOut() async {
+    clearProfileRoleCache();
     await _client.auth.signOut();
     state = const AsyncValue.data(null);
   }

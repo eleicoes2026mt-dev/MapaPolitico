@@ -34,8 +34,15 @@ void main() async {
           initialLocation = '/login';
         } else if (frag.contains('access_token') || frag.contains('refresh_token')) {
           await Supabase.instance.client.auth.getSessionFromUrl(uri);
-          replaceBrowserPath('/completar-cadastro');
-          initialLocation = '/completar-cadastro';
+          final p = Uri.splitQueryString(frag);
+          final isRecovery = p['type'] == 'recovery';
+          if (isRecovery) {
+            replaceBrowserPath('/redefinir-senha');
+            initialLocation = '/redefinir-senha';
+          } else {
+            replaceBrowserPath('/completar-cadastro');
+            initialLocation = '/completar-cadastro';
+          }
         }
       }
     } else {

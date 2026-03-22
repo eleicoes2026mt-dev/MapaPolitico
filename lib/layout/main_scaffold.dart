@@ -144,7 +144,17 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
-  static const _pathsOcultosApoiador = {'/assessores', '/benfeitorias', '/mensagens', '/estrategia'};
+  /// Apoiador: sem painel do deputado (dashboard) nem gestão de assessores etc.
+  static const _pathsOcultosApoiador = {
+    '/',
+    '/assessores',
+    '/benfeitorias',
+    '/mensagens',
+    '/estrategia',
+  };
+
+  /// Assessor: entra em «Apoiadores»; não vê dashboard do candidato nem menu Assessores.
+  static const _pathsOcultosAssessor = {'/', '/assessores'};
 
   @override
   Widget build(BuildContext context) {
@@ -209,7 +219,7 @@ class _Sidebar extends StatelessWidget {
                       textAlign: TextAlign.center,
                     ),
                     Text(
-                      (profile.role as String?)?.toUpperCase() ?? 'USER',
+                      profile.role.toUpperCase(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -240,9 +250,12 @@ class _Sidebar extends StatelessWidget {
                       if (profile.role == 'apoiador') {
                         return !_pathsOcultosApoiador.contains(e.path);
                       }
+                      if (profile.role == 'assessor') {
+                        return !_pathsOcultosAssessor.contains(e.path);
+                      }
                       return true;
                     }).map((e) {
-                      final selected = loc == e.path || (e.path == '/' && loc == '/');
+                      final selected = loc == e.path;
                       return ListTile(
                         leading: Icon(e.icon, size: 22),
                         title: Text(e.title, overflow: TextOverflow.ellipsis),

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/auth/auth_callback_url.dart';
+import '../../../core/config/env_config.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/router/role_home.dart';
 import '../data/login_preferences.dart';
 import '../providers/auth_provider.dart';
 
@@ -73,7 +76,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         await LoginPreferences.setSaveLogin(false);
         await LoginPreferences.setSavedEmail(null);
       }
-      if (mounted) context.go('/');
+      if (!mounted) return;
+      await ref.read(profileProvider.future);
+      final role = ref.read(profileProvider).valueOrNull?.role;
+      if (mounted) context.go(homePathForProfileRole(role));
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -81,6 +87,73 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<void> _mostrarEsqueciSenha() async {
+    final controller = TextEditingController(text: _emailController.text.trim());
+    try {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Redefinir senha'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Informe o e-mail cadastrado. Você receberá um link para criar uma nova senha.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'E-mail',
+                  hintText: 'seu@email.com',
+                ),
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enviar link')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+      final email = controller.text.trim();
+      if (email.isEmpty || !email.contains('@')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Informe um e-mail válido.')),
+        );
+        return;
+      }
+      try {
+        await Supabase.instance.client.auth.resetPasswordForEmail(
+          email,
+          redirectTo: EnvConfig.appUrl,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Se existir conta com este e-mail, enviamos o link. Confira a caixa de entrada e o spam.',
+              ),
+              duration: Duration(seconds: 6),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('AuthException: ', ''))),
+          );
+        }
+      }
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -208,7 +281,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             validator: (v) =>
                                 v == null || v.isEmpty ? 'Informe a senha' : null,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _loading ? null : _mostrarEsqueciSenha,
+                              child: const Text('Esqueci minha senha'),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
                           Row(
                             children: [
                               SizedBox(

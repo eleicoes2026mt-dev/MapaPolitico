@@ -90,6 +90,15 @@ Se quiser que a Edge Function use uma URL fixa mesmo quando o app não enviar:
 
 Assim, se por algum motivo o app enviar localhost, o servidor usa essa URL no lugar.
 
+## 4.2 Recuperação de senha («Esqueci minha senha»)
+
+No app (tela de login) o utilizador pode pedir **redefinição de senha**. O Supabase envia um e-mail com link que abre o app em **`/redefinir-senha`** (o fragmento da URL inclui `type=recovery`).
+
+1. **Authentication** → **URL Configuration** → **Redirect URLs** deve incluir a URL do app (ex.: `https://seu-app.vercel.app` e `https://seu-app.vercel.app/**`).
+2. Opcional: em **Email Templates** → **Reset password**, use texto em português e `{{ .ConfirmationURL }}` no botão (como no convite).
+
+---
+
 ## 4.1 Link «Aceitar convite» expirou (`otp_expired`)
 
 No painel do Supabase / e-mail, o link de convite tem **validade limitada**. Se aparecer *Email link is invalid or has expired*:

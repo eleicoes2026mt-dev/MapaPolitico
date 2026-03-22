@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/router/profile_role_cache.dart' show clearProfileRoleCache;
+import '../../../core/router/role_home.dart';
 import '../providers/auth_provider.dart';
 
-/// Tela para o convidado (assessor/apoiador) completar o cadastro: definir senha e autenticar.
-/// Acessada quando a pessoa clica no link do e-mail de convite e abre o app.
+/// Tela para o convidado (assessor/apoiador) definir senha após o convite, ou [isPasswordRecovery] após «Esqueci minha senha».
 class CompletarCadastroScreen extends ConsumerStatefulWidget {
-  const CompletarCadastroScreen({super.key});
+  const CompletarCadastroScreen({super.key, this.isPasswordRecovery = false});
+
+  /// `true` quando veio do link de recuperação de senha (não do convite).
+  final bool isPasswordRecovery;
 
   @override
   ConsumerState<CompletarCadastroScreen> createState() => _CompletarCadastroScreenState();
@@ -43,8 +47,12 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
     try {
       await Supabase.instance.client.auth.updateUser(UserAttributes(password: senha));
       if (!mounted) return;
+      clearProfileRoleCache();
       ref.invalidate(profileProvider);
-      context.go('/');
+      final profile = await ref.read(profileProvider.future);
+      final role = profile?.role;
+      if (!mounted) return;
+      context.go(homePathForProfileRole(role));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -72,13 +80,15 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
                 Icon(Icons.lock_reset, size: 64, color: theme.colorScheme.primary),
                 const SizedBox(height: 16),
                 Text(
-                  'Complete seu cadastro',
+                  widget.isPasswordRecovery ? 'Definir nova senha' : 'Complete seu cadastro',
                   style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Você foi convidado(a) para acessar o ${AppConstants.ufLabel}. Defina uma senha para concluir e entrar no sistema.',
+                  widget.isPasswordRecovery
+                      ? 'Escolha uma nova senha para voltar a acessar o ${AppConstants.ufLabel}.'
+                      : 'Você foi convidado(a) para acessar o ${AppConstants.ufLabel}. Defina uma senha para concluir. Você entrará no painel do seu perfil (assessor ou apoiador), não no do candidato.',
                   style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
@@ -134,7 +144,7 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
                   onPressed: _loading ? null : _submit,
                   child: _loading
                       ? const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Criar senha e acessar'),
+                      : Text(widget.isPasswordRecovery ? 'Salvar nova senha e entrar' : 'Criar senha e acessar'),
                 ),
               ],
             ),

@@ -64,22 +64,24 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
       _loading = true;
     });
     try {
+      final p = ref.read(profileProvider).valueOrNull;
+      final isCand = p?.role == 'candidato';
       await ref.read(updateProfileProvider)(
         (
           fullName: _nomeController.text.trim(),
           phone: _phoneController.text.trim().isEmpty
               ? null
               : _phoneController.text.trim(),
-          cargo: _cargo,
-          partido: _partidoController.text.trim().isEmpty
-              ? null
-              : _partidoController.text.trim(),
-          numeroCandidato: _numeroController.text.trim().isEmpty
-              ? null
-              : _numeroController.text.trim(),
+          cargo: isCand ? _cargo : p?.cargo,
+          partido: isCand
+              ? (_partidoController.text.trim().isEmpty ? null : _partidoController.text.trim())
+              : p?.partido,
+          numeroCandidato: isCand
+              ? (_numeroController.text.trim().isEmpty ? null : _numeroController.text.trim())
+              : p?.numeroCandidato,
           dataNascimento: _dataNascimento,
           avatarUrl: _avatarUrl,
-          sqCandidatoTse2022: _sqCandidatoTse2022,
+          sqCandidatoTse2022: isCand ? _sqCandidatoTse2022 : p?.sqCandidatoTse2022,
         ),
       );
       if (mounted) {
@@ -187,7 +189,9 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
               Text(
                 profile == null
                     ? 'Complete seu perfil. Ele será criado ao salvar.'
-                    : 'Edite seu nome, contato e dados de candidato.',
+                    : isCandidato
+                        ? 'Edite seu nome, contato e dados de candidato.'
+                        : 'Edite seu nome e contato. Os dados de campanha do candidato ficam só no perfil dele — aqui é o seu acesso (${_roleLabel(role)}).',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -245,36 +249,38 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       uploading: _uploadingImage,
                       onPick: () => _pickAndUploadImage(theme),
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _partidoController,
-                      decoration: const InputDecoration(
-                        labelText: 'Partido Político (sigla)',
-                        prefixIcon: Icon(Icons.flag_outlined),
-                      ),
-                      textCapitalization: TextCapitalization.characters,
-                    ),
-                    const SizedBox(height: 16),
-                    const EstadoMTBadge(),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String?>(
-                      value: _cargo ?? profile?.cargo,
-                      decoration: const InputDecoration(
-                        labelText: 'Cargo',
-                        prefixIcon: Icon(Icons.work_outline),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('Selecione o cargo'),
+                    if (isCandidato) ...[
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _partidoController,
+                        decoration: const InputDecoration(
+                          labelText: 'Partido Político (sigla)',
+                          prefixIcon: Icon(Icons.flag_outlined),
                         ),
-                        ...cargosOpcoes.map((c) => DropdownMenuItem<String?>(
-                              value: c,
-                              child: Text(c),
-                            )),
-                      ],
-                      onChanged: (v) => setState(() => _cargo = v),
-                    ),
+                        textCapitalization: TextCapitalization.characters,
+                      ),
+                      const SizedBox(height: 16),
+                      const EstadoMTBadge(),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String?>(
+                        value: _cargo ?? profile?.cargo,
+                        decoration: const InputDecoration(
+                          labelText: 'Cargo',
+                          prefixIcon: Icon(Icons.work_outline),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Selecione o cargo'),
+                          ),
+                          ...cargosOpcoes.map((c) => DropdownMenuItem<String?>(
+                                value: c,
+                                child: Text(c),
+                              )),
+                        ],
+                        onChanged: (v) => setState(() => _cargo = v),
+                      ),
+                    ],
                     if (isCandidato) ...[
                       const SizedBox(height: 16),
                       TextFormField(
@@ -321,13 +327,22 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      'Função é seu tipo de conta no sistema. Cargo acima é a posição política que você indica.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontStyle: FontStyle.italic,
+                    if (isCandidato)
+                      Text(
+                        'Função é seu tipo de conta no sistema. Cargo acima é a posição política que você indica.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      )
+                    else
+                      Text(
+                        'Sua função (${_roleLabel(role)}) define o que você vê no menu. Não é o perfil do candidato.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
-                    ),
                     if (_error != null) ...[
                       const SizedBox(height: 16),
                       Text(

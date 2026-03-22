@@ -17,6 +17,8 @@ import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
 import '../../layout/main_scaffold.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import 'profile_role_cache.dart';
+import 'role_home.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -40,13 +42,39 @@ GoRouter createAppRouter({String? initialLocation}) {
     navigatorKey: _rootNavigatorKey,
     initialLocation: initialLocation ?? '/',
     refreshListenable: GoRouterRefreshStream(Supabase.instance.client.auth.onAuthStateChange),
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final session = Supabase.instance.client.auth.currentSession;
-      final isAuthPage = state.uri.path == '/login' || state.uri.path == '/cadastro';
-      final isCompletarCadastro = state.uri.path == '/completar-cadastro';
-      if (session == null && !isAuthPage && !isCompletarCadastro) return '/login';
-      if (session == null && isCompletarCadastro) return '/login';
-      if (session != null && isAuthPage) return '/';
+      final path = state.uri.path;
+      final isAuthPage = path == '/login' || path == '/cadastro';
+      final isCompletarCadastro = path == '/completar-cadastro';
+      final isRedefinirSenha = path == '/redefinir-senha';
+      final isPasswordFlow = isCompletarCadastro || isRedefinirSenha;
+
+      if (session == null && !isAuthPage && !isPasswordFlow) {
+        return '/login';
+      }
+      if (session == null && isPasswordFlow) {
+        return '/login';
+      }
+
+      if (session != null && isAuthPage) {
+        final role = await cachedProfileRole(session.user.id);
+        return homePathForProfileRole(role);
+      }
+
+      if (session != null && path == '/') {
+        final role = await cachedProfileRole(session.user.id);
+        final home = homePathForProfileRole(role);
+        if (home != '/') return home;
+      }
+
+      if (session != null) {
+        final role = await cachedProfileRole(session.user.id);
+        if (role == 'assessor' && path == '/assessores') {
+          return '/apoiadores';
+        }
+      }
+
       return null;
     },
     routes: [
@@ -62,10 +90,14 @@ GoRouter createAppRouter({String? initialLocation}) {
         path: '/completar-cadastro',
         builder: (_, __) => const CompletarCadastroScreen(),
       ),
+      GoRoute(
+        path: '/redefinir-senha',
+        builder: (_, __) => const CompletarCadastroScreen(isPasswordRecovery: true),
+      ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) =>
-            _ApoiadorShellWrapper(location: state.uri.path, child: child),
+            _RoleShellWrapper(location: state.uri.path, child: child),
         routes: [
           GoRoute(
             path: '/',
@@ -109,24 +141,34 @@ GoRouter createAppRouter({String? initialLocation}) {
   );
 }
 
-/// Apoiador só acessa dashboard, apoiadores (próprio), votantes, mapa e perfil.
-class _ApoiadorShellWrapper extends ConsumerWidget {
-  const _ApoiadorShellWrapper({required this.location, required this.child});
+/// Restrições por papel + redirecionamento do painel do apoiador.
+class _RoleShellWrapper extends ConsumerWidget {
+  const _RoleShellWrapper({required this.location, required this.child});
 
   final String location;
   final Widget child;
 
-  static const _forbidden = {'/assessores', '/benfeitorias', '/mensagens', '/estrategia'};
+  static const _forbiddenApoiador = {'/assessores', '/benfeitorias', '/mensagens', '/estrategia', '/'};
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(profileProvider).valueOrNull;
-    if (profile?.role == 'apoiador' && _forbidden.contains(location)) {
+    final role = profile?.role;
+
+    if (role == 'apoiador' && _forbiddenApoiador.contains(location)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go('/votantes');
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+
+    if (role == 'assessor' && location == '/assessores') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go('/apoiadores');
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return MainScaffold(child: child);
   }
 }

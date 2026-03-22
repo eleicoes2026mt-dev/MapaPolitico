@@ -56,3 +56,8 @@ A pasta **`.vercel`** (link local) está no **`.gitignore`** — não vai para o
 ## 5. Variáveis de ambiente
 
 **Settings** → **Environment Variables**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `APP_URL`, etc., para **Production** (e Preview se quiseres).
+
+**Importante:** o build só envia `--dart-define` quando o valor **não está vazio**. Valores vazios faziam o app ignorar os defaults em `env_config.dart` e o login falhava com **405** (pedidos ao domínio da Vercel em vez de `*.supabase.co`).
+
+- **APP_URL** em produção: `https://meusvotos.vercel.app` (ou o teu domínio customizado), para convites / magic link.
+- Se quiseres **forçar** URL e chave do Supabase no bundle, define `SUPABASE_URL` e `SUPABASE_ANON_KEY` com texto completo (não deixes em branco).

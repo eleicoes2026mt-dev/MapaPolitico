@@ -1,12 +1,10 @@
-#!/bin/sh
-# Build Flutter Web para deploy na Vercel.
-# As variáveis SUPABASE_URL e SUPABASE_ANON_KEY devem estar definidas no ambiente
-# (no painel da Vercel: Settings > Environment Variables).
-
-set -e
+#!/usr/bin/env bash
+# Build Flutter Web (local ou referência). Na Vercel usa-se scripts/vercel-build.sh.
+set -euo pipefail
 flutter pub get
-flutter build web --release \
-  --dart-define=SUPABASE_URL="$SUPABASE_URL" \
-  --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
-
-# Saída em build/web (configurar "Output Directory" = build/web na Vercel)
+DEFS=()
+[[ -n "${SUPABASE_URL:-}" ]] && DEFS+=(--dart-define=SUPABASE_URL="$SUPABASE_URL")
+[[ -n "${SUPABASE_ANON_KEY:-}" ]] && DEFS+=(--dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY")
+[[ -n "${GOOGLE_MAPS_API_KEY:-}" ]] && DEFS+=(--dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY")
+[[ -n "${APP_URL:-}" ]] && DEFS+=(--dart-define=APP_URL="$APP_URL")
+flutter build web --release "${DEFS[@]}"

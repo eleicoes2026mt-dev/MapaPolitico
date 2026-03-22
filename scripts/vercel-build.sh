@@ -6,14 +6,20 @@ cd "$ROOT"
 export PATH="$ROOT/flutter/bin:$PATH"
 export FLUTTER_ROOT="$ROOT/flutter"
 
-# Variáveis Vercel → compiladas no bundle (ver lib/core/config/env_config.dart)
-if [[ -z "${SUPABASE_URL:-}" || -z "${SUPABASE_ANON_KEY:-}" ]]; then
-  echo ">>> AVISO: SUPABASE_URL ou SUPABASE_ANON_KEY vazias. Define-as em Settings → Environment Variables (Production)."
+# Só passar --dart-define quando a variável está definida e não vazia.
+# Se passares SUPABASE_URL= vazio, o Dart usa string vazia e IGNORA o defaultValue
+# de env_config.dart → o cliente aponta para o domínio da Vercel e o login dá 405.
+DEFS=()
+[[ -n "${SUPABASE_URL:-}" ]] && DEFS+=(--dart-define=SUPABASE_URL="$SUPABASE_URL")
+[[ -n "${SUPABASE_ANON_KEY:-}" ]] && DEFS+=(--dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY")
+[[ -n "${GOOGLE_MAPS_API_KEY:-}" ]] && DEFS+=(--dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY")
+[[ -n "${APP_URL:-}" ]] && DEFS+=(--dart-define=APP_URL="$APP_URL")
+
+if [[ ${#DEFS[@]} -eq 0 ]]; then
+  echo ">>> Nenhuma variável SUPABASE_*/APP_URL/GOOGLE_* no ambiente de build — a usar defaultValue de lib/core/config/env_config.dart."
+else
+  echo ">>> dart-define: ${#DEFS[@]} opção(ões) a partir do ambiente Vercel."
 fi
 
-echo ">>> build web --release (dart-define a partir do ambiente Vercel)..."
-flutter build web --release \
-  --dart-define=SUPABASE_URL="${SUPABASE_URL:-}" \
-  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY:-}" \
-  --dart-define=GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}" \
-  --dart-define=APP_URL="${APP_URL:-}"
+echo ">>> build web --release..."
+flutter build web --release "${DEFS[@]}"

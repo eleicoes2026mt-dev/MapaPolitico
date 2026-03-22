@@ -63,6 +63,22 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
     }
   }
 
+  /// Encerra a sessão de recuperação; senão o GoRouter devolve sempre para `/redefinir-senha`.
+  Future<void> _voltarAoLogin() async {
+    setState(() => _loading = true);
+    try {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return;
+      context.go('/login');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString().replaceFirst('AuthException: ', '').replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -307,7 +323,7 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
                             if (widget.isPasswordRecovery) ...[
                               const SizedBox(height: 20),
                               TextButton(
-                                onPressed: _loading ? null : () => context.go('/login'),
+                                onPressed: _loading ? null : _voltarAoLogin,
                                 child: Text(
                                   'Voltar ao login',
                                   style: theme.textTheme.bodyMedium?.copyWith(

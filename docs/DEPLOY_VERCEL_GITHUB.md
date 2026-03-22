@@ -17,6 +17,25 @@ Hoje o projeto tem `vercel.json` na raiz (build Flutter Web). Para **cada push n
 - O Vercel deve usar o `vercel.json`:
   - `installCommand` / `buildCommand` / `outputDirectory` já definidos.
 
+### Overrides no dashboard (muito importante)
+
+Se **Build Command** ou **Output Directory** estiverem com **Override: ligado**, o Vercel **ignora** o `vercel.json` nesses campos.
+
+1. **Settings** → **General** → **Build and Deployment** → **Build and Development Settings**.
+2. Recomendado: **desliga o override** em:
+   - **Build Command**
+   - **Output Directory** (o repo já usa `build/web`)
+   - **Install Command** (o repo usa `bash scripts/vercel-install.sh`, que instala o Flutter na pasta do projeto)
+3. **Porquê:** o `install` corre num passo e o `build` noutro. O teu override `flutter pub get && flutter build web…` assume `flutter` no PATH global — **não existe** na Vercel; o SDK só aparece depois do `vercel-install.sh`. O `vercel-build.sh` faz `export PATH="$ROOT/flutter/bin:$PATH"` e passa `--dart-define=…` com as variáveis do painel (**SUPABASE_URL**, **SUPABASE_ANON_KEY**, **APP_URL**, **GOOGLE_MAPS_API_KEY**).
+
+Se o log ainda mostra o comando antigo (`if [ -d flutter ]`…), há override ou commit antigo — confirma que o **override está desligado** e que fizeste push do `vercel.json` atual.
+
+O script `scripts/vercel-install.sh` clona **`stable` sem `--depth 1`** para o SDK não ficar **0.0.0-unknown** (necessário para pacotes como `flutter_map`).
+
+### Aviso amarelo “Configuration differs from Production”
+
+Depois de mudares settings, faz um **Redeploy** para o ambiente de produção alinhar com o projeto.
+
 ## 3. Depois disto
 
 - **`git push origin main`** → a Vercel inicia um deployment novo (vês na aba **Deployments** com origem **Git**, não só `vercel deploy`).

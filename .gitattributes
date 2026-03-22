@@ -1,0 +1,2 @@
+# Scripts de deploy Vercel (Linux) — evitar CRLF no Windows
+scripts/*.sh text eol=lf

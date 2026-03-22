@@ -56,3 +56,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .vercel
+
+# Clone local do SDK na pasta do projeto (build Vercel / testes)
+/flutter/

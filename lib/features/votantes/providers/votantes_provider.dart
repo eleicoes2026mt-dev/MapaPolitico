@@ -1,8 +1,146 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../models/municipio.dart';
 import '../../../models/votante.dart';
 import '../../../core/supabase/supabase_provider.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../apoiadores/providers/apoiadores_provider.dart' show meuApoiadorIdProvider, meuAssessorIdProvider;
+import '../../assessores/providers/assessores_provider.dart';
 
 final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
-  final res = await supabase.from('votantes').select().order('nome');
+  final res = await supabase.from('votantes').select('*, municipios(nome)').order('nome');
   return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
+});
+
+/// Municípios MT (para cadastro de votante).
+final municipiosMTListProvider = FutureProvider<List<Municipio>>((ref) async {
+  final res = await supabase.from('municipios').select().order('nome');
+  return (res as List).map((e) => Municipio.fromJson(e as Map<String, dynamic>)).toList();
+});
+
+class NovoVotanteParams {
+  NovoVotanteParams({
+    required this.nome,
+    this.telefone,
+    this.email,
+    this.municipioId,
+    this.abrangencia = 'Individual',
+    this.qtdVotosFamilia = 1,
+    /// Quando candidato/assessor cadastram para um apoiador específico.
+    this.apoiadorId,
+  });
+  final String nome;
+  final String? telefone;
+  final String? email;
+  final String? municipioId;
+  final String abrangencia;
+  final int qtdVotosFamilia;
+  final String? apoiadorId;
+}
+
+final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>((ref) {
+  final client = supabase;
+  return (NovoVotanteParams params) async {
+    final userId = ref.read(currentUserProvider)?.id;
+    if (userId == null) throw Exception('Faça login para cadastrar votantes.');
+
+    final profile = await ref.read(profileProvider.future);
+    final role = profile?.role;
+
+    String? assessorId;
+    String? apoiadorId = params.apoiadorId;
+
+    if (role == 'apoiador') {
+      final aid = await ref.read(meuApoiadorIdProvider.future);
+      if (aid == null) {
+        throw Exception(
+          'Sua conta ainda não está vinculada ao cadastro de apoiador. Peça um convite por e-mail ao candidato ou assessor.',
+        );
+      }
+      final row = await client.from('apoiadores').select('assessor_id').eq('id', aid).maybeSingle();
+      assessorId = row?['assessor_id'] as String?;
+      apoiadorId = aid;
+      if (assessorId == null || assessorId.isEmpty) {
+        throw Exception('Não foi possível identificar o assessor da campanha.');
+      }
+    } else {
+      assessorId = await ref.read(meuAssessorIdProvider.future);
+      if (assessorId == null) {
+        if (profile?.role == 'candidato') {
+          try {
+            await client.from('assessores').insert({
+              'profile_id': userId,
+              'nome': profile!.fullName?.trim().isNotEmpty == true
+                  ? profile.fullName!.trim()
+                  : (profile.email ?? 'Candidato'),
+            });
+            ref.invalidate(meuAssessorIdProvider);
+            ref.invalidate(assessoresListProvider);
+            assessorId = await ref.read(meuAssessorIdProvider.future);
+          } catch (_) {}
+        }
+        if (assessorId == null) {
+          throw Exception(
+            'Ative o acesso de assessor/candidato em Assessores antes de cadastrar votantes.',
+          );
+        }
+      }
+    }
+
+    final insert = <String, dynamic>{
+      'assessor_id': assessorId,
+      'nome': params.nome.trim(),
+      'telefone': params.telefone?.trim().isEmpty == true ? null : params.telefone?.trim(),
+      'email': params.email == null || params.email!.trim().isEmpty
+          ? null
+          : params.email!.trim().toLowerCase(),
+      'municipio_id': params.municipioId,
+      'abrangencia': params.abrangencia,
+      'qtd_votos_familia': params.qtdVotosFamilia < 1 ? 1 : params.qtdVotosFamilia,
+      if (apoiadorId != null && apoiadorId.isNotEmpty) 'apoiador_id': apoiadorId,
+    };
+
+    await client.from('votantes').insert(insert);
+    ref.invalidate(votantesListProvider);
+  };
+});
+
+class AtualizarVotanteParams {
+  AtualizarVotanteParams({
+    this.nome,
+    this.telefone,
+    this.email,
+    this.municipioId,
+    this.abrangencia,
+    this.qtdVotosFamilia,
+  });
+  final String? nome;
+  final String? telefone;
+  final String? email;
+  final String? municipioId;
+  final String? abrangencia;
+  final int? qtdVotosFamilia;
+}
+
+final atualizarVotanteProvider = Provider<Future<void> Function(String id, AtualizarVotanteParams)>((ref) {
+  final client = supabase;
+  return (String id, AtualizarVotanteParams p) async {
+    final row = <String, dynamic>{};
+    if (p.nome != null) row['nome'] = p.nome!.trim();
+    if (p.telefone != null) row['telefone'] = p.telefone!.trim().isEmpty ? null : p.telefone!.trim();
+    if (p.email != null) row['email'] = p.email!.trim().isEmpty ? null : p.email!.trim().toLowerCase();
+    if (p.municipioId != null) row['municipio_id'] = p.municipioId!.trim().isEmpty ? null : p.municipioId;
+    if (p.abrangencia != null) row['abrangencia'] = p.abrangencia;
+    if (p.qtdVotosFamilia != null) row['qtd_votos_familia'] = p.qtdVotosFamilia! < 1 ? 1 : p.qtdVotosFamilia!;
+    if (row.isEmpty) return;
+    await client.from('votantes').update(row).eq('id', id);
+    ref.invalidate(votantesListProvider);
+  };
+});
+
+final removerVotanteProvider = Provider<Future<void> Function(String id)>((ref) {
+  final client = supabase;
+  return (String id) async {
+    await client.from('votantes').delete().eq('id', id);
+    ref.invalidate(votantesListProvider);
+  };
 });

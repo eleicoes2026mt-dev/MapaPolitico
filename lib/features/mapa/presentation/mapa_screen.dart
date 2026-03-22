@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
-import '../../apoiadores/providers/apoiadores_provider.dart';
+import '../providers/cidades_marcadores_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../../estrategia/providers/regioes_fundidas_provider.dart';
 import '../data/mt_municipios_coords.dart';
@@ -235,8 +235,8 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           const SizedBox(height: 12),
           Text(
             votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty
-                ? 'Mapa interativo MT com regiões e cidades. Selecione seu candidato 2022 em Meu perfil para ver votos por cidade. Cadastre apoiadores para ver cidades no mapa.'
-                : 'Mapa com ${votosPorMunicipio.length} cidade(s) com votos (TSE) e ${cidadesComApoiador.length} cidade(s) com apoiadores. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.',
+                ? 'Mapa interativo MT com regiões e cidades. Selecione seu candidato 2022 em Meu perfil para ver votos por cidade. Cadastre apoiadores e votantes (com município) para marcar cidades no mapa.'
+                : 'Mapa com ${votosPorMunicipio.length} cidade(s) com votos (TSE) e ${cidadesComApoiador.length} cidade(s) com apoiadores ou votantes. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],

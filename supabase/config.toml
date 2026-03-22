@@ -39,5 +39,9 @@ file_size_limit = "50MiB"
 verify_jwt = false
 [functions.reenviar-convite-assessor]
 verify_jwt = false
+[functions.convidar-apoiador]
+verify_jwt = false
+[functions.reenviar-convite-apoiador]
+verify_jwt = false
 [functions.promover-candidato]
 verify_jwt = false

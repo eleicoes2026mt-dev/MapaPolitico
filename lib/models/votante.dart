@@ -7,6 +7,8 @@ class Votante {
   final String? telefone;
   final String? email;
   final String? municipioId;
+  /// Preenchido quando a lista vem com join `municipios(nome)`.
+  final String? municipioNome;
   final String abrangencia; // Individual | Familiar
   final int qtdVotosFamilia;
 
@@ -19,11 +21,17 @@ class Votante {
     this.telefone,
     this.email,
     this.municipioId,
+    this.municipioNome,
     this.abrangencia = 'Individual',
     this.qtdVotosFamilia = 1,
   });
 
   factory Votante.fromJson(Map<String, dynamic> json) {
+    final mun = json['municipios'];
+    String? munNome;
+    if (mun is Map && mun['nome'] != null) {
+      munNome = mun['nome'].toString();
+    }
     return Votante(
       id: json['id'] as String,
       profileId: json['profile_id'] as String?,
@@ -33,6 +41,7 @@ class Votante {
       telefone: json['telefone'] as String?,
       email: json['email'] as String?,
       municipioId: json['municipio_id'] as String?,
+      municipioNome: munNome,
       abrangencia: json['abrangencia'] as String? ?? 'Individual',
       qtdVotosFamilia: (json['qtd_votos_familia'] as num?)?.toInt() ?? 1,
     );

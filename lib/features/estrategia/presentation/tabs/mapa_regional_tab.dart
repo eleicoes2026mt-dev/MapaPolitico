@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/constants/regioes_mt.dart';
-import '../../../apoiadores/providers/apoiadores_provider.dart';
+import '../../../mapa/providers/cidades_marcadores_provider.dart';
 import '../../../dados_tse/providers/dados_tse_provider.dart';
 import '../../../mapa/presentation/widgets/mapa_regional_widget.dart';
 import '../../providers/regioes_fundidas_provider.dart';
@@ -168,9 +168,9 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                   Text(
                     isAdmin
                         ? 'Clique em uma região para editar o nome. Segure Ctrl (ou Cmd) e clique em duas ou mais regiões para fundi-las.'
-                          '${votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores.'}'
+                          '${votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores ou votantes.'}'
                         : 'Mapa das regiões de MT.'
-                          '${votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores.'}',
+                          '${votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores ou votantes.'}',
                     style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],

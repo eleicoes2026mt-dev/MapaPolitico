@@ -144,6 +144,8 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
+  static const _pathsOcultosApoiador = {'/assessores', '/benfeitorias', '/mensagens', '/estrategia'};
+
   @override
   Widget build(BuildContext context) {
     final loc = GoRouterState.of(context).uri.path;
@@ -233,7 +235,13 @@ class _Sidebar extends StatelessWidget {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    ..._items.map((e) {
+                    ..._items.where((e) {
+                      if (profile == null) return true;
+                      if (profile.role == 'apoiador') {
+                        return !_pathsOcultosApoiador.contains(e.path);
+                      }
+                      return true;
+                    }).map((e) {
                       final selected = loc == e.path || (e.path == '/' && loc == '/');
                       return ListTile(
                         leading: Icon(e.icon, size: 22),

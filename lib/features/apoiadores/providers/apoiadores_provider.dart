@@ -1,29 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
 import '../../../core/supabase/supabase_provider.dart';
+import '../../../core/config/env_config.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../assessores/providers/assessores_provider.dart';
+import '../../assessores/providers/assessores_provider.dart'
+    show promoverACandidato, messageFromException, assessoresListProvider;
 import '../../benfeitorias/providers/benfeitorias_provider.dart';
-import '../../mapa/data/mt_municipios_coords.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
   final res = await supabase.from('apoiadores').select().order('nome');
   return (res as List).map((e) => Apoiador.fromJson(e as Map<String, dynamic>)).toList();
-});
-
-/// Cidades que possuem pelo menos um apoiador (para marcadores no mapa).
-/// Agrupa por nome normalizado para coincidir com getCoordsMunicipioMT.
-final cidadesComApoiadorProvider = Provider<Map<String, int>>((ref) {
-  final list = ref.watch(apoiadoresListProvider).valueOrNull ?? [];
-  final map = <String, int>{};
-  for (final a in list) {
-    final cidade = a.cidadeParaMapa ?? a.cidadeNome;
-    if (cidade != null && cidade.trim().isNotEmpty) {
-      final key = normalizarNomeMunicipioMT(cidade);
-      map[key] = (map[key] ?? 0) + 1;
-    }
-  }
-  return map;
 });
 
 /// ID do assessor vinculado ao usuário logado (profile_id = current user). Candidato precisa ter ativado acesso em Assessores.
@@ -31,6 +18,14 @@ final meuAssessorIdProvider = FutureProvider<String?>((ref) async {
   final userId = ref.watch(currentUserProvider)?.id;
   if (userId == null) return null;
   final res = await supabase.from('assessores').select('id').eq('profile_id', userId).maybeSingle();
+  return res?['id'] as String?;
+});
+
+/// Linha em `apoiadores` vinculada ao usuário com role `apoiador` (convite por e-mail).
+final meuApoiadorIdProvider = FutureProvider<String?>((ref) async {
+  final userId = ref.watch(currentUserProvider)?.id;
+  if (userId == null) return null;
+  final res = await supabase.from('apoiadores').select('id').eq('profile_id', userId).maybeSingle();
   return res?['id'] as String?;
 });
 
@@ -225,3 +220,65 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     ref.invalidate(apoiadoresListProvider);
   };
 });
+
+/// Convidar apoiador por e-mail (cria usuário com role apoiador e preenche `apoiadores.profile_id`).
+Future<String?> convidarApoiadorPorEmail({required String apoiadorId}) async {
+  await supabase.auth.refreshSession();
+  try {
+    final body = <String, dynamic>{
+      'apoiador_id': apoiadorId,
+      'redirect_to': EnvConfig.appUrl,
+    };
+    final res = await supabase.functions.invoke('convidar-apoiador', body: body);
+    if (res.status == 401) {
+      throw Exception('Sessão expirada. Faça login novamente.');
+    }
+    if (res.status != 200) {
+      final msg = (res.data is Map && (res.data as Map).containsKey('error'))
+          ? (res.data as Map)['error'] as String?
+          : 'Erro ao convidar apoiador';
+      throw Exception(msg ?? 'Erro ao convidar apoiador');
+    }
+    final data = res.data;
+    if (data is Map && data.containsKey('error')) {
+      throw Exception(data['error'] as String? ?? 'Erro ao convidar apoiador');
+    }
+    if (data is Map && data['link_copia'] is String) {
+      final s = (data['link_copia'] as String).trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
+  } on FunctionException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}
+
+/// Reenviar convite (apoiador ainda sem `profile_id` vinculado).
+Future<String?> reenviarConviteApoiador({required String apoiadorId}) async {
+  await supabase.auth.refreshSession();
+  try {
+    final body = <String, dynamic>{
+      'apoiador_id': apoiadorId,
+      'redirect_to': EnvConfig.appUrl,
+    };
+    final res = await supabase.functions.invoke('reenviar-convite-apoiador', body: body);
+    if (res.status == 401) throw Exception('Sessão expirada.');
+    if (res.status != 200) {
+      final msg = (res.data is Map && (res.data as Map).containsKey('error'))
+          ? (res.data as Map)['error'] as String?
+          : 'Erro ao reenviar convite';
+      throw Exception(msg ?? 'Erro ao reenviar convite');
+    }
+    final data = res.data;
+    if (data is Map && data.containsKey('error')) {
+      throw Exception(data['error'] as String? ?? 'Erro ao reenviar convite');
+    }
+    if (data is Map && data['link_copia'] is String) {
+      final s = (data['link_copia'] as String).trim();
+      if (s.isNotEmpty) return s;
+    }
+    return null;
+  } on FunctionException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}

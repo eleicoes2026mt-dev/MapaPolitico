@@ -3,11 +3,21 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../../core/widgets/convite_link_dialog.dart';
 import '../../../models/apoiador.dart';
 import '../../mapa/data/mt_municipios_coords.dart';
 import '../../auth/providers/auth_provider.dart' show profileProvider;
 import '../data/brasil_api_cnpj.dart';
-import '../providers/apoiadores_provider.dart';
+import '../providers/apoiadores_provider.dart'
+    show
+        apoiadoresListProvider,
+        criarApoiadorProvider,
+        atualizarApoiadorProvider,
+        NovoApoiadorParams,
+        NovaBenfeitoriaItem,
+        AtualizarApoiadorParams,
+        convidarApoiadorPorEmail,
+        reenviarConviteApoiador;
 
 /// Parse de data no padrão dd/MM/yyyy; retorna null se inválido.
 /// Aceita "15/04/1992" ou "15041992" (8 dígitos).
@@ -117,6 +127,15 @@ final _emailRegex = RegExp(
 );
 bool _isEmailValido(String? s) => s != null && s.trim().isNotEmpty && _emailRegex.hasMatch(s.trim());
 
+/// E-mail para convite (PF: email; PJ: e-mail do responsável).
+String? _emailParaConviteApoiador(Apoiador a) {
+  for (final cand in [a.email, a.emailResponsavel]) {
+    final s = cand?.trim() ?? '';
+    if (s.isNotEmpty && _emailRegex.hasMatch(s)) return s;
+  }
+  return null;
+}
+
 const _perfisOpcoes = ['Prefeitural', 'Vereador(a)', 'Líder Religional', 'Empresarial'];
 
 const _tiposBenfeitoria = [
@@ -154,6 +173,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final profile = ref.watch(profileProvider).valueOrNull;
+    final ehApoiador = profile?.role == 'apoiador';
     final list = ref.watch(apoiadoresListProvider);
     var filtered = list.valueOrNull ?? [];
     if (_query.isNotEmpty) {
@@ -191,18 +212,19 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                 onChanged: (v) => setState(() => _perfilFilter = v ?? 'Todos os Perfis'),
               ),
               const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _abrirNovoApoiador,
-                icon: const Icon(Icons.add),
-                label: const Text('Novo Apoiador'),
-              ),
+              if (!ehApoiador)
+                FilledButton.icon(
+                  onPressed: _abrirNovoApoiador,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Novo Apoiador'),
+                ),
             ],
           ),
           const SizedBox(height: 24),
           list.when(
             data: (_) {
-              final profile = ref.watch(profileProvider).valueOrNull;
-              final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
+              final podeEditar =
+                  profile?.role == 'candidato' || profile?.role == 'assessor' || profile?.role == 'apoiador';
               return LayoutBuilder(
                 builder: (_, c) {
                   return Wrap(
@@ -802,7 +824,7 @@ class _BenfeitoriaTile extends StatelessWidget {
   }
 }
 
-class _ApoiadorCard extends StatelessWidget {
+class _ApoiadorCard extends ConsumerWidget {
   const _ApoiadorCard({required this.apoiador, required this.podeEditar, required this.onRefresh});
 
   final Apoiador apoiador;
@@ -810,10 +832,14 @@ class _ApoiadorCard extends StatelessWidget {
   final VoidCallback onRefresh;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width > 800 ? 380.0 : double.infinity;
     final cidadeDisplay = apoiador.cidadeNome != null ? displayNomeCidadeMT(apoiador.cidadeNome!) : null;
+    final profile = ref.watch(profileProvider).valueOrNull;
+    final podeConvidarEquipe = profile?.role == 'candidato' || profile?.role == 'assessor';
+    final emailConvite = _emailParaConviteApoiador(apoiador);
+    final mostrarConvite = podeConvidarEquipe && apoiador.profileId == null && emailConvite != null;
     return SizedBox(
       width: width,
       child: Card(
@@ -847,6 +873,79 @@ class _ApoiadorCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (mostrarConvite) ...[
+                    IconButton(
+                      icon: const Icon(Icons.mark_email_read_outlined),
+                      tooltip: 'Convidar por e-mail (acesso ao app)',
+                      onPressed: () async {
+                        try {
+                          final link = await convidarApoiadorPorEmail(apoiadorId: apoiador.id);
+                          onRefresh();
+                          if (!context.mounted) return;
+                          if (link != null && link.isNotEmpty) {
+                            await showConviteLinkDialog(
+                              context,
+                              link: link,
+                              title: 'Link de acesso do apoiador',
+                              description:
+                                  'O convite também foi enviado por e-mail. Copie o link e envie pelo WhatsApp se a mensagem não chegar. Com o acesso, o apoiador cadastra votantes que aparecem no mapa.',
+                              snackbarMessage: 'Link copiado.',
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Convite enviado por e-mail. Se não chegar, confira spam ou reenvie e use o link copiável quando aparecer.',
+                                ),
+                                duration: Duration(seconds: 5),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(e.toString().replaceFirst('Exception: ', '')),
+                                backgroundColor: theme.colorScheme.error,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.forward_to_inbox_outlined),
+                      tooltip: 'Reenviar convite',
+                      onPressed: () async {
+                        try {
+                          final link = await reenviarConviteApoiador(apoiadorId: apoiador.id);
+                          if (!context.mounted) return;
+                          if (link != null && link.isNotEmpty) {
+                            await showConviteLinkDialog(
+                              context,
+                              link: link,
+                              title: 'Link de convite (reenvio)',
+                              description: 'Copie e envie pelo WhatsApp se o e-mail não chegar.',
+                              snackbarMessage: 'Link copiado.',
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Convite reenviado por e-mail.')),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(e.toString().replaceFirst('Exception: ', '')),
+                                backgroundColor: theme.colorScheme.error,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ],
                   if (podeEditar)
                     IconButton(
                       icon: const Icon(Icons.edit_outlined),

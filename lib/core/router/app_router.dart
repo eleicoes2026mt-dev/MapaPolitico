@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../features/auth/presentation/login_screen.dart';
@@ -15,6 +16,7 @@ import '../../features/estrategia/presentation/estrategia_screen.dart';
 import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
 import '../../layout/main_scaffold.dart';
+import '../../features/auth/providers/auth_provider.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -62,7 +64,8 @@ GoRouter createAppRouter({String? initialLocation}) {
       ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
-        builder: (_, __, child) => MainScaffold(child: child),
+        builder: (context, state, child) =>
+            _ApoiadorShellWrapper(location: state.uri.path, child: child),
         routes: [
           GoRoute(
             path: '/',
@@ -104,4 +107,26 @@ GoRouter createAppRouter({String? initialLocation}) {
       ),
     ],
   );
+}
+
+/// Apoiador só acessa dashboard, apoiadores (próprio), votantes, mapa e perfil.
+class _ApoiadorShellWrapper extends ConsumerWidget {
+  const _ApoiadorShellWrapper({required this.location, required this.child});
+
+  final String location;
+  final Widget child;
+
+  static const _forbidden = {'/assessores', '/benfeitorias', '/mensagens', '/estrategia'};
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider).valueOrNull;
+    if (profile?.role == 'apoiador' && _forbidden.contains(location)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go('/votantes');
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return MainScaffold(child: child);
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/supabase/supabase_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 
 class DashboardStats {
   const DashboardStats({
@@ -29,6 +30,36 @@ class DashboardStats {
 
 final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   final client = supabase;
+  final profile = await ref.watch(profileProvider.future);
+
+  if (profile?.role == 'apoiador') {
+    final votantesRes = await client.from('votantes').select('id, qtd_votos_familia, municipio_id');
+    final votantesCount = votantesRes.length;
+    var votosVotantes = 0;
+    final cidadeCount = <String, int>{};
+    for (final r in votantesRes) {
+      final q = (r['qtd_votos_familia'] as num?)?.toInt() ?? 1;
+      votosVotantes += q;
+      final mid = r['municipio_id'] as String?;
+      if (mid != null) {
+        final nome = await client.from('municipios').select('nome').eq('id', mid).maybeSingle().then((x) => x?['nome'] as String? ?? '');
+        if (nome.isNotEmpty) cidadeCount[nome] = (cidadeCount[nome] ?? 0) + q;
+      }
+    }
+    final votosPorCidade = cidadeCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    return DashboardStats(
+      assessores: 0,
+      apoiadores: 1,
+      votantes: votantesCount,
+      estimativaVotos: votosVotantes,
+      votosPorCidade: votosPorCidade.map((e) => MapEntry(e.key, e.value)).toList(),
+      apoiadoresPorPerfil: const [],
+      totalBenfeitorias: 0,
+      benfeitoriasCount: 0,
+      aniversariantesHoje: 0,
+      mensagensCount: 0,
+    );
+  }
 
   final assessoresRes = await client.from('assessores').select('id');
   final assessoresCount = assessoresRes.length;

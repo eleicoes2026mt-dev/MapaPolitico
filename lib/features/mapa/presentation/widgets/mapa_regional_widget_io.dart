@@ -48,6 +48,8 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onSaveCorRegiao,
     this.onRegionTap,
     this.onCityTap,
+    this.locaisVotacaoContent,
+    this.selectedMunicipioKey,
   });
 
   final double height;
@@ -62,6 +64,10 @@ class MapaRegionalWidget extends StatefulWidget {
   final void Function(String cdRgint, String hexCor)? onSaveCorRegiao;
   final bool Function(String id, String nome, String? cdRgint)? onRegionTap;
   final void Function(String nomeMunicipio)? onCityTap;
+  /// Na web, exibido dentro do painel ranking; em mobile ignorado.
+  final Widget? locaisVotacaoContent;
+  /// Na web, evidencia a linha da cidade no ranking; em mobile ignorado.
+  final String? selectedMunicipioKey;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();

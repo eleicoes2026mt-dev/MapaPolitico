@@ -23,6 +23,8 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onSaveCorRegiao,
     this.onRegionTap,
     this.onCityTap,
+    this.locaisVotacaoContent,
+    this.selectedMunicipioKey,
   });
 
   final double height;
@@ -39,6 +41,10 @@ class MapaRegionalWidget extends StatefulWidget {
   final bool Function(String id, String nome, String? cdRgint)? onRegionTap;
   /// Ao clicar numa cidade (mapa ou legenda), recebe o nome do município (chave em votosPorMunicipio) para exibir locais de votação.
   final void Function(String nomeMunicipio)? onCityTap;
+  /// Conteúdo "Locais de votação" para exibir dentro do painel lateral (ranking). Quando definido, aparece expandido no bloco do ranking.
+  final Widget? locaisVotacaoContent;
+  /// Chave do município atualmente selecionado (para evidenciar a linha no ranking).
+  final String? selectedMunicipioKey;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetWebState();
@@ -303,8 +309,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       widget.estimativaPorCidade?[normalizarNomeMunicipioMT(keyMunicipio)] ?? 0;
 
   /// Agrega votos por região (região imediata) usando point-in-polygon. Ordenado por total decrescente.
-  /// Inclui estimativa por cidade e por região para comparativo.
-  List<({String id, String nome, int total, int totalEstimativa, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> _rankingRegioes() {
+  /// Inclui percentual da região sobre o total geral, estimativa por cidade e por região.
+  List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> _rankingRegioes() {
     final votos = widget.votosPorMunicipio;
     final regioes = _regioesMT;
     if (votos == null || votos.isEmpty || regioes == null) return [];
@@ -337,6 +343,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       final nome = entry.value.nome;
       final total = entry.value.total;
       final totalEstimativa = entry.value.totalEstimativa;
+      final pct = totalGeral > 0 ? (total / totalGeral * 100) : 0.0;
       final cidades = entry.value.cidades.entries
           .map((c) => (
                 cidade: displayNomeCidadeMT(c.key),
@@ -347,29 +354,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               ))
           .toList()
         ..sort((a, b) => b.votos.compareTo(a.votos));
-      return (id: id, nome: nome, total: total, totalEstimativa: totalEstimativa, cidades: cidades);
+      return (id: id, nome: nome, total: total, totalEstimativa: totalEstimativa, pct: pct, cidades: cidades);
     }).toList();
     list.sort((a, b) => b.total.compareTo(a.total));
     return list;
-  }
-
-  /// Top cidades por votos (para a legenda "Locais mais votados") com percentual, estimativa e chave para onCityTap.
-  List<({String nome, String key, int votos, double pct, int estimativa})> _topLocaisVotados({int limit = 10}) {
-    final votos = widget.votosPorMunicipio;
-    if (votos == null || votos.isEmpty) return [];
-    final total = votos.values.fold<int>(0, (a, b) => a + b);
-    if (total == 0) return [];
-    final list = votos.entries
-        .map((e) => (
-              nome: displayNomeCidadeMT(e.key),
-              key: e.key,
-              votos: e.value,
-              pct: e.value / total * 100,
-              estimativa: _estimativaCidade(e.key),
-            ))
-        .toList();
-    list.sort((a, b) => b.votos.compareTo(a.votos));
-    return list.take(limit).toList();
   }
 
   void _onMapTap() {
@@ -547,7 +535,6 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final heatMarkers = _buildHeatMarkers();
     final markers = _buildMarkers();
     final ranking = _rankingRegioes();
-    final topLocais = _topLocaisVotados(limit: 10);
 
     return SizedBox(
       height: widget.height,
@@ -593,66 +580,17 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               ],
             ),
           ),
-          if (topLocais.isNotEmpty)
-            Positioned(
-              left: 8,
-              bottom: 8,
-              child: Material(
-                elevation: 2,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.whatshot, size: 18, color: Colors.deepOrange.shade800),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Locais mais votados',
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).colorScheme.onSurface,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      ...topLocais.asMap().entries.map((e) {
-                        final i = e.key + 1;
-                        final loc = e.value;
-                        return InkWell(
-                          onTap: () => widget.onCityTap?.call(loc.key),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 2, bottom: 2),
-                            child: Text(
-                              loc.estimativa > 0
-                                  ? '$i. ${loc.nome}: est. ${loc.estimativa} | ${loc.votos} votos (${loc.pct.toStringAsFixed(1)}%)'
-                                  : '$i. ${loc.nome}: ${loc.votos} votos (${loc.pct.toStringAsFixed(1)}%)',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurface,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           if (ranking.isNotEmpty)
             Positioned(
               right: 8,
               top: 8,
               bottom: 8,
-              child: _RankingPanel(ranking: ranking, onCityTap: widget.onCityTap),
+              child: _RankingPanel(
+                ranking: ranking,
+                onCityTap: widget.onCityTap,
+                locaisVotacaoContent: widget.locaisVotacaoContent,
+                selectedMunicipioKey: widget.selectedMunicipioKey,
+              ),
             ),
           if (_hoveredRegionName != null && _hoverPosition != null)
             Positioned(
@@ -678,28 +616,34 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   }
 }
 
-/// Painel lateral: ranking de regiões; ao clicar expande com cidades (estimativa vs votos TSE); ao tocar na cidade abre locais de votação.
+/// Painel lateral analítico: ranking de regiões com votos e percentual; expande com cidades (estimativa vs TSE); toque na cidade abre locais de votação (explodindo dentro deste bloco).
 class _RankingPanel extends StatelessWidget {
   const _RankingPanel({
     required this.ranking,
     this.onCityTap,
+    this.locaisVotacaoContent,
+    this.selectedMunicipioKey,
   });
 
-  final List<({String id, String nome, int total, int totalEstimativa, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
+  final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
   final void Function(String nomeMunicipio)? onCityTap;
+  final Widget? locaisVotacaoContent;
+  final String? selectedMunicipioKey;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final showLocais = locaisVotacaoContent != null;
+    final totalVotos = ranking.fold<int>(0, (s, r) => s + r.total);
+    final totalEstimativa = ranking.fold<int>(0, (s, r) => s + r.totalEstimativa);
     return Material(
       elevation: 4,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 280,
-        constraints: const BoxConstraints(maxHeight: 400),
+        width: 400,
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
@@ -723,80 +667,230 @@ class _RankingPanel extends StatelessWidget {
               ),
             ),
             const Divider(height: 1),
-            Flexible(
+            // Resumo geral: votos totais e estimativa
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Resultado geral',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.how_to_vote_outlined, size: 16, color: theme.colorScheme.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Votos totais (TSE): ',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        Text(
+                          '$totalVotos',
+                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: theme.colorScheme.primary),
+                        ),
+                      ],
+                    ),
+                    if (totalEstimativa > 0) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.analytics_outlined, size: 16, color: theme.colorScheme.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Estimativa (campanha): ',
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                          Text(
+                            '$totalEstimativa',
+                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.primary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            // Cabeçalho analítico: # | Região | Votos | %
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  SizedBox(width: 22, child: Text('#', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant))),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text('Região', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant))),
+                  Text('Votos', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant)),
+                  const SizedBox(width: 8),
+                  SizedBox(width: 44, child: Text('%', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.right)),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: ranking.length,
                 itemBuilder: (context, i) {
                   final r = ranking[i];
-                  return ExpansionTile(
-                    initiallyExpanded: false,
-                    title: Row(
-                      children: [
-                        Text(
-                          '${i + 1}',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            r.nome,
-                            style: theme.textTheme.bodySmall,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (r.totalEstimativa > 0)
-                          Text(
-                            'est. ${r.totalEstimativa} | ',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
+                  final regionContainsSelected = selectedMunicipioKey != null &&
+                      r.cidades.any((c) => c.key == selectedMunicipioKey);
+                  return Container(
+                    decoration: regionContainsSelected
+                        ? BoxDecoration(
+                            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(4),
+                          )
+                        : null,
+                    child: ExpansionTile(
+                      initiallyExpanded: regionContainsSelected,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      title: Row(
+                        children: [
+                          SizedBox(
+                            width: 22,
+                            child: Text(
+                              '${i + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: theme.colorScheme.primary,
+                              ),
                             ),
                           ),
-                        Text(
-                          '${r.total} votos',
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              r.nome,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                fontWeight: regionContainsSelected ? FontWeight.w600 : null,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (r.totalEstimativa > 0)
+                            Text(
+                              'est. ${r.totalEstimativa} | ',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          Text(
+                            '${r.total}',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 44,
+                            child: Text(
+                              '${r.pct.toStringAsFixed(1)}%',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.primary,
+                              ),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                        ],
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12, right: 12, bottom: 4),
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 28),
+                              Expanded(child: Text('Cidade', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant))),
+                              Text('Votos', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant)),
+                              const SizedBox(width: 8),
+                              SizedBox(width: 44, child: Text('%', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.right)),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                    children: [
-                      ...r.cidades.map((c) => InkWell(
+                        ...r.cidades.map((c) {
+                          final isSelected = c.key == selectedMunicipioKey;
+                          return InkWell(
                             onTap: () => onCityTap?.call(c.key),
                             borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 24, right: 12, top: 4, bottom: 8),
+                            child: Container(
+                              margin: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
+                              padding: const EdgeInsets.only(left: 20, right: 12, top: 6, bottom: 8),
+                              decoration: isSelected
+                                  ? BoxDecoration(
+                                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.7),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: theme.colorScheme.primary, width: 1.5),
+                                    )
+                                  : null,
                               child: Row(
                                 children: [
+                                  if (isSelected)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: Icon(Icons.place, size: 16, color: theme.colorScheme.primary),
+                                    ),
                                   Expanded(
                                     child: Text(
                                       c.cidade,
                                       style: theme.textTheme.bodySmall?.copyWith(
                                         color: theme.colorScheme.onSurfaceVariant,
+                                        fontWeight: isSelected ? FontWeight.w600 : null,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  Icon(Icons.place_outlined, size: 14, color: theme.colorScheme.primary),
+                                  if (!isSelected)
+                                    Icon(Icons.place_outlined, size: 14, color: theme.colorScheme.primary),
                                   const SizedBox(width: 4),
                                   Text(
-                                    c.estimativa > 0
-                                        ? 'est. ${c.estimativa} | ${c.votos} (${c.pct.toStringAsFixed(1)}%)'
-                                        : '${c.votos} (${c.pct.toStringAsFixed(1)}%)',
-                                    style: theme.textTheme.labelSmall,
+                                    c.estimativa > 0 ? 'est. ${c.estimativa} | ${c.votos}' : '${c.votos}',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      fontWeight: isSelected ? FontWeight.w600 : null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  SizedBox(
+                                    width: 44,
+                                    child: Text(
+                                      '${c.pct.toStringAsFixed(1)}%',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                        fontWeight: isSelected ? FontWeight.w600 : null,
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
-                          )),
-                    ],
+                          );
+                        }),
+                      ],
+                    ),
                   );
                 },
               ),
             ),
+            if (showLocais) ...[
+              const Divider(height: 1),
+              Expanded(
+                flex: 1,
+                child: locaisVotacaoContent!,
+              ),
+            ],
           ],
         ),
       ),

@@ -144,10 +144,11 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
-  /// Apoiador: sem painel do deputado (dashboard) nem gestão de assessores etc.
+  /// Apoiador: só votantes, mapa e perfil — sem apoiadores (só candidato/assessor).
   static const _pathsOcultosApoiador = {
     '/',
     '/assessores',
+    '/apoiadores',
     '/benfeitorias',
     '/mensagens',
     '/estrategia',

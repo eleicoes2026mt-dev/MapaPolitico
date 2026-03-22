@@ -5,6 +5,7 @@ import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/geo/lat_lng.dart';
 import '../../data/geo_loader.dart';
 import '../../data/mt_municipios_coords.dart';
+import '../../models/mapa_marcador_cidade.dart';
 
 /// Mapa para **web**: OpenStreetMap + regiões de MT (flutter_map).
 /// Mesma funcionalidade de regiões, toque e tooltip que no app mobile.
@@ -14,7 +15,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.height = 400,
     this.votosPorMunicipio,
     this.estimativaPorCidade,
-    this.cidadesComApoiador,
+    this.cidadesMarcadoresMapa,
     this.regioesFundidas,
     this.nomesCustomizados,
     this.coresCustomizadas,
@@ -31,7 +32,8 @@ class MapaRegionalWidget extends StatefulWidget {
   final Map<String, int>? votosPorMunicipio;
   /// Estimativa de votos por cidade (chave normalizada). Para comparativo com votos TSE.
   final Map<String, int>? estimativaPorCidade;
-  final Map<String, int>? cidadesComApoiador;
+  /// Marcadores por cidade (contagem + bandeira opcional do apoiador).
+  final Map<String, MapaMarcadorCidade>? cidadesMarcadoresMapa;
   final List<RegiaoFundida>? regioesFundidas;
   final Map<String, String>? nomesCustomizados;
   final Map<String, String>? coresCustomizadas;
@@ -282,20 +284,43 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   /// Apenas marcadores de cidades com apoiadores (votos TSE ficam só no calor).
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
-    final apoiadores = widget.cidadesComApoiador;
-    if (apoiadores != null && apoiadores.isNotEmpty) {
-      for (final e in apoiadores.entries) {
+    final porCidade = widget.cidadesMarcadoresMapa;
+    if (porCidade != null && porCidade.isNotEmpty) {
+      for (final e in porCidade.entries) {
         final coords = getCoordsMunicipioMT(e.key);
         if (coords != null) {
           final nome = displayNomeCidadeMT(e.key);
+          final m = e.value;
+          final cor = m.bandeiraCorPrimariaHex != null && m.bandeiraCorPrimariaHex!.isNotEmpty
+              ? _colorFromHex(m.bandeiraCorPrimariaHex)
+              : Colors.green.shade700;
+          final label = m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
+              ? m.bandeiraEmoji!.trim()
+              : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
+                  ? m.bandeiraIniciais!.trim()
+                  : '${m.quantidade}');
           markers.add(
             Marker(
               point: ll.LatLng(coords.latitude, coords.longitude),
-              width: 24,
-              height: 24,
+              width: 32,
+              height: 32,
               child: Tooltip(
-                message: '$nome: ${e.value} apoiador(es)',
-                child: Icon(Icons.people, color: Colors.green.shade700, size: 24),
+                message: '$nome: ${m.quantidade} na rede (apoiadores/votantes)',
+                child: GestureDetector(
+                  onTap: () => widget.onCityTap?.call(e.key),
+                  child: m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
+                      ? Text(label, style: const TextStyle(fontSize: 22))
+                      : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
+                          ? CircleAvatar(
+                              radius: 14,
+                              backgroundColor: cor,
+                              child: Text(
+                                label.length > 3 ? label.substring(0, 3) : label,
+                                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            )
+                          : Icon(Icons.people, color: cor, size: 26)),
+                ),
               ),
             ),
           );

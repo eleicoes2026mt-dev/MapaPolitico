@@ -79,6 +79,9 @@ GoRouter createAppRouter({String? initialLocation}) {
 
       if (session != null) {
         final role = await cachedProfileRole(session.user.id);
+        if (role == 'apoiador' && path == '/apoiadores') {
+          return '/votantes';
+        }
         if (role == 'assessor' && path == '/assessores') {
           return '/apoiadores';
         }
@@ -157,7 +160,14 @@ class _RoleShellWrapper extends ConsumerWidget {
   final String location;
   final Widget child;
 
-  static const _forbiddenApoiador = {'/assessores', '/benfeitorias', '/mensagens', '/estrategia', '/'};
+  static const _forbiddenApoiador = {
+    '/assessores',
+    '/apoiadores',
+    '/benfeitorias',
+    '/mensagens',
+    '/estrategia',
+    '/',
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

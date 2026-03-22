@@ -9,6 +9,10 @@ import '../../benfeitorias/providers/benfeitorias_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
+  final profile = ref.watch(profileProvider).valueOrNull;
+  // Apoiador não deve listar outros apoiadores (tela só para candidato/assessor).
+  if (profile?.role == 'apoiador') return [];
+
   final res = await supabase.from('apoiadores').select().order('nome');
   return (res as List).map((e) => Apoiador.fromJson(e as Map<String, dynamic>)).toList();
 });
@@ -27,6 +31,15 @@ final meuApoiadorIdProvider = FutureProvider<String?>((ref) async {
   if (userId == null) return null;
   final res = await supabase.from('apoiadores').select('id').eq('profile_id', userId).maybeSingle();
   return res?['id'] as String?;
+});
+
+/// Cadastro completo do apoiador logado (para bandeira no mapa / perfil).
+final meuApoiadorProvider = FutureProvider<Apoiador?>((ref) async {
+  final id = await ref.watch(meuApoiadorIdProvider.future);
+  if (id == null) return null;
+  final res = await supabase.from('apoiadores').select().eq('id', id).maybeSingle();
+  if (res == null) return null;
+  return Apoiador.fromJson(Map<String, dynamic>.from(res));
 });
 
 /// Item de benfeitoria para cadastro junto com o apoiador.
@@ -194,6 +207,12 @@ class AtualizarApoiadorParams {
     this.estimativaVotos,
     this.votosPrometidosUltimaEleicao,
     this.atualizarLegado = false,
+    this.bandeiraIniciais,
+    this.bandeiraCorPrimaria,
+    this.bandeiraCorSecundaria,
+    this.bandeiraSimbolo,
+    this.bandeiraEmoji,
+    this.atualizarBandeira = false,
   });
   final String? nome;
   final String? cidadeNome;
@@ -203,6 +222,13 @@ class AtualizarApoiadorParams {
   final int? votosPrometidosUltimaEleicao;
   /// Se true, atualiza votos_prometidos_ultima_eleicao (inclusive para null).
   final bool atualizarLegado;
+  final String? bandeiraIniciais;
+  final String? bandeiraCorPrimaria;
+  final String? bandeiraCorSecundaria;
+  final String? bandeiraSimbolo;
+  final String? bandeiraEmoji;
+  /// Se true, grava campos de bandeira (permite limpar com null nos opcionais).
+  final bool atualizarBandeira;
 }
 
 final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiadorId, AtualizarApoiadorParams params)>((ref) {
@@ -215,9 +241,26 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     if (params.email != null) row['email'] = params.email!.trim().isEmpty ? null : params.email!.trim();
     if (params.estimativaVotos != null) row['estimativa_votos'] = params.estimativaVotos!;
     if (params.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = params.votosPrometidosUltimaEleicao;
+    if (params.atualizarBandeira) {
+      final ini = params.bandeiraIniciais?.trim() ?? '';
+      row['bandeira_iniciais'] = ini.isEmpty ? null : (ini.length > 3 ? ini.substring(0, 3) : ini);
+      row['bandeira_cor_primaria'] = params.bandeiraCorPrimaria == null || params.bandeiraCorPrimaria!.trim().isEmpty
+          ? null
+          : params.bandeiraCorPrimaria!.trim();
+      row['bandeira_cor_secundaria'] = params.bandeiraCorSecundaria == null || params.bandeiraCorSecundaria!.trim().isEmpty
+          ? null
+          : params.bandeiraCorSecundaria!.trim();
+      row['bandeira_simbolo'] = params.bandeiraSimbolo == null || params.bandeiraSimbolo!.trim().isEmpty
+          ? null
+          : params.bandeiraSimbolo!.trim();
+      row['bandeira_emoji'] = params.bandeiraEmoji == null || params.bandeiraEmoji!.trim().isEmpty
+          ? null
+          : params.bandeiraEmoji!.trim();
+    }
     if (row.isEmpty) return;
     await client.from('apoiadores').update(row).eq('id', apoiadorId);
     ref.invalidate(apoiadoresListProvider);
+    ref.invalidate(meuApoiadorProvider);
   };
 });
 

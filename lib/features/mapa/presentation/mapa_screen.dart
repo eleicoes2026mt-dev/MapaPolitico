@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/regioes_mt.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
-import '../providers/cidades_marcadores_provider.dart';
+import '../../apoiadores/providers/apoiadores_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../../estrategia/providers/regioes_fundidas_provider.dart';
 import '../data/mt_municipios_coords.dart';
-import '../providers/estimativa_por_cidade_provider.dart';
+import '../providers/mapa_camadas_filtradas_provider.dart';
+import '../providers/mapa_filtros_provider.dart';
 import 'widgets/mapa_regional_widget.dart';
 
 /// Painel de locais de votação exibido no bloco principal (abaixo do mapa).
@@ -13,10 +16,12 @@ class _LocaisVotacaoPanel extends StatelessWidget {
   const _LocaisVotacaoPanel({
     required this.nomeMunicipio,
     required this.onClose,
+    required this.estimativaPorCidade,
   });
 
   final String nomeMunicipio;
   final VoidCallback onClose;
+  final Map<String, int> estimativaPorCidade;
 
   @override
   Widget build(BuildContext context) {
@@ -25,10 +30,9 @@ class _LocaisVotacaoPanel extends StatelessWidget {
     return Consumer(
       builder: (context, ref, _) {
         final async = ref.watch(locaisVotacaoPorMunicipioProvider(nomeMunicipio));
-        final estimativaAsync = ref.watch(estimativaPorCidadeProvider);
         final votosPorMunicipio = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
         final votosTseCidade = votosPorMunicipio[nomeMunicipio] ?? 0;
-        final estimativaCidade = estimativaAsync.valueOrNull?[normalizarNomeMunicipioMT(nomeMunicipio)] ?? 0;
+        final estimativaCidade = estimativaPorCidade[normalizarNomeMunicipioMT(nomeMunicipio)] ?? 0;
         return Column(
           mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -166,13 +170,18 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final votosPorMunicipio = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
-    final estimativaPorCidade = ref.watch(estimativaPorCidadeProvider).valueOrNull;
-    final cidadesComApoiador = ref.watch(cidadesComApoiadorProvider);
+    final votosAjustados = ref.watch(mapaVotosTseAjustadosProvider);
+    final estimativaPorCidade = ref.watch(mapaEstimativaFiltradaProvider);
+    final marcadores = ref.watch(mapaMarcadoresFiltradosProvider);
+    final filtros = ref.watch(mapaFiltrosProvider);
     final regioesFundidas = ref.watch(regioesFundidasParaMapaProvider);
     final nomesCustomizados = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
     final coresCustomizadas = ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
     final isAdmin = ref.watch(isAdminProvider);
+    final profile = ref.watch(profileProvider).valueOrNull;
+    final apoiadoresLista = ref.watch(apoiadoresListProvider).valueOrNull ?? [];
+    final podeFiltrarApoiador = profile?.role == 'candidato' || profile?.role == 'assessor';
+
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < 600 ? 16.0 : 24.0;
 
@@ -194,15 +203,127 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
               const EstadoMTBadge(compact: true),
             ],
           ),
-          SizedBox(height: padding),
+          SizedBox(height: padding * 0.5),
+          Card(
+            margin: EdgeInsets.zero,
+            child: ExpansionTile(
+              title: Text(
+                'Filtros do mapa',
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                _subtituloFiltros(filtros),
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      DropdownButtonFormField<String?>(
+                        value: filtros.cidadeKey,
+                        decoration: const InputDecoration(
+                          labelText: 'Cidade',
+                          prefixIcon: Icon(Icons.location_city_outlined),
+                        ),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem<String?>(value: null, child: Text('Todas')),
+                          ...listCidadesMTNomesNormalizados.map(
+                            (k) => DropdownMenuItem<String?>(
+                              value: k,
+                              child: Text(displayNomeCidadeMT(k), overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ],
+                        onChanged: (v) => ref.read(mapaFiltrosProvider.notifier).setCidade(v),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String?>(
+                        value: filtros.regiaoCdRgint,
+                        decoration: const InputDecoration(
+                          labelText: 'Região intermediária',
+                          prefixIcon: Icon(Icons.map_outlined),
+                        ),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem<String?>(value: null, child: Text('Todas')),
+                          ...regioesIntermediariasMT.map(
+                            (r) => DropdownMenuItem<String?>(
+                              value: r.id,
+                              child: Text(r.nome, overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ],
+                        onChanged: (v) => ref.read(mapaFiltrosProvider.notifier).setRegiao(v),
+                      ),
+                      if (podeFiltrarApoiador && apoiadoresLista.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<String?>(
+                          value: filtros.apoiadorId,
+                          decoration: const InputDecoration(
+                            labelText: 'Rede do apoiador',
+                            prefixIcon: Icon(Icons.people_outline),
+                          ),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem<String?>(value: null, child: Text('Campanha inteira')),
+                            ...apoiadoresLista.map(
+                              (a) => DropdownMenuItem<String?>(
+                                value: a.id,
+                                child: Text(a.nome, overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ],
+                          onChanged: (v) => ref.read(mapaFiltrosProvider.notifier).setApoiador(v),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        value: filtros.topBenfeitoriasMunicipios,
+                        decoration: const InputDecoration(
+                          labelText: 'Municípios com mais benfeitorias',
+                          prefixIcon: Icon(Icons.volunteer_activism_outlined),
+                        ),
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(value: 0, child: Text('Sem filtro')),
+                          DropdownMenuItem(value: 5, child: Text('Top 5')),
+                          DropdownMenuItem(value: 10, child: Text('Top 10')),
+                          DropdownMenuItem(value: 15, child: Text('Top 15')),
+                          DropdownMenuItem(value: 20, child: Text('Top 20')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) ref.read(mapaFiltrosProvider.notifier).setTopBenfeitorias(v);
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => ref.read(mapaFiltrosProvider.notifier).limpar(),
+                          icon: const Icon(Icons.filter_alt_off, size: 18),
+                          label: const Text('Limpar filtros'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: padding * 0.5),
           Expanded(
             child: Card(
               clipBehavior: Clip.antiAlias,
               child: MapaRegionalWidget(
                 height: double.infinity,
-                votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
-                estimativaPorCidade: estimativaPorCidade?.isEmpty ?? true ? null : estimativaPorCidade,
-                cidadesComApoiador: cidadesComApoiador.isEmpty ? null : cidadesComApoiador,
+                votosPorMunicipio: votosAjustados.isEmpty ? null : votosAjustados,
+                estimativaPorCidade: estimativaPorCidade.isEmpty ? null : estimativaPorCidade,
+                cidadesMarcadoresMapa: marcadores.isEmpty ? null : marcadores,
                 regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,
                 nomesCustomizados: nomesCustomizados.isEmpty ? null : nomesCustomizados,
                 coresCustomizadas: coresCustomizadas.isEmpty ? null : coresCustomizadas,
@@ -225,6 +346,7 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
                 locaisVotacaoContent: _selectedMunicipio != null
                     ? _LocaisVotacaoPanel(
                         nomeMunicipio: _selectedMunicipio!,
+                        estimativaPorCidade: estimativaPorCidade,
                         onClose: () => setState(() => _selectedMunicipio = null),
                       )
                     : null,
@@ -234,13 +356,32 @@ class _MapaScreenState extends ConsumerState<MapaScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            votosPorMunicipio.isEmpty && cidadesComApoiador.isEmpty
+            votosAjustados.isEmpty && marcadores.isEmpty
                 ? 'Mapa interativo MT com regiões e cidades. Selecione seu candidato 2022 em Meu perfil para ver votos por cidade. Cadastre apoiadores e votantes (com município) para marcar cidades no mapa.'
-                : 'Mapa com ${votosPorMunicipio.length} cidade(s) com votos (TSE) e ${cidadesComApoiador.length} cidade(s) com apoiadores ou votantes. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.',
+                : 'Mapa com ${votosAjustados.length} cidade(s) com votos (TSE) e ${marcadores.length} cidade(s) com apoiadores ou votantes. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ),
     );
+  }
+
+  String _subtituloFiltros(MapaFiltros f) {
+    final parts = <String>[];
+    if (f.cidadeKey != null) parts.add(displayNomeCidadeMT(f.cidadeKey!));
+    if (f.regiaoCdRgint != null) {
+      String? nomeRg;
+      for (final x in regioesIntermediariasMT) {
+        if (x.id == f.regiaoCdRgint) {
+          nomeRg = x.nome;
+          break;
+        }
+      }
+      parts.add(nomeRg ?? 'Região');
+    }
+    if (f.apoiadorId != null) parts.add('Por apoiador');
+    if (f.topBenfeitoriasMunicipios > 0) parts.add('Top ${f.topBenfeitoriasMunicipios} benfeitorias');
+    if (parts.isEmpty) return 'Nenhum filtro ativo';
+    return parts.join(' · ');
   }
 }

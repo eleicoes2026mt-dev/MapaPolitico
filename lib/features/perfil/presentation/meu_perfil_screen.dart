@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/supabase/supabase_provider.dart';
+import '../../../models/apoiador.dart';
+import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../providers/perfil_provider.dart';
@@ -327,6 +329,43 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
+                    if (role == 'apoiador') ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        'Bandeira no mapa',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Iniciais, cor e emoji no marcador da sua cidade no mapa regional.',
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 12),
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final async = ref.watch(meuApoiadorProvider);
+                          return async.when(
+                            data: (ap) {
+                              if (ap == null) {
+                                return Text(
+                                  'Cadastro de apoiador não encontrado para esta conta.',
+                                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                                );
+                              }
+                              return _BandeiraApoiadorSection(key: ValueKey(ap.id), apoiador: ap);
+                            },
+                            loading: () => const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            ),
+                            error: (e, _) => Text(
+                              'Erro ao carregar apoiador: $e',
+                              style: TextStyle(color: theme.colorScheme.error),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                     if (isCandidato)
                       Text(
                         'Função é seu tipo de conta no sistema. Cargo acima é a posição política que você indica.',
@@ -692,6 +731,119 @@ class _NmVotavelTseField extends ConsumerWidget {
       },
       loading: () => const SizedBox(height: 56, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
       error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _BandeiraApoiadorSection extends ConsumerStatefulWidget {
+  const _BandeiraApoiadorSection({super.key, required this.apoiador});
+
+  final Apoiador apoiador;
+
+  @override
+  ConsumerState<_BandeiraApoiadorSection> createState() => _BandeiraApoiadorSectionState();
+}
+
+class _BandeiraApoiadorSectionState extends ConsumerState<_BandeiraApoiadorSection> {
+  late final TextEditingController _iniciais;
+  late final TextEditingController _cor;
+  late final TextEditingController _emoji;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _iniciais = TextEditingController(text: widget.apoiador.bandeiraIniciais ?? '');
+    _cor = TextEditingController(text: widget.apoiador.bandeiraCorPrimaria ?? '');
+    _emoji = TextEditingController(text: widget.apoiador.bandeiraEmoji ?? '');
+  }
+
+  @override
+  void dispose() {
+    _iniciais.dispose();
+    _cor.dispose();
+    _emoji.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _BandeiraApoiadorSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.apoiador.id != widget.apoiador.id) {
+      _iniciais.text = widget.apoiador.bandeiraIniciais ?? '';
+      _cor.text = widget.apoiador.bandeiraCorPrimaria ?? '';
+      _emoji.text = widget.apoiador.bandeiraEmoji ?? '';
+    }
+  }
+
+  Future<void> _salvarBandeira() async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(atualizarApoiadorProvider)(
+        widget.apoiador.id,
+        AtualizarApoiadorParams(
+          atualizarBandeira: true,
+          bandeiraIniciais: _iniciais.text.trim().isEmpty ? null : _iniciais.text.trim(),
+          bandeiraCorPrimaria: _cor.text.trim().isEmpty ? null : _cor.text.trim(),
+          bandeiraEmoji: _emoji.text.trim().isEmpty ? null : _emoji.text.trim(),
+        ),
+      );
+      ref.invalidate(meuApoiadorProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bandeira atualizada')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: _iniciais,
+          decoration: const InputDecoration(
+            labelText: 'Iniciais (até 3 caracteres)',
+            prefixIcon: Icon(Icons.text_fields),
+          ),
+          maxLength: 3,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _cor,
+          decoration: const InputDecoration(
+            labelText: 'Cor principal (hex)',
+            hintText: '#2196F3',
+            prefixIcon: Icon(Icons.palette_outlined),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _emoji,
+          decoration: const InputDecoration(
+            labelText: 'Emoji (opcional)',
+            prefixIcon: Icon(Icons.emoji_emotions_outlined),
+          ),
+          maxLength: 8,
+        ),
+        const SizedBox(height: 16),
+        FilledButton.tonal(
+          onPressed: _saving ? null : _salvarBandeira,
+          child: _saving
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Salvar bandeira'),
+        ),
+      ],
     );
   }
 }

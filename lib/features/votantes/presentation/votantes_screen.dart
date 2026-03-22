@@ -25,6 +25,38 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
     );
   }
 
+  Future<void> _promoverParaApoiador(Votante v) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Promover a apoiador'),
+        content: Text(
+          'Criar cadastro de apoiador para "${v.nome}" e remover o registro de votante? '
+          'É necessário ter município definido e o votante não pode estar vinculado a outro apoiador.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Promover')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(promoverVotanteParaApoiadorProvider)(v.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Votante promovido a apoiador.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
   Future<void> _confirmarExcluir(Votante v) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -58,6 +90,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
     final profile = ref.watch(profileProvider).valueOrNull;
     final podeCadastrar =
         profile?.role == 'candidato' || profile?.role == 'assessor' || profile?.role == 'apoiador';
+    final podePromoverApoiador = profile?.role == 'candidato' || profile?.role == 'assessor';
 
     final list = ref.watch(votantesListProvider);
     final apoiadoresAsync = ref.watch(apoiadoresListProvider);
@@ -140,8 +173,10 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
             data: (_) => _VotantesTable(
               votantes: filtered,
               apoiadorPorId: apoiadorPorId,
+              podePromoverApoiador: podePromoverApoiador,
               onEdit: (v) => _abrirNovoOuEditar(existente: v),
               onDelete: _confirmarExcluir,
+              onPromover: _promoverParaApoiador,
             ),
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Erro: $e'),
@@ -156,14 +191,18 @@ class _VotantesTable extends StatelessWidget {
   const _VotantesTable({
     required this.votantes,
     required this.apoiadorPorId,
+    required this.podePromoverApoiador,
     required this.onEdit,
     required this.onDelete,
+    required this.onPromover,
   });
 
   final List<Votante> votantes;
   final Map<String, String> apoiadorPorId;
+  final bool podePromoverApoiador;
   final void Function(Votante) onEdit;
   final void Function(Votante) onDelete;
+  final void Function(Votante) onPromover;
 
   @override
   Widget build(BuildContext context) {
@@ -185,6 +224,12 @@ class _VotantesTable extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (podePromoverApoiador && v.apoiadorId == null && v.municipioId != null)
+                    IconButton(
+                      icon: const Icon(Icons.upgrade),
+                      tooltip: 'Promover a apoiador',
+                      onPressed: () => onPromover(v),
+                    ),
                   IconButton(icon: const Icon(Icons.edit), onPressed: () => onEdit(v)),
                   IconButton(icon: const Icon(Icons.delete), onPressed: () => onDelete(v)),
                 ],
@@ -209,6 +254,7 @@ class _VotantesTable extends StatelessWidget {
         rows: votantes.map((v) {
           final cidade = v.municipioNome ?? (v.municipioId != null ? v.municipioId! : '—');
           final ap = v.apoiadorId != null ? (apoiadorPorId[v.apoiadorId!] ?? '—') : '—';
+          final podePromover = podePromoverApoiador && v.apoiadorId == null && v.municipioId != null;
           return DataRow(
             cells: [
               DataCell(Text(v.nome)),
@@ -220,6 +266,12 @@ class _VotantesTable extends StatelessWidget {
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (podePromover)
+                    IconButton(
+                      icon: const Icon(Icons.upgrade, size: 20),
+                      tooltip: 'Promover a apoiador',
+                      onPressed: () => onPromover(v),
+                    ),
                   IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => onEdit(v)),
                   IconButton(icon: const Icon(Icons.delete, size: 20), onPressed: () => onDelete(v)),
                 ],

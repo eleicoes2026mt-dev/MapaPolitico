@@ -26,6 +26,11 @@ class Apoiador {
   final int votosFamilia;
   final int votosFuncionarios;
   final int? votosPrometidosUltimaEleicao;
+  final String? bandeiraIniciais;
+  final String? bandeiraCorPrimaria;
+  final String? bandeiraCorSecundaria;
+  final String? bandeiraSimbolo;
+  final String? bandeiraEmoji;
 
   const Apoiador({
     required this.id,
@@ -55,6 +60,11 @@ class Apoiador {
     this.votosFamilia = 0,
     this.votosFuncionarios = 0,
     this.votosPrometidosUltimaEleicao,
+    this.bandeiraIniciais,
+    this.bandeiraCorPrimaria,
+    this.bandeiraCorSecundaria,
+    this.bandeiraSimbolo,
+    this.bandeiraEmoji,
   });
 
   factory Apoiador.fromJson(Map<String, dynamic> json) {
@@ -88,6 +98,11 @@ class Apoiador {
       votosFamilia: (json['votos_familia'] as num?)?.toInt() ?? 0,
       votosFuncionarios: (json['votos_funcionarios'] as num?)?.toInt() ?? 0,
       votosPrometidosUltimaEleicao: (json['votos_prometidos_ultima_eleicao'] as num?)?.toInt(),
+      bandeiraIniciais: json['bandeira_iniciais'] as String?,
+      bandeiraCorPrimaria: json['bandeira_cor_primaria'] as String?,
+      bandeiraCorSecundaria: json['bandeira_cor_secundaria'] as String?,
+      bandeiraSimbolo: json['bandeira_simbolo'] as String?,
+      bandeiraEmoji: json['bandeira_emoji'] as String?,
     );
   }
 
@@ -119,6 +134,11 @@ class Apoiador {
         'votos_familia': votosFamilia,
         'votos_funcionarios': votosFuncionarios,
         'votos_prometidos_ultima_eleicao': votosPrometidosUltimaEleicao,
+        'bandeira_iniciais': bandeiraIniciais,
+        'bandeira_cor_primaria': bandeiraCorPrimaria,
+        'bandeira_cor_secundaria': bandeiraCorSecundaria,
+        'bandeira_simbolo': bandeiraSimbolo,
+        'bandeira_emoji': bandeiraEmoji,
       };
 
   /// Nome da cidade para exibição no mapa (cidade_nome ou derivado).

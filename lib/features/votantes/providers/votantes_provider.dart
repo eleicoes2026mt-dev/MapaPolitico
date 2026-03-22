@@ -3,10 +3,25 @@ import '../../../models/municipio.dart';
 import '../../../models/votante.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../apoiadores/providers/apoiadores_provider.dart' show meuApoiadorIdProvider, meuAssessorIdProvider;
+import '../../apoiadores/providers/apoiadores_provider.dart'
+    show apoiadoresListProvider, meuApoiadorIdProvider, meuAssessorIdProvider;
+import '../../mapa/providers/benfeitorias_agg_provider.dart';
 import '../../assessores/providers/assessores_provider.dart';
 
 final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
+  final profile = await ref.watch(profileProvider.future);
+
+  if (profile?.role == 'apoiador') {
+    final apoiadorId = await ref.watch(meuApoiadorIdProvider.future);
+    if (apoiadorId == null) return [];
+    final res = await supabase
+        .from('votantes')
+        .select('*, municipios(nome)')
+        .eq('apoiador_id', apoiadorId)
+        .order('nome');
+    return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   final res = await supabase.from('votantes').select('*, municipios(nome)').order('nome');
   return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
 });
@@ -142,5 +157,23 @@ final removerVotanteProvider = Provider<Future<void> Function(String id)>((ref) 
   return (String id) async {
     await client.from('votantes').delete().eq('id', id);
     ref.invalidate(votantesListProvider);
+  };
+});
+
+/// Promove votante a apoiador (RPC). Retorna o id do novo apoiador.
+final promoverVotanteParaApoiadorProvider = Provider<Future<String> Function(String votanteId)>((ref) {
+  return (String votanteId) async {
+    final res = await supabase.rpc(
+      'promover_votante_para_apoiador',
+      params: {'p_votante_id': votanteId},
+    );
+    ref.invalidate(votantesListProvider);
+    ref.invalidate(apoiadoresListProvider);
+    ref.invalidate(benfeitoriasAggPorMunicipioProvider);
+    final id = res?.toString().trim();
+    if (id == null || id.isEmpty) {
+      throw Exception('Não foi possível promover o votante.');
+    }
+    return id;
   };
 });

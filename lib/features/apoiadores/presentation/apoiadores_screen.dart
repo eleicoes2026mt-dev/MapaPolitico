@@ -18,6 +18,7 @@ import '../providers/apoiadores_provider.dart'
         AtualizarApoiadorParams,
         convidarApoiadorPorEmail,
         reenviarConviteApoiador;
+import '../providers/campanha_kpis_provider.dart';
 
 /// Parse de data no padrão dd/MM/yyyy; retorna null se inválido.
 /// Aceita "15/04/1992" ou "15041992" (8 dígitos).
@@ -175,6 +176,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final ehApoiador = profile?.role == 'apoiador';
+    final mostrarKpis = profile?.role == 'candidato' || profile?.role == 'assessor';
     final list = ref.watch(apoiadoresListProvider);
     var filtered = list.valueOrNull ?? [];
     if (_query.isNotEmpty) {
@@ -197,6 +199,20 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          if (mostrarKpis) ...[
+            ref.watch(campanhaKpisProvider).when(
+                  data: (k) => k == null ? const SizedBox.shrink() : _CampanhaKpisPanel(resumo: k),
+                  loading: () => const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: Center(child: SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2))),
+                  ),
+                  error: (e, _) => Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Text('KPIs: $e', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                  ),
+                ),
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
               Expanded(
@@ -223,8 +239,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
           const SizedBox(height: 24),
           list.when(
             data: (_) {
-              final podeEditar =
-                  profile?.role == 'candidato' || profile?.role == 'assessor' || profile?.role == 'apoiador';
+              final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
               return LayoutBuilder(
                 builder: (_, c) {
                   return Wrap(
@@ -237,6 +252,59 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Text('Erro: $e'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Resumo por assessor + totais (votos estimados: apoiadores + votantes).
+class _CampanhaKpisPanel extends StatelessWidget {
+  const _CampanhaKpisPanel({required this.resumo});
+
+  final CampanhaKpisResumo resumo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        title: Text(
+          'Indicadores por assessor',
+          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          'Total: ${resumo.totalApoiadores} apoiadores · ${resumo.totalVotantes} votantes · '
+          '~${resumo.totalEstimativaApoiadores} votos est. (redes de apoiadores) · '
+          '~${resumo.totalEstimativaVotantes} votos est. (cadastro de votantes)',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+            child: Column(
+              children: resumo.porAssessor.map((l) {
+                final vazio = l.qtdApoiadores == 0 && l.qtdVotantes == 0;
+                return ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: Text(
+                    l.nome,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Text(
+                    vazio
+                        ? 'Nenhum apoiador ou votante vinculado ainda'
+                        : '${l.qtdApoiadores} apoiador(es) · ${l.qtdVotantes} votante(s) · '
+                            '~${l.estimativaVotosApoiadores} est. apoiadores · ~${l.estimativaVotosVotantes} est. votantes',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),

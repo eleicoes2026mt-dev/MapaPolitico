@@ -6,6 +6,7 @@ import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/geo/lat_lng.dart';
 import '../../data/geo_loader.dart';
 import '../../data/mt_municipios_coords.dart';
+import '../../models/mapa_marcador_cidade.dart';
 
 const _prefsKeyRegionNames = 'mapa_regioes_nomes';
 
@@ -39,7 +40,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.height = 400,
     this.votosPorMunicipio,
     this.estimativaPorCidade,
-    this.cidadesComApoiador,
+    this.cidadesMarcadoresMapa,
     this.regioesFundidas,
     this.nomesCustomizados,
     this.coresCustomizadas,
@@ -55,7 +56,7 @@ class MapaRegionalWidget extends StatefulWidget {
   final double height;
   final Map<String, int>? votosPorMunicipio;
   final Map<String, int>? estimativaPorCidade;
-  final Map<String, int>? cidadesComApoiador;
+  final Map<String, MapaMarcadorCidade>? cidadesMarcadoresMapa;
   final List<RegiaoFundida>? regioesFundidas;
   final Map<String, String>? nomesCustomizados;
   final Map<String, String>? coresCustomizadas;
@@ -90,7 +91,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
   void didUpdateWidget(covariant MapaRegionalWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.votosPorMunicipio != widget.votosPorMunicipio ||
-        oldWidget.cidadesComApoiador != widget.cidadesComApoiador ||
+        oldWidget.cidadesMarcadoresMapa != widget.cidadesMarcadoresMapa ||
         oldWidget.coresCustomizadas != widget.coresCustomizadas) {
       _loadGeo();
     }
@@ -422,22 +423,38 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       }
     }
 
-    final apoiadoresPorCidade = widget.cidadesComApoiador;
-    if (apoiadoresPorCidade != null && apoiadoresPorCidade.isNotEmpty) {
-      for (final e in apoiadoresPorCidade.entries) {
+    Color marcadorCor(MapaMarcadorCidade m) {
+      final h = m.bandeiraCorPrimariaHex;
+      if (h == null || h.isEmpty) return Colors.green;
+      final s = h.replaceFirst('#', '');
+      if (s.length == 6) {
+        return Color(int.parse('FF$s', radix: 16));
+      }
+      return Colors.green;
+    }
+
+    final marcadoresPorCidade = widget.cidadesMarcadoresMapa;
+    if (marcadoresPorCidade != null && marcadoresPorCidade.isNotEmpty) {
+      for (final e in marcadoresPorCidade.entries) {
         final coords = getCoordsMunicipioMT(e.key);
         if (coords != null) {
+          final m = e.value;
           final apSym = SimpleMarkerSymbol(
             style: SimpleMarkerSymbolStyle.circle,
-            color: Colors.green,
-            size: 10,
+            color: marcadorCor(m),
+            size: m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty ? 12 : 10,
           );
           apSym.outline = SimpleLineSymbol(color: Colors.white, width: 1);
           overlayMarkers.graphics.add(
             Graphic(
               geometry: ArcGISPoint(x: coords.longitude, y: coords.latitude, spatialReference: _wgs84),
               symbol: apSym,
-              attributes: {'title': e.key, 'snippet': '${e.value} apoiador(es)', 'type': 'apoiador'},
+              attributes: {
+                'title': e.key,
+                'snippet':
+                    '${m.quantidade} na rede${m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty ? ' ${m.bandeiraEmoji}' : ''}',
+                'type': 'apoiador',
+              },
             ),
           );
         }

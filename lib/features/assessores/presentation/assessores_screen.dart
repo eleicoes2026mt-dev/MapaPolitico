@@ -5,6 +5,7 @@ import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
 import '../providers/assessores_provider.dart' show assessoresListProvider, convidarAssessor, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException;
+import '../../configuracoes/providers/menu_access_provider.dart';
 
 /// Link de convite para enviar por WhatsApp se o e-mail do Supabase não chegar.
 Future<void> showLinkConviteAssessorDialog(BuildContext context, String link) async {
@@ -68,6 +69,14 @@ class AssessoresScreen extends ConsumerStatefulWidget {
 class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
   String _query = '';
   bool _promovendo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(registerMenuAccessProvider)('assessores');
+    });
+  }
 
   void _openNovoAssessorDialog(BuildContext context) {
     showDialog<void>(

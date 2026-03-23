@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'mt_municipios_coords.dart';
 
@@ -36,6 +38,32 @@ enum TseVotoTier {
 }
 
 /// Cor sólida do centro do círculo (TSE).
+/// Proporção **0 → 1** (menos → mais votos) para tamanho/cor das bolhas no mapa.
+/// Com [maxV/minV] ≥ 8 usa escala **logarítmica** para não “achatar” todas as cidades
+/// quando há uma capital com muitos votos e o restante com poucos.
+double proporcaoVisualVotos(int votos, int minV, int maxV) {
+  if (maxV <= minV) return 1.0;
+  final ratio = maxV / math.max(minV, 1);
+  if (ratio >= 8) {
+    final logMin = math.log(minV + 1.0);
+    final logMax = math.log(maxV + 1.0);
+    final logV = math.log(votos + 1.0);
+    if (logMax <= logMin) return 1.0;
+    return ((logV - logMin) / (logMax - logMin)).clamp(0.0, 1.0);
+  }
+  return ((votos - minV) / (maxV - minV)).clamp(0.0, 1.0);
+}
+
+/// Cor contínua da bolha TSE: vermelho (menos votos) → verde (mais votos).
+Color corHeatmapVotos(int votos, int minV, int maxV) {
+  final t = proporcaoVisualVotos(votos, minV, maxV);
+  return Color.lerp(
+    const Color(0xFFB71C1C),
+    const Color(0xFF2E7D32),
+    t,
+  )!;
+}
+
 Color corCentroTier(TseVotoTier tier) {
   switch (tier) {
     case TseVotoTier.baixo:

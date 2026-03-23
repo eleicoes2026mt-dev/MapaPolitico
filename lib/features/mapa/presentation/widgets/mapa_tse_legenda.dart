@@ -90,7 +90,9 @@ class MapaTseLegenda extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Toque numa cor para ver o intervalo de votos e a lista de cidades.',
+              'No mapa: bolhas menores e mais vermelhas = menos votos; maiores e mais verdes = mais votos '
+              '(em relação ao mínimo e ao máximo entre as cidades com dados). '
+              'Toque numa faixa abaixo para ver o intervalo e a lista.',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 10),

@@ -4,7 +4,6 @@ import '../../../core/widgets/estado_mt_badge.dart';
 import 'tabs/performance_tab.dart';
 import 'tabs/mapa_regional_tab.dart';
 import 'tabs/metas_tab.dart';
-import 'tabs/responsaveis_tab.dart';
 import 'tabs/regioes_tab.dart';
 
 class EstrategiaScreen extends ConsumerStatefulWidget {
@@ -20,7 +19,7 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -66,7 +65,6 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
               Tab(icon: Icon(Icons.show_chart), text: 'Performance'),
               Tab(icon: Icon(Icons.map), text: 'Mapa Regional'),
               Tab(icon: Icon(Icons.flag), text: 'Metas'),
-              Tab(icon: Icon(Icons.people), text: 'Responsáveis'),
               Tab(icon: Icon(Icons.merge_type), text: 'Regiões'),
             ],
           ),
@@ -81,7 +79,6 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
                 PerformanceTab(),
                 MapaRegionalTab(),
                 MetasTab(),
-                ResponsaveisTab(),
                 RegioesTab(),
               ],
             ),

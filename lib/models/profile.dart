@@ -13,6 +13,8 @@ class Profile {
   final String? numeroCandidato;
   final DateTime? dataNascimento;
   final int? sqCandidatoTse2022;
+  final DateTime? lastAccessAssessoresAt;
+  final DateTime? lastAccessApoiadoresAt;
 
   const Profile({
     required this.id,
@@ -29,6 +31,8 @@ class Profile {
     this.numeroCandidato,
     this.dataNascimento,
     this.sqCandidatoTse2022,
+    this.lastAccessAssessoresAt,
+    this.lastAccessApoiadoresAt,
   });
 
   factory Profile.fromJson(Map<String, dynamic> json) {
@@ -49,6 +53,12 @@ class Profile {
           ? DateTime.tryParse(json['data_nascimento'].toString())
           : null,
       sqCandidatoTse2022: (json['sq_candidato_tse_2022'] as num?)?.toInt(),
+      lastAccessAssessoresAt: json['last_access_assessores_at'] != null
+          ? DateTime.tryParse(json['last_access_assessores_at'].toString())
+          : null,
+      lastAccessApoiadoresAt: json['last_access_apoiadores_at'] != null
+          ? DateTime.tryParse(json['last_access_apoiadores_at'].toString())
+          : null,
     );
   }
 

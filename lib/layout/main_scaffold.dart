@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../core/constants/app_constants.dart';
 import '../features/auth/providers/auth_provider.dart';
+import '../models/profile.dart';
 
 class MainScaffold extends ConsumerStatefulWidget {
   const MainScaffold({super.key, required this.child});
@@ -78,17 +80,30 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
 
 String _titleForRoute(String path) {
   const map = {
-      '/': 'Dashboard',
-      '/assessores': 'Assessores',
-      '/apoiadores': 'Apoiadores',
-      '/votantes': 'Votantes',
-      '/mensagens': 'Mensagens',
-      '/benfeitorias': 'Benfeitorias',
-      '/estrategia': 'Estratégia',
-      '/mapa': 'Mapa',
-      '/perfil': 'Meu perfil',
+    '/': 'Dashboard',
+    '/assessores': 'Assessores',
+    '/apoiadores': 'Apoiadores',
+    '/votantes': 'Votantes',
+    '/mensagens': 'Mensagens',
+    '/benfeitorias': 'Benfeitorias',
+    '/estrategia': 'Estratégia',
+    '/mapa': 'Mapa',
+    '/configuracoes': 'Configurações',
+    '/perfil': 'Meu perfil',
   };
   return map[path] ?? 'CampanhaMT';
+}
+
+String? _subtitleUltimoAcesso(String path, Profile? p) {
+  if (p == null) return null;
+  final fmt = DateFormat('dd/MM/yyyy HH:mm');
+  if (path == '/assessores' && p.lastAccessAssessoresAt != null) {
+    return 'Último acesso: ${fmt.format(p.lastAccessAssessoresAt!.toLocal())}';
+  }
+  if (path == '/apoiadores' && p.lastAccessApoiadoresAt != null) {
+    return 'Último acesso: ${fmt.format(p.lastAccessApoiadoresAt!.toLocal())}';
+  }
+  return null;
 }
 
 /// Barra estreita com botão para expandir o menu (telas largas).
@@ -127,7 +142,7 @@ class _Sidebar extends StatelessWidget {
     this.expanded = false,
   });
 
-  final dynamic profile;
+  final Profile? profile;
   final VoidCallback onSignOut;
   final VoidCallback? onCollapse;
   final bool expanded;
@@ -141,6 +156,7 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/benfeitorias', 'Benfeitorias', Icons.favorite_border),
     _NavItem('/estrategia', 'Estratégia', Icons.location_on_outlined),
     _NavItem('/mapa', 'Mapa', Icons.map_outlined),
+    _NavItem('/configuracoes', 'Configurações', Icons.settings_outlined),
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
@@ -152,13 +168,15 @@ class _Sidebar extends StatelessWidget {
     '/benfeitorias',
     '/mensagens',
     '/estrategia',
+    '/configuracoes',
   };
 
   /// Assessor: entra em «Apoiadores»; não vê dashboard do candidato nem menu Assessores.
-  static const _pathsOcultosAssessor = {'/', '/assessores'};
+  static const _pathsOcultosAssessor = {'/', '/assessores', '/configuracoes'};
 
   @override
   Widget build(BuildContext context) {
+    final prof = profile;
     final loc = GoRouterState.of(context).uri.path;
     final theme = Theme.of(context);
 
@@ -207,28 +225,28 @@ class _Sidebar extends StatelessWidget {
                   ),
               ],
             ),
-            if (profile != null) ...[
+            if (prof != null) ...[
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Column(
                   children: [
                     Text(
-                      profile.fullName ?? profile.email ?? 'Usuário',
+                      prof.fullName ?? prof.email ?? 'Usuário',
                       style: theme.textTheme.bodyMedium,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                     ),
                     Text(
-                      profile.role.toUpperCase(),
+                      prof.role.toUpperCase(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                    if (profile.cargo != null && profile.cargo!.isNotEmpty) ...[
+                    if (prof.cargo != null && prof.cargo!.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
-                        profile.cargo!,
+                        prof.cargo!,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.primary,
                           fontWeight: FontWeight.w500,
@@ -247,19 +265,33 @@ class _Sidebar extends StatelessWidget {
                 child: Column(
                   children: [
                     ..._items.where((e) {
-                      if (profile == null) return true;
-                      if (profile.role == 'apoiador') {
+                      if (prof == null) return true;
+                      if (e.path == '/configuracoes' && prof.role != 'candidato') {
+                        return false;
+                      }
+                      if (prof.role == 'apoiador') {
                         return !_pathsOcultosApoiador.contains(e.path);
                       }
-                      if (profile.role == 'assessor') {
+                      if (prof.role == 'assessor') {
                         return !_pathsOcultosAssessor.contains(e.path);
                       }
                       return true;
                     }).map((e) {
                       final selected = loc == e.path;
+                      final sub = _subtitleUltimoAcesso(e.path, prof);
                       return ListTile(
                         leading: Icon(e.icon, size: 22),
                         title: Text(e.title, overflow: TextOverflow.ellipsis),
+                        subtitle: sub != null
+                            ? Text(
+                                sub,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.primary.withValues(alpha: 0.85),
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              )
+                            : null,
                         selected: selected,
                         onTap: () {
                           if (isDrawer) Navigator.of(context).pop();

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
-import '../../estrategia/providers/regioes_fundidas_provider.dart';
-import '../../estrategia/providers/responsavel_regiao_provider.dart';
-import '../../assessores/providers/assessores_provider.dart';
+import '../../mapa/presentation/mapa_regional_panel.dart';
 import '../providers/dashboard_provider.dart';
 
 /// Breakpoints para responsividade
@@ -38,9 +37,20 @@ class DashboardScreen extends ConsumerWidget {
               child: Text('Erro ao carregar: $e', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.error)),
             ),
           ),
+          SizedBox(height: padding * 1.25),
+          const MapaRegionalPanel(mode: MapaPanelMode.embedded),
+          SizedBox(height: padding),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => context.push('/mapa'),
+              icon: const Icon(Icons.open_in_full, size: 18),
+              label: const Text('Abrir mapa em tela cheia'),
+            ),
+          ),
           SizedBox(height: padding),
           stats.when(
-            data: (s) => _MiddleSection(votosPorCidade: s.votosPorCidade, aniversariantesHoje: s.aniversariantesHoje),
+            data: (s) => _AniversariantesHoje(count: s.aniversariantesHoje),
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
@@ -55,128 +65,8 @@ class DashboardScreen extends ConsumerWidget {
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
           ),
-          SizedBox(height: padding),
-          _ResponsaveisRegiaoSection(),
         ],
       ),
-    );
-  }
-}
-
-class _ResponsaveisRegiaoSection extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final responsaveisAsync = ref.watch(responsavelRegiaoProvider);
-    final regioes = ref.watch(regioesEfetivasProvider);
-    final assessoresAsync = ref.watch(assessoresListProvider);
-    final width = MediaQuery.sizeOf(context).width;
-    final isCompact = width < _Breakpoint.mobile;
-
-    return responsaveisAsync.when(
-      data: (responsaveis) {
-        return assessoresAsync.when(
-          data: (assessores) {
-            final assessorById = {for (final a in assessores) a.id: a.nome};
-            final comResponsavel = regioes.where((r) => responsaveis[r.id] != null).toList();
-            if (comResponsavel.isEmpty) {
-              return Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: Padding(
-                  padding: EdgeInsets.all(isCompact ? 16 : 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.assignment_ind_outlined, color: theme.colorScheme.primary, size: isCompact ? 20 : 24),
-                          SizedBox(width: isCompact ? 8 : 12),
-                          Text(
-                            'Responsáveis por região',
-                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Nenhuma região com responsável atribuído. Atribua em Estratégia > Responsáveis.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-            return Card(
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: EdgeInsets.all(isCompact ? 16 : 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.assignment_ind_outlined, color: theme.colorScheme.primary, size: isCompact ? 20 : 24),
-                        SizedBox(width: isCompact ? 8 : 12),
-                        Text(
-                          'Responsáveis por região',
-                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ...comResponsavel.take(10).map((r) {
-                      final nomeAssessor = assessorById[responsaveis[r.id]] ?? '—';
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 4,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                color: r.cor,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                r.nome,
-                                style: theme.textTheme.bodyMedium,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Text(
-                              nomeAssessor,
-                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    if (comResponsavel.length > 10)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '+ ${comResponsavel.length - 10} região(ões)',
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-        );
-      },
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }
@@ -323,148 +213,6 @@ class _StatCard extends StatelessWidget {
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MiddleSection extends StatelessWidget {
-  const _MiddleSection({
-    required this.votosPorCidade,
-    required this.aniversariantesHoje,
-  });
-
-  final List<MapEntry<String, int>> votosPorCidade;
-  final int aniversariantesHoje;
-
-  @override
-  Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final isColumn = width < _Breakpoint.tablet;
-    const spacing = 24.0;
-
-    final chart = _VotosPorCidadeChart(items: votosPorCidade);
-    final aniv = _AniversariantesHoje(count: aniversariantesHoje);
-
-    if (isColumn) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          chart,
-          const SizedBox(height: spacing),
-          aniv,
-        ],
-      );
-    }
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(flex: 2, child: chart),
-          const SizedBox(width: spacing),
-          Expanded(flex: 1, child: aniv),
-        ],
-      ),
-    );
-  }
-}
-
-class _VotosPorCidadeChart extends StatelessWidget {
-  const _VotosPorCidadeChart({required this.items});
-
-  final List<MapEntry<String, int>> items;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isCompact = MediaQuery.sizeOf(context).width < _Breakpoint.mobile;
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: EdgeInsets.all(isCompact ? 16 : 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Votos por Cidade (Top 8)',
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            if (items.isEmpty)
-              _EmptyChartPlaceholder(
-                message: 'Nenhum voto por cidade ainda.',
-                height: 200,
-              )
-            else
-              SizedBox(
-                height: isCompact ? 180 : 220,
-                child: BarChart(
-                  BarChartData(
-                    alignment: BarChartAlignment.spaceAround,
-                    maxY: (items.map((e) => e.value).reduce((a, b) => a > b ? a : b).toDouble()) * 1.1,
-                    barTouchData: BarTouchData(enabled: false),
-                    titlesData: FlTitlesData(
-                      leftTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          reservedSize: isCompact ? 28 : 36,
-                          getTitlesWidget: (v, meta) => Text(
-                            v.toInt().toString(),
-                            style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ),
-                      ),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true,
-                          getTitlesWidget: (v, _) => Text(
-                            v.toInt() < items.length ? items[v.toInt()].key : '',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontSize: isCompact ? 10 : 12,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                          ),
-                          reservedSize: isCompact ? 36 : 44,
-                        ),
-                      ),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    gridData: FlGridData(
-                      show: true,
-                      getDrawingHorizontalLine: (v) => FlLine(
-                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        strokeWidth: 1,
-                      ),
-                      drawVerticalLine: false,
-                    ),
-                    borderData: FlBorderData(show: false),
-                    barGroups: List.generate(
-                      items.length,
-                      (i) => BarChartGroupData(
-                        x: i,
-                        barRods: [
-                          BarChartRodData(
-                            toY: items[i].value.toDouble(),
-                            color: theme.colorScheme.primary,
-                            width: isCompact ? 12 : 16,
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                          ),
-                        ],
-                        showingTooltipIndicators: [0],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

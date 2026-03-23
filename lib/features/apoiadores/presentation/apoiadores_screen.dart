@@ -19,6 +19,7 @@ import '../providers/apoiadores_provider.dart'
         convidarApoiadorPorEmail,
         reenviarConviteApoiador;
 import '../providers/campanha_kpis_provider.dart';
+import '../../configuracoes/providers/menu_access_provider.dart';
 
 /// Parse de data no padrão dd/MM/yyyy; retorna null se inválido.
 /// Aceita "15/04/1992" ou "15041992" (8 dígitos).
@@ -159,6 +160,14 @@ class ApoiadoresScreen extends ConsumerStatefulWidget {
 class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
   String _query = '';
   String _perfilFilter = 'Todos os Perfis';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(registerMenuAccessProvider)('apoiadores');
+    });
+  }
 
   Future<void> _abrirNovoApoiador() async {
     await showDialog<void>(

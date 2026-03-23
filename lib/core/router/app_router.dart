@@ -16,6 +16,7 @@ import '../../features/benfeitorias/presentation/benfeitorias_screen.dart';
 import '../../features/estrategia/presentation/estrategia_screen.dart';
 import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
+import '../../features/configuracoes/presentation/configuracoes_screen.dart';
 import '../../layout/main_scaffold.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import 'profile_role_cache.dart';
@@ -79,6 +80,9 @@ GoRouter createAppRouter({String? initialLocation}) {
 
       if (session != null) {
         final role = await cachedProfileRole(session.user.id);
+        if (role != 'candidato' && path == '/configuracoes') {
+          return homePathForProfileRole(role);
+        }
         if (role == 'apoiador' && path == '/apoiadores') {
           return '/votantes';
         }
@@ -147,6 +151,10 @@ GoRouter createAppRouter({String? initialLocation}) {
             path: '/perfil',
             pageBuilder: (_, state) => const NoTransitionPage(child: MeuPerfilScreen()),
           ),
+          GoRoute(
+            path: '/configuracoes',
+            pageBuilder: (_, state) => const NoTransitionPage(child: ConfiguracoesScreen()),
+          ),
         ],
       ),
     ],
@@ -184,6 +192,13 @@ class _RoleShellWrapper extends ConsumerWidget {
     if (role == 'assessor' && location == '/assessores') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go('/apoiadores');
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (role != 'candidato' && location == '/configuracoes') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go('/');
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

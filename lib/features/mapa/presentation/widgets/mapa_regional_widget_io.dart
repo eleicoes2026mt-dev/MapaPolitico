@@ -53,6 +53,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onCityTap,
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
+    this.embedRankingBelowMap = false,
   });
 
   final double height;
@@ -71,6 +72,8 @@ class MapaRegionalWidget extends StatefulWidget {
   final Widget? locaisVotacaoContent;
   /// Na web, evidencia a linha da cidade no ranking; em mobile ignorado.
   final String? selectedMunicipioKey;
+  /// Só usado na web; ignorado no ArcGIS.
+  final bool embedRankingBelowMap;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();
@@ -84,8 +87,28 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
   Offset? _hoverPosition;
   Map<String, String> _customRegionNames = {};
   String? _editingRegionId;
+  /// Drill-down: só polígonos e bolhas desta região imediata (toque sem admin).
+  String? _regiaoDrillDownId;
   bool _geoLoaded = false;
   GraphicsOverlay? _overlayRegioesMT;
+
+  bool _municipioVisivelNoDrill(String municipioKey) {
+    final id = _regiaoDrillDownId;
+    if (id == null) return true;
+    final list = _regioesMTList;
+    if (list == null) return true;
+    RegiaoIntermediariaMT? reg;
+    for (final r in list) {
+      if (r.id == id) {
+        reg = r;
+        break;
+      }
+    }
+    if (reg == null) return true;
+    final coords = getCoordsMunicipioMT(municipioKey);
+    if (coords == null) return false;
+    return pointInRegion(LatLng(coords.latitude, coords.longitude), reg.polygons);
+  }
 
   static SpatialReference get _wgs84 => SpatialReference.wgs84;
 
@@ -353,6 +376,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     final overlayRegioesMT = GraphicsOverlay();
     const neutralBorder = Color(0xFF757575);
     for (final regiao in regioesMT) {
+      if (_regiaoDrillDownId != null && regiao.id != _regiaoDrillDownId) continue;
       final color = _colorForRegiao(regiao.cdRgint ?? regiao.id);
       final regionId = regiao.id;
       final nomeOriginal = regiao.nome;
@@ -408,19 +432,19 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       final votosList = votos.entries
           .map((e) => (key: e.key, v: e.value, coords: getCoordsMunicipioMT(e.key)))
           .where((e) => e.coords != null)
+          .where((e) => _municipioVisivelNoDrill(e.key))
           .toList();
       if (votosList.isNotEmpty) {
         final mm = minMaxVotos(votos);
         final minV = mm.minV;
         final maxV = mm.maxV;
-        final range = (maxV - minV).clamp(1, 1 << 30).toDouble();
-        const sizeMin = 7.0;
-        const sizeMax = 17.0;
+        const sizeMin = 5.0;
+        const sizeMax = 24.0;
         for (final e in votosList) {
-          final t = ((e.v - minV) / range).clamp(0.0, 1.0);
-          final size = sizeMin + (sizeMax - sizeMin) * (t * 0.5 + 0.5);
+          final tVis = proporcaoVisualVotos(e.v, minV, maxV);
+          final size = sizeMin + (sizeMax - sizeMin) * tVis;
           final tier = tierParaVotos(e.v, minV, maxV);
-          final cor = corCentroTier(tier);
+          final cor = corHeatmapVotos(e.v, minV, maxV);
           final tseSym = SimpleMarkerSymbol(
             style: SimpleMarkerSymbolStyle.circle,
             color: cor,
@@ -457,6 +481,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     final marcadoresPorCidade = widget.cidadesMarcadoresMapa;
     if (marcadoresPorCidade != null && marcadoresPorCidade.isNotEmpty) {
       for (final e in marcadoresPorCidade.entries) {
+        if (!_municipioVisivelNoDrill(e.key)) continue;
         final coords = getCoordsMunicipioMT(e.key);
         if (coords != null) {
           final m = e.value;
@@ -613,6 +638,13 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                       final cdRgint = att['cdRgint'] as String?;
                       if (regionId != null && nome != null && mounted) {
                         if (widget.onRegionTap != null && widget.onRegionTap!(regionId, nome, cdRgint)) return;
+                        if (widget.onSaveNomeRegiao == null) {
+                          setState(() {
+                            _regiaoDrillDownId = _regiaoDrillDownId == regionId ? null : regionId;
+                          });
+                          _loadGeo();
+                          return;
+                        }
                         _showEditRegionNameDialog(context, regionId, nome, cdRgint);
                       }
                       return;

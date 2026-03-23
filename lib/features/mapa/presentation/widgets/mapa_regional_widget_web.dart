@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
@@ -28,6 +30,8 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onCityTap,
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
+    /// Dashboard/mobile: ranking em coluna abaixo do mapa (sem sobrepor o mapa).
+    this.embedRankingBelowMap = false,
   });
 
   final double height;
@@ -49,6 +53,7 @@ class MapaRegionalWidget extends StatefulWidget {
   final Widget? locaisVotacaoContent;
   /// Chave do município atualmente selecionado (para evidenciar a linha no ranking).
   final String? selectedMunicipioKey;
+  final bool embedRankingBelowMap;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetWebState();
@@ -106,8 +111,102 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   Offset? _hoverPosition;
   String? _editingRegionId;
   int? _editingPolygonIndex;
+  /// Drill-down: só esta região imediata (polígonos + bolhas + marcadores).
+  String? _regiaoDrillDownId;
   bool _loading = true;
   String? _error;
+
+  RegiaoIntermediariaMT? get _regiaoDrillDown {
+    final id = _regiaoDrillDownId;
+    if (id == null) return null;
+    return _regioesMT?.where((r) => r.id == id).firstOrNull;
+  }
+
+  /// Votos TSE a mostrar nas bolhas (filtrados se drill-down ativo).
+  Map<String, int>? get _votosParaBolhas {
+    final v = widget.votosPorMunicipio;
+    if (v == null) return null;
+    final reg = _regiaoDrillDown;
+    if (reg == null) return v;
+    final out = <String, int>{};
+    for (final e in v.entries) {
+      if (_municipioPertenceRegiao(e.key, reg)) out[e.key] = e.value;
+    }
+    return out;
+  }
+
+  Map<String, MapaMarcadorCidade>? get _marcadoresParaMapa {
+    final m = widget.cidadesMarcadoresMapa;
+    if (m == null) return null;
+    final reg = _regiaoDrillDown;
+    if (reg == null) return m;
+    final out = <String, MapaMarcadorCidade>{};
+    for (final e in m.entries) {
+      if (_municipioPertenceRegiao(e.key, reg)) out[e.key] = e.value;
+    }
+    return out;
+  }
+
+  bool _municipioPertenceRegiao(String municipioKey, RegiaoIntermediariaMT reg) {
+    final coords = getCoordsMunicipioMT(municipioKey);
+    if (coords == null) return false;
+    final pt = LatLng(coords.latitude, coords.longitude);
+    return pointInRegion(pt, reg.polygons);
+  }
+
+  void _setDrillDownRegiao(String? id) {
+    setState(() => _regiaoDrillDownId = id);
+    if (id == null) {
+      _fitCameraTodoEstado();
+    } else {
+      final reg = _regioesMT?.where((r) => r.id == id).firstOrNull;
+      if (reg != null) _fitCameraToRegiao(reg);
+    }
+  }
+
+  void _fitCameraTodoEstado() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: _brasilBounds,
+          padding: const EdgeInsets.all(32),
+          maxZoom: 9,
+          minZoom: 4,
+        ),
+      );
+    });
+  }
+
+  void _fitCameraToRegiao(RegiaoIntermediariaMT regiao) {
+    final polys = regiao.polygons;
+    if (polys.isEmpty) return;
+    var minLat = 90.0;
+    var maxLat = -90.0;
+    var minLng = 180.0;
+    var maxLng = -180.0;
+    for (final g in polys) {
+      for (final p in g.points) {
+        minLat = math.min(minLat, p.latitude);
+        maxLat = math.max(maxLat, p.latitude);
+        minLng = math.min(minLng, p.longitude);
+        maxLng = math.max(maxLng, p.longitude);
+      }
+    }
+    if (minLat >= maxLat || minLng >= maxLng) return;
+    final bounds = LatLngBounds(ll.LatLng(minLat, minLng), ll.LatLng(maxLat, maxLng));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.all(40),
+          maxZoom: 12,
+          minZoom: 4,
+        ),
+      );
+    });
+  }
 
   @override
   void initState() {
@@ -203,10 +302,12 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     }
 
     // 2) Delimitações das regiões de MT: só borda; preenchimento transparente. Cor só na região clicada.
+    // Drill-down: só desenha a região selecionada (as outras somem).
     final mtList = _regioesMT;
     if (mtList != null) {
       const neutralBorder = Color(0xFF757575);
       for (final regiao in mtList) {
+        if (_regiaoDrillDownId != null && regiao.id != _regiaoDrillDownId) continue;
         var polygonIndex = 0;
         for (final geo in regiao.polygons) {
           final isEditing = regiao.id == _editingRegionId && polygonIndex == _editingPolygonIndex;
@@ -233,7 +334,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
 
   /// Votos TSE: círculos com degradê (centro → transparente) e cor por faixa (vermelho … verde).
   List<Marker> _buildHeatMarkers() {
-    final votos = widget.votosPorMunicipio;
+    final votos = _votosParaBolhas;
     if (votos == null || votos.isEmpty) return [];
 
     final entries = votos.entries
@@ -245,18 +346,19 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final mm = minMaxVotos(votos);
     final minV = mm.minV;
     final maxV = mm.maxV;
-    final range = (maxV - minV).clamp(1, 1 << 30).toDouble();
 
-    const sizeMin = 20.0;
-    const sizeMax = 48.0;
+    /// Intervalo completo (menor = bolha menor; maior = maior e mais “verde”).
+    const sizeMin = 18.0;
+    const sizeMax = 72.0;
 
     return entries.map((e) {
-      final tSize = ((e.votos - minV) / range).clamp(0.0, 1.0);
-      final size = sizeMin + (sizeMax - sizeMin) * (tSize * 0.5 + 0.5);
+      final tVis = proporcaoVisualVotos(e.votos, minV, maxV);
+      final size = sizeMin + (sizeMax - sizeMin) * tVis;
       final tier = tierParaVotos(e.votos, minV, maxV);
-      final center = corCentroTier(tier).withValues(alpha: 0.88);
-      final mid = corCentroTier(tier).withValues(alpha: 0.45);
-      final edge = corCentroTier(tier).withValues(alpha: 0.0);
+      final core = corHeatmapVotos(e.votos, minV, maxV);
+      final center = core.withValues(alpha: 0.92);
+      final mid = core.withValues(alpha: 0.44);
+      final edge = core.withValues(alpha: 0.0);
       return Marker(
         point: ll.LatLng(e.coords!.latitude, e.coords!.longitude),
         width: size,
@@ -295,7 +397,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   /// Marcadores de apoiadores/votantes (camada acima dos círculos TSE).
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
-    final porCidade = widget.cidadesMarcadoresMapa;
+    final porCidade = _marcadoresParaMapa;
     if (porCidade != null && porCidade.isNotEmpty) {
       for (final e in porCidade.entries) {
         final coords = getCoordsMunicipioMT(e.key);
@@ -351,6 +453,20 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   int _estimativaCidade(String keyMunicipio) =>
       widget.estimativaPorCidade?[normalizarNomeMunicipioMT(keyMunicipio)] ?? 0;
 
+  /// Total TSE = soma de [votosPorMunicipio] (bate com o resultado oficial), não com a soma das regiões do mapa.
+  int _totalVotosTseSomados() {
+    final v = widget.votosPorMunicipio;
+    if (v == null || v.isEmpty) return 0;
+    return v.values.fold<int>(0, (a, b) => a + b);
+  }
+
+  /// Estimativa da campanha em todos os municípios que têm voto TSE no mapa.
+  int _totalEstimativaSomada() {
+    final v = widget.votosPorMunicipio;
+    if (v == null || v.isEmpty) return 0;
+    return v.keys.fold<int>(0, (s, k) => s + _estimativaCidade(k));
+  }
+
   /// Agrega votos por região (região imediata) usando point-in-polygon. Ordenado por total decrescente.
   /// Inclui percentual da região sobre o total geral, estimativa por cidade e por região.
   List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> _rankingRegioes() {
@@ -400,7 +516,139 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       return (id: id, nome: nome, total: total, totalEstimativa: totalEstimativa, pct: pct, cidades: cidades);
     }).toList();
     list.sort((a, b) => b.total.compareTo(a.total));
+
+    // Drill-down: só o ranking da região focada; % das cidades relativas ao total da região.
+    final drillId = _regiaoDrillDownId;
+    if (drillId != null) {
+      final filtrada = list.where((r) => r.id == drillId).toList();
+      if (filtrada.isEmpty) return [];
+      final rr = filtrada.first;
+      final totalReg = rr.total;
+      final cidadesRel = rr.cidades
+          .map(
+            (c) => (
+                  cidade: c.cidade,
+                  key: c.key,
+                  votos: c.votos,
+                  pct: totalReg > 0 ? (c.votos / totalReg * 100) : 0.0,
+                  estimativa: c.estimativa,
+                ),
+          )
+          .toList();
+      return [
+        (
+          id: rr.id,
+          nome: rr.nome,
+          total: rr.total,
+          totalEstimativa: rr.totalEstimativa,
+          pct: rr.pct,
+          cidades: cidadesRel,
+        ),
+      ];
+    }
     return list;
+  }
+
+  /// Mapa + faixa drill-down + tooltip (sem ranking sobreposto).
+  Widget _buildMapStackContent(
+    BuildContext context,
+    List<Polygon<String>> polygons,
+    List<Marker> heatMarkers,
+    List<Marker> markers,
+  ) {
+    final drillNome = _regiaoDrillDown?.nome;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        MouseRegion(
+          hitTestBehavior: HitTestBehavior.deferToChild,
+          cursor: SystemMouseCursors.click,
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCameraFit: CameraFit.bounds(
+                bounds: _brasilBounds,
+                padding: const EdgeInsets.all(32),
+                maxZoom: 9,
+                minZoom: 4,
+              ),
+              minZoom: 4,
+              maxZoom: 18,
+              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+              onTap: (_, __) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _onMapTap();
+                });
+              },
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'campanha_mt',
+              ),
+              PolygonLayer<String>(
+                hitNotifier: _hitNotifier,
+                polygons: polygons,
+                polygonCulling: true,
+                simplificationTolerance: 0.5,
+                useAltRendering: true,
+              ),
+              if (heatMarkers.isNotEmpty) MarkerLayer(markers: heatMarkers),
+              if (markers.isNotEmpty) MarkerLayer(markers: markers),
+            ],
+          ),
+        ),
+        if (_regiaoDrillDownId != null && drillNome != null)
+          Positioned(
+            left: 8,
+            right: 8,
+            top: 8,
+            child: Material(
+              elevation: 6,
+              borderRadius: BorderRadius.circular(8),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.filter_alt, size: 20, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Só esta região: $drillNome',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => _setDrillDownRegiao(null),
+                      child: const Text('Todo o estado'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (_hoveredRegionName != null && _hoverPosition != null)
+          Positioned(
+            left: _hoverPosition!.dx + 12,
+            top: _hoverPosition!.dy + 8,
+            child: Material(
+              elevation: 4,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(
+                  _hoveredRegionName!,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   void _onMapTap() {
@@ -418,6 +666,15 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final partKey = '${regiao.id}#$polygonIndex';
     // No mapa só o nome oficial do GeoJSON (padronizado).
     final displayName = regiao.nome;
+    // Candidato / sem edição de regiões: toque alterna drill-down nesta região.
+    if (widget.onSaveNomeRegiao == null) {
+      if (_regiaoDrillDownId == regiao.id) {
+        _setDrillDownRegiao(null);
+      } else {
+        _setDrillDownRegiao(regiao.id);
+      }
+      return;
+    }
     if (widget.onRegionTap != null) {
       final handled = widget.onRegionTap!(regiao.id, regiao.nome, regiao.cdRgint);
       if (handled) return;
@@ -524,10 +781,12 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         ),
       ),
     ).then((saved) {
-      if (mounted) setState(() {
-        _editingRegionId = null;
-        _editingPolygonIndex = null;
-      });
+      if (mounted) {
+        setState(() {
+          _editingRegionId = null;
+          _editingPolygonIndex = null;
+        });
+      }
       if (saved == true) {
         if (aplicarSoNestaRegiao && widget.onRemoverDaFusao != null) {
           widget.onRemoverDaFusao!(cdRgint);
@@ -578,82 +837,120 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final heatMarkers = _buildHeatMarkers();
     final markers = _buildMarkers();
     final ranking = _rankingRegioes();
+    final totalVotosTseGeral = _totalVotosTseSomados();
+    final totalEstimativaGeral = _totalEstimativaSomada();
+
+    // Dashboard/mobile embutido: mapa e ranking em coluna — o mapa deixa de ser tapado pelo painel.
+    if (widget.embedRankingBelowMap) {
+      if (ranking.isEmpty) {
+        return SizedBox(
+          height: widget.height,
+          width: double.infinity,
+          child: _buildMapStackContent(context, polygons, heatMarkers, markers),
+        );
+      }
+      return SizedBox(
+        height: widget.height,
+        width: double.infinity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 13,
+              child: _buildMapStackContent(context, polygons, heatMarkers, markers),
+            ),
+            Expanded(
+              flex: 11,
+              child: _RankingPanel(
+                ranking: ranking,
+                totalVotosTseGeral: totalVotosTseGeral,
+                totalEstimativaGeral: totalEstimativaGeral,
+                onCityTap: widget.onCityTap,
+                locaisVotacaoContent: widget.locaisVotacaoContent,
+                selectedMunicipioKey: widget.selectedMunicipioKey,
+                layoutCompact: true,
+                focusedRegiaoId: _regiaoDrillDownId,
+                onToggleFocusRegiao: (id) {
+                  if (_regiaoDrillDownId == id) {
+                    _setDrillDownRegiao(null);
+                  } else {
+                    _setDrillDownRegiao(id);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return SizedBox(
       height: widget.height,
       width: double.infinity,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          MouseRegion(
-            hitTestBehavior: HitTestBehavior.deferToChild,
-            cursor: SystemMouseCursors.click,
-            child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCameraFit: CameraFit.bounds(
-                  bounds: _brasilBounds,
-                  padding: const EdgeInsets.all(32),
-                  maxZoom: 9,
-                  minZoom: 4,
-                ),
-                minZoom: 4,
-                maxZoom: 18,
-                interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
-                onTap: (_, __) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _onMapTap();
-                  });
-                },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 560;
+          // Sobre o mapa (tela cheia estreita): painel mais baixo para não cobrir o território.
+          final bottomPanelH = math.max(
+            168.0,
+            math.min(300.0, constraints.maxHeight * 0.36),
+          );
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: _buildMapStackContent(context, polygons, heatMarkers, markers),
               ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'campanha_mt',
-                ),
-                PolygonLayer<String>(
-                  hitNotifier: _hitNotifier,
-                  polygons: polygons,
-                  polygonCulling: true,
-                  simplificationTolerance: 0.5,
-                  useAltRendering: true,
-                ),
-                if (heatMarkers.isNotEmpty) MarkerLayer(markers: heatMarkers),
-                if (markers.isNotEmpty) MarkerLayer(markers: markers),
-              ],
-            ),
-          ),
-          if (ranking.isNotEmpty)
-            Positioned(
-              right: 8,
-              top: 8,
-              bottom: 8,
-              child: _RankingPanel(
-                ranking: ranking,
-                onCityTap: widget.onCityTap,
-                locaisVotacaoContent: widget.locaisVotacaoContent,
-                selectedMunicipioKey: widget.selectedMunicipioKey,
-              ),
-            ),
-          if (_hoveredRegionName != null && _hoverPosition != null)
-            Positioned(
-              left: _hoverPosition!.dx + 12,
-              top: _hoverPosition!.dy + 8,
-              child: Material(
-                elevation: 4,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Text(
-                    _hoveredRegionName!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
+              if (ranking.isNotEmpty)
+                narrow
+                    ? Positioned(
+                        left: 8,
+                        right: 8,
+                        bottom: 8,
+                        height: bottomPanelH,
+                        child: _RankingPanel(
+                          ranking: ranking,
+                          totalVotosTseGeral: totalVotosTseGeral,
+                          totalEstimativaGeral: totalEstimativaGeral,
+                          onCityTap: widget.onCityTap,
+                          locaisVotacaoContent: widget.locaisVotacaoContent,
+                          selectedMunicipioKey: widget.selectedMunicipioKey,
+                          layoutCompact: true,
+                          focusedRegiaoId: _regiaoDrillDownId,
+                          onToggleFocusRegiao: (id) {
+                            if (_regiaoDrillDownId == id) {
+                              _setDrillDownRegiao(null);
+                            } else {
+                              _setDrillDownRegiao(id);
+                            }
+                          },
                         ),
-                  ),
-                ),
-              ),
-            ),
-        ],
+                      )
+                    : Positioned(
+                        right: 8,
+                        top: _regiaoDrillDownId != null ? 56 : 8,
+                        bottom: 8,
+                        child: _RankingPanel(
+                          ranking: ranking,
+                          totalVotosTseGeral: totalVotosTseGeral,
+                          totalEstimativaGeral: totalEstimativaGeral,
+                          onCityTap: widget.onCityTap,
+                          locaisVotacaoContent: widget.locaisVotacaoContent,
+                          selectedMunicipioKey: widget.selectedMunicipioKey,
+                          layoutCompact: false,
+                          focusedRegiaoId: _regiaoDrillDownId,
+                          onToggleFocusRegiao: (id) {
+                            if (_regiaoDrillDownId == id) {
+                              _setDrillDownRegiao(null);
+                            } else {
+                              _setDrillDownRegiao(id);
+                            }
+                          },
+                        ),
+                      ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -663,28 +960,47 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
 class _RankingPanel extends StatelessWidget {
   const _RankingPanel({
     required this.ranking,
+    required this.totalVotosTseGeral,
+    required this.totalEstimativaGeral,
     this.onCityTap,
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
+    this.layoutCompact = false,
+    this.focusedRegiaoId,
+    required this.onToggleFocusRegiao,
   });
 
   final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
+  /// Soma real dos votos TSE (todos os municípios); o ranking por região pode somar menos se algum município não cair no polígono.
+  final int totalVotosTseGeral;
+  final int totalEstimativaGeral;
   final void Function(String nomeMunicipio)? onCityTap;
   final Widget? locaisVotacaoContent;
   final String? selectedMunicipioKey;
+  /// Em ecrãs estreitos o painel fica na parte inferior do mapa; usa largura total.
+  final bool layoutCompact;
+  /// Região em modo drill-down no mapa (só essa região visível).
+  final String? focusedRegiaoId;
+  /// Alterna foco: se já for [id], o mapa volta a mostrar todo o estado.
+  final void Function(String regiaoId) onToggleFocusRegiao;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final showLocais = locaisVotacaoContent != null;
-    final totalVotos = ranking.fold<int>(0, (s, r) => s + r.total);
-    final totalEstimativa = ranking.fold<int>(0, (s, r) => s + r.totalEstimativa);
+    final totalVotos = totalVotosTseGeral;
+    final totalEstimativa = totalEstimativaGeral;
+    final screenW = MediaQuery.sizeOf(context).width;
+    // Lateral: ~42% da largura (200–400 px). Compacto: barra inferior em largura total.
+    final panelWidth = layoutCompact
+        ? double.infinity
+        : math.min(400.0, math.max(200.0, screenW * 0.42));
     return Material(
       elevation: 4,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 400,
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        width: panelWidth,
+        padding: EdgeInsets.symmetric(vertical: layoutCompact ? 4 : 8),
         child: Column(
           mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -699,7 +1015,7 @@ class _RankingPanel extends StatelessWidget {
                     'Ranking por região (votos)',
                     style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                   ),
-                  if (onCityTap != null)
+                  if (onCityTap != null && !layoutCompact)
                     Text(
                       'Toque numa cidade para ver locais de votação',
                       style: theme.textTheme.labelSmall?.copyWith(
@@ -712,9 +1028,9 @@ class _RankingPanel extends StatelessWidget {
             const Divider(height: 1),
             // Resumo geral: votos totais e estimativa
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: layoutCompact ? 4 : 8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: EdgeInsets.symmetric(horizontal: 10, vertical: layoutCompact ? 6 : 8),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(6),
@@ -785,7 +1101,7 @@ class _RankingPanel extends StatelessWidget {
             const Divider(height: 1),
             Expanded(
               child: ListView.builder(
-                shrinkWrap: true,
+                // shrinkWrap aqui dentro de Expanded faz a lista pedir altura total → overflow.
                 itemCount: ranking.length,
                 itemBuilder: (context, i) {
                   final r = ranking[i];
@@ -799,12 +1115,27 @@ class _RankingPanel extends StatelessWidget {
                           )
                         : null,
                     child: ExpansionTile(
-                      initiallyExpanded: regionContainsSelected,
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      initiallyExpanded: regionContainsSelected || (focusedRegiaoId == r.id && ranking.length == 1),
+                      visualDensity: layoutCompact ? VisualDensity.compact : VisualDensity.standard,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
                       title: Row(
                         children: [
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                            style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                            icon: Icon(
+                              focusedRegiaoId == r.id ? Icons.filter_alt : Icons.filter_alt_outlined,
+                              size: 20,
+                              color: focusedRegiaoId == r.id
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurfaceVariant,
+                            ),
+                            tooltip: focusedRegiaoId == r.id ? 'Mostrar todo o estado' : 'Só esta região no mapa',
+                            onPressed: () => onToggleFocusRegiao(r.id),
+                          ),
                           SizedBox(
-                            width: 22,
+                            width: 18,
                             child: Text(
                               '${i + 1}',
                               style: theme.textTheme.labelMedium?.copyWith(
@@ -813,7 +1144,7 @@ class _RankingPanel extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               r.nome,

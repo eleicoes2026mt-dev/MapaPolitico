@@ -74,7 +74,16 @@ class ConfiguracoesScreen extends ConsumerWidget {
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             ),
-            error: (e, _) => SelectableText('$e', style: TextStyle(color: theme.colorScheme.error)),
+            error: (e, _) => Card(
+              color: theme.colorScheme.errorContainer.withValues(alpha: 0.35),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(
+                  e is Exception ? e.toString().replaceFirst('Exception: ', '') : '$e',
+                  style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                ),
+              ),
+            ),
           ),
         ],
       ),

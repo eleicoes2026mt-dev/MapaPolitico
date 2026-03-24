@@ -9,7 +9,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../assessores/providers/assessores_provider.dart'
-    show AtualizarMeuAssessorEnderecoParams, atualizarMeuAssessorEnderecoProvider, meuAssessorRegistroProvider;
+    show
+        AtualizarMeuAssessorEnderecoParams,
+        atualizarMeuAssessorEnderecoProvider,
+        meuAssessorRegistroProvider;
 import 'widgets/bandeira_apoiador_editor.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
@@ -80,14 +83,19 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
               : _phoneController.text.trim(),
           cargo: isCand ? _cargo : p?.cargo,
           partido: isCand
-              ? (_partidoController.text.trim().isEmpty ? null : _partidoController.text.trim())
+              ? (_partidoController.text.trim().isEmpty
+                  ? null
+                  : _partidoController.text.trim())
               : p?.partido,
           numeroCandidato: isCand
-              ? (_numeroController.text.trim().isEmpty ? null : _numeroController.text.trim())
+              ? (_numeroController.text.trim().isEmpty
+                  ? null
+                  : _numeroController.text.trim())
               : p?.numeroCandidato,
           dataNascimento: _dataNascimento,
           avatarUrl: _avatarUrl,
-          sqCandidatoTse2022: isCand ? _sqCandidatoTse2022 : p?.sqCandidatoTse2022,
+          sqCandidatoTse2022:
+              isCand ? _sqCandidatoTse2022 : p?.sqCandidatoTse2022,
         ),
       );
       if (mounted) {
@@ -107,7 +115,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
 
   Future<void> _pickAndUploadImage(ThemeData theme) async {
     final picker = ImagePicker();
-    final xfile = await picker.pickImage(source: ImageSource.gallery, maxWidth: 512, imageQuality: 85);
+    final xfile = await picker.pickImage(
+        source: ImageSource.gallery, maxWidth: 512, imageQuality: 85);
     if (xfile == null || !mounted) return;
     setState(() => _uploadingImage = true);
     try {
@@ -118,19 +127,21 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
       final path = '$userId.$ext';
       final bytes = await xfile.readAsBytes();
       await supabase.storage.from('avatars').uploadBinary(
-        path,
-        bytes,
-        fileOptions: const FileOptions(upsert: true),
-      );
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: true),
+          );
       final url = supabase.storage.from('avatars').getPublicUrl(path);
-      if (mounted) setState(() {
-        _avatarUrl = url;
-        _uploadingImage = false;
-      });
+      if (mounted)
+        setState(() {
+          _avatarUrl = url;
+          _uploadingImage = false;
+        });
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingImage = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro ao enviar imagem: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Erro ao enviar imagem: $e')));
       }
     }
   }
@@ -144,7 +155,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
     return profileAsync.when(
       data: (profile) {
         if (currentUser == null) {
-          return const Center(child: Text('Faça login para editar seu perfil.'));
+          return const Center(
+              child: Text('Faça login para editar seu perfil.'));
         }
         final email = profile?.email ?? currentUser.email ?? '';
         final role = profile?.role ?? 'votante';
@@ -169,7 +181,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
             if (_avatarUrl == null && profile?.avatarUrl != null) {
               setState(() => _avatarUrl = profile?.avatarUrl);
             }
-            if (_sqCandidatoTse2022 == null && profile?.sqCandidatoTse2022 != null) {
+            if (_sqCandidatoTse2022 == null &&
+                profile?.sqCandidatoTse2022 != null) {
               setState(() => _sqCandidatoTse2022 = profile?.sqCandidatoTse2022);
             }
           });
@@ -301,7 +314,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       const SizedBox(height: 16),
                       _CandidatoTse2022Field(
                         value: _sqCandidatoTse2022,
-                        onChanged: (v) => setState(() => _sqCandidatoTse2022 = v),
+                        onChanged: (v) =>
+                            setState(() => _sqCandidatoTse2022 = v),
                       ),
                       const SizedBox(height: 16),
                       _NmVotavelTseField(),
@@ -337,12 +351,14 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       const SizedBox(height: 24),
                       Text(
                         'Bandeira no mapa',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Cores, formato do fundo, emoji e estilo das iniciais no marcador da sua cidade.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: 12),
                       Consumer(
@@ -353,14 +369,18 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                               if (ap == null) {
                                 return Text(
                                   'Cadastro de apoiador não encontrado para esta conta.',
-                                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.error),
                                 );
                               }
-                              return BandeiraApoiadorEditor(key: ValueKey(ap.id), apoiador: ap);
+                              return BandeiraApoiadorEditor(
+                                  key: ValueKey(ap.id), apoiador: ap);
                             },
                             loading: () => const Padding(
                               padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              child: Center(
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2)),
                             ),
                             error: (e, _) => Text(
                               'Erro ao carregar apoiador: $e',
@@ -372,7 +392,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       const SizedBox(height: 24),
                       Text(
                         'Endereço (opcional)',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       const _EnderecoApoiadorForm(),
@@ -381,7 +402,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       const SizedBox(height: 24),
                       Text(
                         'Endereço (opcional)',
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       const _EnderecoAssessorForm(),
@@ -480,7 +502,9 @@ class _DataNascimentoField extends StatelessWidget {
           prefixIcon: Icon(Icons.calendar_today_outlined),
         ),
         child: Text(
-          value == null ? 'Toque para selecionar' : DateFormat('dd/MM/yyyy').format(value!),
+          value == null
+              ? 'Toque para selecionar'
+              : DateFormat('dd/MM/yyyy').format(value!),
           style: TextStyle(
             color: value == null ? Theme.of(context).hintColor : null,
           ),
@@ -523,7 +547,8 @@ class _ImagemPerfilField extends StatelessWidget {
                   ? NetworkImage(avatarUrl!)
                   : null,
               child: avatarUrl == null || avatarUrl!.isEmpty
-                  ? Icon(Icons.person, size: 40, color: theme.colorScheme.onSurfaceVariant)
+                  ? Icon(Icons.person,
+                      size: 40, color: theme.colorScheme.onSurfaceVariant)
                   : null,
             ),
             const SizedBox(width: 16),
@@ -577,12 +602,14 @@ class _CandidatoTse2022Field extends ConsumerWidget {
         if (list.isEmpty) {
           return Text(
             'Não há candidatos da eleição 2022 (MT) na base. Verifique a carga na tabela votacao_secao.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           );
         }
         final selected = list.where((c) => c.sqCandidato == value).firstOrNull;
         return InkWell(
-          onTap: () => _showCandidato2022Picker(context, list, value, onChanged),
+          onTap: () =>
+              _showCandidato2022Picker(context, list, value, onChanged),
           child: InputDecorator(
             decoration: const InputDecoration(
               labelText: 'Quem sou eu na eleição 2022 (TSE)',
@@ -596,10 +623,13 @@ class _CandidatoTse2022Field extends ConsumerWidget {
           ),
         );
       },
-      loading: () => const SizedBox(height: 56, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+      loading: () => const SizedBox(
+          height: 56,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
       error: (e, _) => Text(
         'Erro ao carregar candidatos 2022: $e. Confira se a tabela votacao_secao tem a coluna nm_votavel com os nomes (equivalente ao NM_VOTAVEL do CSV). Após importar, rode no SQL do Supabase: REFRESH MATERIALIZED VIEW candidatos_2022_mt;',
-        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+        style:
+            theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
       ),
     );
   }
@@ -636,17 +666,20 @@ class _Candidato2022SearchDialog extends StatefulWidget {
   final void Function(int?) onSelected;
 
   @override
-  State<_Candidato2022SearchDialog> createState() => _Candidato2022SearchDialogState();
+  State<_Candidato2022SearchDialog> createState() =>
+      _Candidato2022SearchDialogState();
 }
 
-class _Candidato2022SearchDialogState extends State<_Candidato2022SearchDialog> {
+class _Candidato2022SearchDialogState
+    extends State<_Candidato2022SearchDialog> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _searchFocus.requestFocus());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => _searchFocus.requestFocus());
   }
 
   @override
@@ -659,7 +692,9 @@ class _Candidato2022SearchDialogState extends State<_Candidato2022SearchDialog> 
   List<({int sqCandidato, String nmVotavel})> get _filtered {
     final q = _searchController.text.trim().toLowerCase();
     if (q.isEmpty) return widget.list;
-    return widget.list.where((c) => c.nmVotavel.toLowerCase().contains(q)).toList();
+    return widget.list
+        .where((c) => c.nmVotavel.toLowerCase().contains(q))
+        .toList();
   }
 
   @override
@@ -731,7 +766,8 @@ class _NmVotavelTseField extends ConsumerWidget {
         if (list.isEmpty) {
           return Text(
             'Selecione acima (Eleição 2022) para vincular seu candidato. O campo NM_VOTAVEL é opcional para importação de CSV.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           );
         }
         final current = selected.valueOrNull;
@@ -743,13 +779,18 @@ class _NmVotavelTseField extends ConsumerWidget {
             prefixIcon: Icon(Icons.badge_outlined),
           ),
           items: [
-            const DropdownMenuItem<String?>(value: null, child: Text('Não selecionado')),
-            ...list.map((s) => DropdownMenuItem<String?>(value: s, child: Text(s, overflow: TextOverflow.ellipsis))),
+            const DropdownMenuItem<String?>(
+                value: null, child: Text('Não selecionado')),
+            ...list.map((s) => DropdownMenuItem<String?>(
+                value: s, child: Text(s, overflow: TextOverflow.ellipsis))),
           ],
-          onChanged: (v) => ref.read(tseNmVotavelSelectedProvider.notifier).setSelected(v),
+          onChanged: (v) =>
+              ref.read(tseNmVotavelSelectedProvider.notifier).setSelected(v),
         );
       },
-      loading: () => const SizedBox(height: 56, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
+      loading: () => const SizedBox(
+          height: 56,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -766,12 +807,16 @@ class _EnderecoApoiadorForm extends ConsumerWidget {
         padding: EdgeInsets.symmetric(vertical: 8),
         child: LinearProgressIndicator(minHeight: 2),
       ),
-      error: (e, _) => Text('Erro: $e', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      error: (e, _) => Text('Erro: $e',
+          style: TextStyle(color: Theme.of(context).colorScheme.error)),
       data: (ap) {
         if (ap == null) {
           return Text(
             'Cadastro de apoiador não encontrado.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.error),
           );
         }
         return _EnderecoApoiadorFormBody(apoiador: ap);
@@ -786,10 +831,12 @@ class _EnderecoApoiadorFormBody extends ConsumerStatefulWidget {
   final Apoiador apoiador;
 
   @override
-  ConsumerState<_EnderecoApoiadorFormBody> createState() => _EnderecoApoiadorFormBodyState();
+  ConsumerState<_EnderecoApoiadorFormBody> createState() =>
+      _EnderecoApoiadorFormBodyState();
 }
 
-class _EnderecoApoiadorFormBodyState extends ConsumerState<_EnderecoApoiadorFormBody> {
+class _EnderecoApoiadorFormBodyState
+    extends ConsumerState<_EnderecoApoiadorFormBody> {
   late final TextEditingController _cep;
   late final TextEditingController _logradouro;
   late final TextEditingController _numero;
@@ -842,7 +889,8 @@ class _EnderecoApoiadorFormBodyState extends ConsumerState<_EnderecoApoiadorForm
       );
       ref.invalidate(meuApoiadorProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Endereço salvo')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Endereço salvo')));
       }
     } catch (e) {
       if (mounted) {
@@ -863,36 +911,46 @@ class _EnderecoApoiadorFormBodyState extends ConsumerState<_EnderecoApoiadorForm
       children: [
         TextFormField(
           controller: _cep,
-          decoration: const InputDecoration(labelText: 'CEP', prefixIcon: Icon(Icons.pin_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'CEP', prefixIcon: Icon(Icons.pin_outlined)),
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _logradouro,
-          decoration: const InputDecoration(labelText: 'Rua / logradouro', prefixIcon: Icon(Icons.signpost_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'Rua / logradouro',
+              prefixIcon: Icon(Icons.signpost_outlined)),
           textCapitalization: TextCapitalization.words,
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _numero,
-          decoration: const InputDecoration(labelText: 'Número', prefixIcon: Icon(Icons.numbers_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'Número', prefixIcon: Icon(Icons.numbers_outlined)),
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _complemento,
-          decoration: const InputDecoration(labelText: 'Complemento', prefixIcon: Icon(Icons.apartment_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'Complemento',
+              prefixIcon: Icon(Icons.apartment_outlined)),
         ),
         const SizedBox(height: 12),
         FilledButton.tonal(
           onPressed: _saving ? null : _salvar,
           child: _saving
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Salvar endereço'),
         ),
         const SizedBox(height: 4),
         Text(
           'Independente do botão "Salvar perfil" acima.',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -910,12 +968,16 @@ class _EnderecoAssessorForm extends ConsumerWidget {
         padding: EdgeInsets.symmetric(vertical: 8),
         child: LinearProgressIndicator(minHeight: 2),
       ),
-      error: (e, _) => Text('Erro: $e', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      error: (e, _) => Text('Erro: $e',
+          style: TextStyle(color: Theme.of(context).colorScheme.error)),
       data: (a) {
         if (a == null) {
           return Text(
             'Registro de assessor não encontrado.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.error),
           );
         }
         return _EnderecoAssessorFormBody(assessor: a);
@@ -930,10 +992,12 @@ class _EnderecoAssessorFormBody extends ConsumerStatefulWidget {
   final Assessor assessor;
 
   @override
-  ConsumerState<_EnderecoAssessorFormBody> createState() => _EnderecoAssessorFormBodyState();
+  ConsumerState<_EnderecoAssessorFormBody> createState() =>
+      _EnderecoAssessorFormBodyState();
 }
 
-class _EnderecoAssessorFormBodyState extends ConsumerState<_EnderecoAssessorFormBody> {
+class _EnderecoAssessorFormBodyState
+    extends ConsumerState<_EnderecoAssessorFormBody> {
   late final TextEditingController _cep;
   late final TextEditingController _logradouro;
   late final TextEditingController _numero;
@@ -984,7 +1048,8 @@ class _EnderecoAssessorFormBodyState extends ConsumerState<_EnderecoAssessorForm
       );
       ref.invalidate(meuAssessorRegistroProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Endereço salvo')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Endereço salvo')));
       }
     } catch (e) {
       if (mounted) {
@@ -1005,36 +1070,46 @@ class _EnderecoAssessorFormBodyState extends ConsumerState<_EnderecoAssessorForm
       children: [
         TextFormField(
           controller: _cep,
-          decoration: const InputDecoration(labelText: 'CEP', prefixIcon: Icon(Icons.pin_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'CEP', prefixIcon: Icon(Icons.pin_outlined)),
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _logradouro,
-          decoration: const InputDecoration(labelText: 'Rua / logradouro', prefixIcon: Icon(Icons.signpost_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'Rua / logradouro',
+              prefixIcon: Icon(Icons.signpost_outlined)),
           textCapitalization: TextCapitalization.words,
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _numero,
-          decoration: const InputDecoration(labelText: 'Número', prefixIcon: Icon(Icons.numbers_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'Número', prefixIcon: Icon(Icons.numbers_outlined)),
         ),
         const SizedBox(height: 8),
         TextFormField(
           controller: _complemento,
-          decoration: const InputDecoration(labelText: 'Complemento', prefixIcon: Icon(Icons.apartment_outlined)),
+          decoration: const InputDecoration(
+              labelText: 'Complemento',
+              prefixIcon: Icon(Icons.apartment_outlined)),
         ),
         const SizedBox(height: 12),
         FilledButton.tonal(
           onPressed: _saving ? null : _salvar,
           child: _saving
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Salvar endereço'),
         ),
         const SizedBox(height: 4),
         Text(
           'Independente do botão "Salvar perfil" acima.',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       ],
     );

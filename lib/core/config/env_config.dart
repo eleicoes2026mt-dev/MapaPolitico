@@ -22,6 +22,14 @@ class EnvConfig {
     defaultValue: '',
   );
 
+  /// Chave ArcGIS (Location / basemap). Obrigatória no Android/iOS para o mapa nativo não falhar.
+  /// Crie em https://developers.arcgis.com/ e passe na build:
+  /// `flutter build apk --dart-define=ARCGIS_API_KEY=sua_chave`
+  static const String arcgisApiKey = String.fromEnvironment(
+    'ARCGIS_API_KEY',
+    defaultValue: '',
+  );
+
   /// URL pública do app (usada no link do e-mail de convite para assessores).
   /// Em produção use --dart-define=APP_URL=https://seu-dominio.vercel.app
   static const String appUrl = String.fromEnvironment(

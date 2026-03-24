@@ -9,13 +9,27 @@ import '../../votantes/providers/votantes_provider.dart';
 /// Histórico de alterações (apenas candidato; RLS no Supabase).
 final campanhaAuditLogProvider = FutureProvider.autoDispose<List<CampanhaAuditLog>>((ref) async {
   final client = supabase;
-  final res = await client
-      .from('campanha_audit_log')
-      .select()
-      .order('created_at', ascending: false)
-      .limit(300);
-  final list = res as List;
-  return list.map((e) => CampanhaAuditLog.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+  try {
+    final res = await client
+        .from('campanha_audit_log')
+        .select()
+        .order('created_at', ascending: false)
+        .limit(300);
+    final list = res as List;
+    return list.map((e) => CampanhaAuditLog.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+  } catch (e) {
+    final s = e.toString();
+    if (s.contains('PGRST205') ||
+        s.contains('campanha_audit_log') && s.contains('Could not find the table')) {
+      throw Exception(
+        'A tabela de auditoria ainda não existe neste projeto Supabase. '
+        'No dashboard: SQL → cole e execute o ficheiro '
+        'supabase/migrations/20250325120000_campanha_audit_e_ultimo_acesso.sql '
+        '(ou rode: supabase db push). Depois recarregue esta página.',
+      );
+    }
+    rethrow;
+  }
 });
 
 Future<void> restaurarExclusaoAudit(WidgetRef ref, String logId) async {

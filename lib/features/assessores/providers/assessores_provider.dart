@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/assessor.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../../core/config/env_config.dart';
+import '../../../core/router/profile_role_cache.dart';
 import '../../auth/providers/auth_provider.dart';
 
 /// ID do assessor vinculado ao usuário logado (`profile_id` = usuário atual).
@@ -163,15 +164,15 @@ Future<void> removerAssessor(String assessorId) async {
 }
 
 /// Promover o usuário atual a Candidato (Nível 1) se ainda não existir candidato no sistema.
+/// Usa RPC no Postgres (migração `promover_candidato_se_vazio`); não depende da Edge Function deployada.
 Future<void> promoverACandidato() async {
-  final res = await supabase.functions.invoke('promover-candidato');
-  if (res.status != 200) {
-    final msg = (res.data is Map && (res.data as Map).containsKey('error'))
-        ? (res.data as Map)['error'] as String?
-        : 'Erro ao ativar acesso';
-    throw Exception(msg ?? 'Erro ao ativar acesso');
+  await supabase.auth.refreshSession();
+  final res = await supabase.rpc('promover_candidato_se_vazio');
+  if (res is Map) {
+    final err = res['error'];
+    if (err != null) {
+      throw Exception(err is String ? err : err.toString());
+    }
   }
-  if (res.data is Map && (res.data as Map).containsKey('error')) {
-    throw Exception((res.data as Map)['error'] as String? ?? 'Erro ao ativar acesso');
-  }
+  clearProfileRoleCache();
 }

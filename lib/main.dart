@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -8,12 +10,24 @@ import 'package:app_links/app_links.dart';
 import 'core/auth/auth_callback_url.dart';
 import 'core/auth/jwt_recovery.dart';
 import 'core/auth/supabase_auth_fragment.dart';
+import 'core/bootstrap/arcgis_environment.dart';
 import 'core/config/env_config.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
-void main() async {
+void main() {
+  runZonedGuarded(() {
+    _mainAsync().catchError((Object e, StackTrace st) {
+      debugPrint('Erro no bootstrap: $e\n$st');
+    });
+  }, (error, stack) {
+    debugPrint('Erro não tratado: $error\n$stack');
+  });
+}
+
+Future<void> _mainAsync() async {
   WidgetsFlutterBinding.ensureInitialized();
+  initArcgisEnvironment();
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
     anonKey: EnvConfig.supabaseAnonKey,

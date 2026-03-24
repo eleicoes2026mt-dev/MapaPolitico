@@ -305,13 +305,16 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   late final TextEditingController _logradouro;
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
-  String? _municipioId;
+  /// Chave normalizada (lista `listCidadesMTNomesNormalizados`), igual ao cadastro de apoiadores.
+  String? _cidadeNomeNormalizado;
   String _abrangencia = 'Individual';
   String? _apoiadorOpcionalId;
   bool _loading = false;
-  /// Apoiador criando votante: true = escolher outra cidade no dropdown.
-  bool _usarOutroMunicipio = false;
-  bool _municipioPadraoApoiadorAplicado = false;
+  /// Apoiador criando votante: preenche cidade padrão uma vez a partir do cadastro.
+  bool _apoiadorPadraoCidadeAplicado = false;
+  bool _postFrameDefaultApoiadorAgendado = false;
+  /// Edição: sincronizar dropdown a partir de `municipio_id` (uma vez).
+  bool _postFrameSyncEdicaoAgendado = false;
 
   @override
   void initState() {
@@ -325,11 +328,13 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _logradouro = TextEditingController(text: v?.logradouro ?? '');
     _numero = TextEditingController(text: v?.numero ?? '');
     _complemento = TextEditingController(text: v?.complemento ?? '');
-    _municipioId = v?.municipioId;
+    if (v != null && v.municipioNome != null && v.municipioNome!.trim().isNotEmpty) {
+      _cidadeNomeNormalizado = normalizarNomeMunicipioMT(v.municipioNome!);
+    }
     _abrangencia = v?.abrangencia ?? 'Individual';
     _apoiadorOpcionalId = v?.apoiadorId;
     if (v != null) {
-      _municipioPadraoApoiadorAplicado = true;
+      _apoiadorPadraoCidadeAplicado = true;
     }
   }
 
@@ -348,8 +353,23 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
 
   Future<void> _salvar() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_municipioId == null || _municipioId!.isEmpty) {
+    if (_cidadeNomeNormalizado == null || _cidadeNomeNormalizado!.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione o município.')));
+      return;
+    }
+    final municipios = await ref.read(municipiosMTListProvider.future);
+    var municipioIdResolvido = municipioIdParaNomeCidade(_cidadeNomeNormalizado, municipios);
+    municipioIdResolvido ??= municipioIdParaNomeCidade(displayNomeCidadeMT(_cidadeNomeNormalizado!), municipios);
+    if (municipioIdResolvido == null || municipioIdResolvido.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Não foi possível vincular a cidade ao cadastro de municípios. '
+            'Confirme que a tabela «municipios» no Supabase está preenchida (seed).',
+          ),
+        ),
+      );
       return;
     }
     setState(() => _loading = true);
@@ -362,7 +382,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             nome: _nome.text.trim(),
             telefone: _telefone.text.trim().isEmpty ? null : _telefone.text.trim(),
             email: _email.text.trim().isEmpty ? null : _email.text.trim(),
-            municipioId: _municipioId,
+            municipioId: municipioIdResolvido,
             abrangencia: _abrangencia,
             qtdVotosFamilia: qtd,
             cep: _cep.text.trim(),
@@ -378,7 +398,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             nome: _nome.text.trim(),
             telefone: _telefone.text.trim().isEmpty ? null : _telefone.text.trim(),
             email: _email.text.trim().isEmpty ? null : _email.text.trim(),
-            municipioId: _municipioId,
+            municipioId: municipioIdResolvido,
             abrangencia: _abrangencia,
             qtdVotosFamilia: qtd < 1 ? 1 : qtd,
             apoiadorId: profile?.role == 'apoiador' ? null : _apoiadorOpcionalId,
@@ -406,123 +426,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     }
   }
 
-  String _nomeMunicipioParaExibir(List<Municipio> municipios, String? municipioId, String? cidadeNomeFallback) {
-    if (municipioId != null && municipioId.isNotEmpty) {
-      for (final m in municipios) {
-        if (m.id == municipioId) return displayNomeCidadeMT(m.nome);
-      }
-    }
-    if (cidadeNomeFallback != null && cidadeNomeFallback.trim().isNotEmpty) {
-      return displayNomeCidadeMT(normalizarNomeMunicipioMT(cidadeNomeFallback));
-    }
-    return 'Município';
-  }
-
-  /// Novo votante como apoiador: padrão = cidade do cadastro do apoiador; opção de outro município.
-  List<Widget> _camposMunicipioApoiador(ThemeData theme, List<Municipio> municipios) {
-    return ref.watch(meuApoiadorProvider).when(
-          loading: () => [
-            Text(
-              'Carregando seu município de cadastro...',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 8),
-            const LinearProgressIndicator(),
-          ],
-          error: (e, _) => [
-            Text(
-              'Erro ao carregar seu cadastro: $e',
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
-          ],
-          data: (meuAp) {
-            final midAp = municipioIdResolvidoParaApoiador(meuAp, municipios);
-            final temNomeCidade =
-                meuAp != null && (meuAp.cidadeNome ?? '').trim().isNotEmpty;
-            final temUuidCadastro = midAp != null && midAp.isNotEmpty;
-
-            /// Sem linha na tabela municipios para a cidade da ficha (ex.: base antiga).
-            if (!temUuidCadastro && temNomeCidade) {
-              final exibicao = _nomeMunicipioParaExibir(municipios, '', meuAp.cidadeNome);
-              return [
-                Text(
-                  'Sua ficha indica a cidade $exibicao. Selecione o mesmo município na lista abaixo.',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 8),
-                _MunicipioDropdownField(
-                  municipios: municipios,
-                  municipioId: _municipioId,
-                  onChanged: (v) => setState(() => _municipioId = v),
-                ),
-              ];
-            }
-
-            if (!temUuidCadastro && !temNomeCidade) {
-              return [
-                Text(
-                  'Seu cadastro de apoiador não tem cidade. Defina o município em Meu perfil (com assessor/candidato) ou escolha abaixo.',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
-                ),
-                const SizedBox(height: 8),
-                _MunicipioDropdownField(
-                  municipios: municipios,
-                  municipioId: _municipioId,
-                  onChanged: (v) => setState(() => _municipioId = v),
-                ),
-              ];
-            }
-
-            final out = <Widget>[];
-            if (!_usarOutroMunicipio) {
-              out.add(
-                InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Município (MT) *',
-                    helperText: 'Padrão: mesma cidade do seu cadastro de apoiador',
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Text(
-                      _nomeMunicipioParaExibir(municipios, midAp, meuAp?.cidadeNome),
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                  ),
-                ),
-              );
-            } else {
-              out.add(
-                _MunicipioDropdownField(
-                  municipios: municipios,
-                  municipioId: _municipioId,
-                  onChanged: (v) => setState(() => _municipioId = v),
-                ),
-              );
-            }
-            out.add(
-              CheckboxListTile(
-                value: _usarOutroMunicipio,
-                onChanged: (v) {
-                  setState(() {
-                    _usarOutroMunicipio = v ?? false;
-                    if (!_usarOutroMunicipio) {
-                      _municipioId = midAp;
-                    }
-                  });
-                },
-                title: const Text('Cadastrar em outro município'),
-                subtitle: _usarOutroMunicipio
-                    ? const Text('Desmarque para voltar à sua cidade de cadastro')
-                    : null,
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-              ),
-            );
-            return out;
-          },
-        );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -543,27 +446,66 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
           error: (e, _) => Text('Erro ao carregar cidades: $e'),
           data: (municipios) {
             final apAsync = ref.watch(meuApoiadorProvider);
-            if (profile?.role == 'apoiador' && widget.existente == null && !_municipioPadraoApoiadorAplicado) {
-              if (apAsync.hasValue) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted || _municipioPadraoApoiadorAplicado) return;
-                  setState(() {
-                    _municipioPadraoApoiadorAplicado = true;
+            final ex = widget.existente;
+            if (ex != null &&
+                !_postFrameSyncEdicaoAgendado &&
+                _cidadeNomeNormalizado == null &&
+                ex.municipioId != null) {
+              _postFrameSyncEdicaoAgendado = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                Municipio? encontrado;
+                for (final m in municipios) {
+                  if (m.id == ex.municipioId) {
+                    encontrado = m;
+                    break;
+                  }
+                }
+                setState(() {
+                  if (encontrado != null) {
+                    _cidadeNomeNormalizado = normalizarNomeMunicipioMT(encontrado.nome);
+                  }
+                });
+              });
+            }
+            if (profile?.role == 'apoiador' &&
+                widget.existente == null &&
+                !_apoiadorPadraoCidadeAplicado &&
+                !_postFrameDefaultApoiadorAgendado &&
+                apAsync.hasValue) {
+              _postFrameDefaultApoiadorAgendado = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted || _apoiadorPadraoCidadeAplicado) return;
+                setState(() {
+                  _apoiadorPadraoCidadeAplicado = true;
                     final ap = apAsync.valueOrNull;
                     final mid = municipioIdResolvidoParaApoiador(ap, municipios);
                     if (mid != null && mid.isNotEmpty) {
-                      _municipioId = mid;
-                      _usarOutroMunicipio = false;
-                    } else {
-                      _usarOutroMunicipio = true;
-                      final tentativa = municipioIdParaNomeCidade(ap?.cidadeNome, municipios);
-                      if (tentativa != null && tentativa.isNotEmpty) {
-                        _municipioId = tentativa;
+                      for (final m in municipios) {
+                        if (m.id == mid) {
+                          _cidadeNomeNormalizado = normalizarNomeMunicipioMT(m.nome);
+                          break;
+                        }
+                      }
+                    } else if (ap?.cidadeNome != null && ap!.cidadeNome!.trim().isNotEmpty) {
+                      final tentId = municipioIdParaNomeCidade(ap.cidadeNome, municipios);
+                      if (tentId != null) {
+                        for (final m in municipios) {
+                          if (m.id == tentId) {
+                            _cidadeNomeNormalizado = normalizarNomeMunicipioMT(m.nome);
+                            break;
+                          }
+                        }
                       }
                     }
                   });
                 });
-              }
+            }
+            final cidades = listCidadesMTNomesNormalizados.toList();
+            if (_cidadeNomeNormalizado != null &&
+                _cidadeNomeNormalizado!.isNotEmpty &&
+                !cidades.contains(_cidadeNomeNormalizado)) {
+              cidades.add(_cidadeNomeNormalizado!);
             }
             return SingleChildScrollView(
               child: Form(
@@ -591,15 +533,30 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 12),
-                    if (profile?.role == 'apoiador' && widget.existente == null)
-                      ..._camposMunicipioApoiador(theme, municipios)
-                    else ...[
-                      _MunicipioDropdownField(
-                        municipios: municipios,
-                        municipioId: _municipioId,
-                        onChanged: (v) => setState(() => _municipioId = v),
+                    DropdownButtonFormField<String>(
+                      value: cidades.contains(_cidadeNomeNormalizado) ? _cidadeNomeNormalizado : null,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Município (MT) *',
+                        hintText: 'Selecione a cidade',
+                        helperText:
+                            'Mesma lista do cadastro de apoiadores; aparece no mapa regional e na estimativa.',
                       ),
-                    ],
+                      menuMaxHeight: 380,
+                      items: cidades
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(
+                                displayNomeCidadeMT(c),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() => _cidadeNomeNormalizado = v),
+                      validator: (v) => v == null || v.isEmpty ? 'Selecione o município' : null,
+                    ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: _abrangencia,
@@ -693,48 +650,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
               : const Text('Salvar'),
         ),
       ],
-    );
-  }
-}
-
-/// Lista completa de municípios (tabela `municipios`), ordenada por nome de exibição.
-class _MunicipioDropdownField extends StatelessWidget {
-  const _MunicipioDropdownField({
-    required this.municipios,
-    required this.municipioId,
-    required this.onChanged,
-  });
-
-  final List<Municipio> municipios;
-  final String? municipioId;
-  final ValueChanged<String?> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final sorted = List<Municipio>.from(municipios)
-      ..sort((a, b) => displayNomeCidadeMT(a.nome).compareTo(displayNomeCidadeMT(b.nome)));
-    final valid = municipioId != null && sorted.any((m) => m.id == municipioId);
-    return DropdownButtonFormField<String>(
-      isExpanded: true,
-      value: valid ? municipioId : null,
-      decoration: const InputDecoration(
-        labelText: 'Município (MT) *',
-        hintText: 'Selecione a cidade',
-      ),
-      menuMaxHeight: 380,
-      items: sorted
-          .map(
-            (m) => DropdownMenuItem(
-              value: m.id,
-              child: Text(
-                displayNomeCidadeMT(m.nome),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
-          .toList(),
-      onChanged: onChanged,
-      validator: (v) => v == null || v.isEmpty ? 'Selecione o município' : null,
     );
   }
 }

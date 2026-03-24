@@ -25,7 +25,8 @@ CREATE INDEX IF NOT EXISTS idx_campanha_audit_candidato_created
 COMMENT ON TABLE campanha_audit_log IS 'Histórico insert/update/delete para auditoria e restauração (candidato)';
 
 -- Dono da campanha (deputado) a partir do assessor_id
-CREATE OR REPLACE FUNCTION auth.candidato_profile_id_para_assessor(p_assessor_id UUID)
+-- (em public — o SQL Editor do Supabase cloud não permite CREATE no schema auth)
+CREATE OR REPLACE FUNCTION public.candidato_profile_id_para_assessor(p_assessor_id UUID)
 RETURNS UUID
 LANGUAGE sql
 STABLE
@@ -47,14 +48,14 @@ AS $$
 $$;
 
 -- Candidato dono a partir de um votante (assessor direto ou via apoiador)
-CREATE OR REPLACE FUNCTION auth.candidato_profile_id_para_votante(p_votante_id UUID)
+CREATE OR REPLACE FUNCTION public.candidato_profile_id_para_votante(p_votante_id UUID)
 RETURNS UUID
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT auth.candidato_profile_id_para_assessor(
+  SELECT public.candidato_profile_id_para_assessor(
     COALESCE(
       (SELECT v.assessor_id FROM votantes v WHERE v.id = p_votante_id),
       (SELECT ap.assessor_id
@@ -65,14 +66,14 @@ AS $$
   );
 $$;
 
-CREATE OR REPLACE FUNCTION auth.candidato_profile_id_para_benfeitoria(p_benfeitoria_id UUID)
+CREATE OR REPLACE FUNCTION public.candidato_profile_id_para_benfeitoria(p_benfeitoria_id UUID)
 RETURNS UUID
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT auth.candidato_profile_id_para_assessor(
+  SELECT public.candidato_profile_id_para_assessor(
     (SELECT ap.assessor_id
      FROM benfeitorias b
      INNER JOIN apoiadores ap ON ap.id = b.apoiador_id
@@ -131,7 +132,7 @@ AS $$
 DECLARE
   v_candidato UUID;
 BEGIN
-  v_candidato := auth.candidato_profile_id_para_assessor(COALESCE(NEW.id, OLD.id));
+  v_candidato := public.candidato_profile_id_para_assessor(COALESCE(NEW.id, OLD.id));
   IF TG_OP = 'INSERT' THEN
     PERFORM public.log_campanha_audit_event(
       v_candidato, auth.uid(), 'assessores', NEW.id, 'insert', NULL, to_jsonb(NEW)
@@ -161,7 +162,7 @@ AS $$
 DECLARE
   v_candidato UUID;
 BEGIN
-  v_candidato := auth.candidato_profile_id_para_assessor(COALESCE(NEW.assessor_id, OLD.assessor_id));
+  v_candidato := public.candidato_profile_id_para_assessor(COALESCE(NEW.assessor_id, OLD.assessor_id));
   IF TG_OP = 'INSERT' THEN
     PERFORM public.log_campanha_audit_event(
       v_candidato, auth.uid(), 'apoiadores', NEW.id, 'insert', NULL, to_jsonb(NEW)
@@ -191,7 +192,7 @@ AS $$
 DECLARE
   v_candidato UUID;
 BEGIN
-  v_candidato := auth.candidato_profile_id_para_votante(COALESCE(NEW.id, OLD.id));
+  v_candidato := public.candidato_profile_id_para_votante(COALESCE(NEW.id, OLD.id));
   IF TG_OP = 'INSERT' THEN
     PERFORM public.log_campanha_audit_event(
       v_candidato, auth.uid(), 'votantes', NEW.id, 'insert', NULL, to_jsonb(NEW)
@@ -221,7 +222,7 @@ AS $$
 DECLARE
   v_candidato UUID;
 BEGIN
-  v_candidato := auth.candidato_profile_id_para_benfeitoria(COALESCE(NEW.id, OLD.id));
+  v_candidato := public.candidato_profile_id_para_benfeitoria(COALESCE(NEW.id, OLD.id));
   IF TG_OP = 'INSERT' THEN
     PERFORM public.log_campanha_audit_event(
       v_candidato, auth.uid(), 'benfeitorias', NEW.id, 'insert', NULL, to_jsonb(NEW)
@@ -269,7 +270,10 @@ CREATE POLICY campanha_audit_candidato_select ON campanha_audit_log
   FOR SELECT TO authenticated
   USING (
     candidato_profile_id = auth.uid()
-    AND auth.is_candidato()
+    AND EXISTS (
+      SELECT 1 FROM profiles p
+      WHERE p.id = auth.uid() AND p.role::text = 'candidato'
+    )
   );
 
 -- RPC: atualizar último acesso ao menu
@@ -300,7 +304,9 @@ AS $$
 DECLARE
   r campanha_audit_log%ROWTYPE;
 BEGIN
-  IF NOT auth.is_candidato() THEN
+  IF NOT EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND role::text = 'candidato'
+  ) THEN
     RAISE EXCEPTION 'Apenas o candidato pode restaurar registros';
   END IF;
 

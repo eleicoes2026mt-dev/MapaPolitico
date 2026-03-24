@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../models/apoiador.dart';
 import '../../../../models/bandeira_visual.dart';
 import '../../../apoiadores/providers/apoiadores_provider.dart';
+import '../../../mapa/providers/cidades_marcadores_provider.dart';
 import '../../../mapa/presentation/widgets/bandeira_marcador_widget.dart';
 
 /// Editor completo da bandeira no mapa (cores visuais, layout, emoji, estilo das iniciais).
@@ -216,6 +217,7 @@ class _BandeiraApoiadorEditorState extends ConsumerState<BandeiraApoiadorEditor>
         ),
       );
       ref.invalidate(meuApoiadorProvider);
+      ref.invalidate(cidadesMarcadoresMapaCampanhaProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bandeira salva')));
       }
@@ -275,6 +277,11 @@ class _BandeiraApoiadorEditorState extends ConsumerState<BandeiraApoiadorEditor>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          'As alterações da bandeira só são gravadas ao tocar em "Salvar bandeira" abaixo (não use apenas "Salvar perfil" no fim da página).',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+        ),
+        const SizedBox(height: 12),
         Text('Pré-visualização', style: theme.textTheme.labelLarge),
         const SizedBox(height: 8),
         Center(

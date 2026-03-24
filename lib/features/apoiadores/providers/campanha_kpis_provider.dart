@@ -50,15 +50,60 @@ int _votosEstimadosVotante(Votante v) {
 }
 
 /// KPIs para candidato e assessor (painel Apoiadores). Apoiador não usa.
-final campanhaKpisProvider = FutureProvider<CampanhaKpisResumo?>((ref) async {
-  final profile = ref.watch(profileProvider).valueOrNull;
-  if (profile == null) return null;
-  if (profile.role == 'apoiador') return null;
+///
+/// Deriva de [apoiadoresListProvider], [votantesListProvider] e [assessoresListProvider]
+/// sem `await ref.watch(...future)` — esse padrão pode travar o app (deadlock) com Riverpod.
+///
+/// **Não exige** que votantes/assessores saiam de `loading` para mostrar o painel: se uma
+/// dessas consultas ficar pendente (rede/Supabase), usamos listas vazias e o painel deixa de
+/// travar a tela; os valores atualizam quando os dados chegam.
+///
+/// O perfil deve ser tratado com [AsyncValue.when]: `select(role)` com `valueOrNull` em loading
+/// devolve null e esconde KPIs / combina mal com a lista.
+final campanhaKpisProvider = Provider<AsyncValue<CampanhaKpisResumo?>>((ref) {
+  return ref.watch(profileProvider).when(
+        data: (profile) {
+          if (profile == null) return const AsyncValue.data(null);
+          if (profile.role == 'apoiador') return const AsyncValue.data(null);
 
-  final apoiadores = await ref.watch(apoiadoresListProvider.future);
-  final votantes = await ref.watch(votantesListProvider.future);
-  final assessores = await ref.watch(assessoresListProvider.future);
+          final apAsync = ref.watch(apoiadoresListProvider);
+          final voAsync = ref.watch(votantesListProvider);
+          final asAsync = ref.watch(assessoresListProvider);
 
+          final votErr = voAsync.maybeWhen(
+            error: (e, st) => AsyncValue<CampanhaKpisResumo?>.error(e, st),
+            orElse: () => null,
+          );
+          if (votErr != null) return votErr;
+
+          final asErr = asAsync.maybeWhen(
+            error: (e, st) => AsyncValue<CampanhaKpisResumo?>.error(e, st),
+            orElse: () => null,
+          );
+          if (asErr != null) return asErr;
+
+          return apAsync.when(
+            data: (apoiadores) => AsyncValue.data(
+              _buildCampanhaKpisResumo(
+                apoiadores,
+                voAsync.valueOrNull ?? [],
+                asAsync.valueOrNull ?? [],
+              ),
+            ),
+            loading: () => const AsyncValue.loading(),
+            error: (e, st) => AsyncValue.error(e, st),
+          );
+        },
+        loading: () => const AsyncValue.loading(),
+        error: (e, st) => AsyncValue.error(e, st),
+      );
+});
+
+CampanhaKpisResumo _buildCampanhaKpisResumo(
+  List<Apoiador> apoiadores,
+  List<Votante> votantes,
+  List<Assessor> assessores,
+) {
   final porId = <String, _Acc>{};
   for (final Apoiador ap in apoiadores) {
     porId.putIfAbsent(ap.assessorId, () => _Acc());
@@ -123,7 +168,7 @@ final campanhaKpisProvider = FutureProvider<CampanhaKpisResumo?>((ref) async {
     totalEstimativaApoiadores: tEstA,
     totalEstimativaVotantes: tEstV,
   );
-});
+}
 
 class _Acc {
   int apoiadores = 0;

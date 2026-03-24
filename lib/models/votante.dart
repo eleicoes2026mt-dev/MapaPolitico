@@ -11,6 +11,10 @@ class Votante {
   final String? municipioNome;
   final String abrangencia; // Individual | Familiar
   final int qtdVotosFamilia;
+  final String? cep;
+  final String? logradouro;
+  final String? numero;
+  final String? complemento;
 
   const Votante({
     required this.id,
@@ -24,6 +28,10 @@ class Votante {
     this.municipioNome,
     this.abrangencia = 'Individual',
     this.qtdVotosFamilia = 1,
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
   });
 
   factory Votante.fromJson(Map<String, dynamic> json) {
@@ -44,6 +52,10 @@ class Votante {
       municipioNome: munNome,
       abrangencia: json['abrangencia'] as String? ?? 'Individual',
       qtdVotosFamilia: (json['qtd_votos_familia'] as num?)?.toInt() ?? 1,
+      cep: json['cep'] as String?,
+      logradouro: json['logradouro'] as String?,
+      numero: json['numero'] as String?,
+      complemento: json['complemento'] as String?,
     );
   }
 
@@ -58,5 +70,9 @@ class Votante {
         'municipio_id': municipioId,
         'abrangencia': abrangencia,
         'qtd_votos_familia': qtdVotosFamilia,
+        'cep': cep,
+        'logradouro': logradouro,
+        'numero': numero,
+        'complemento': complemento,
       };
 }

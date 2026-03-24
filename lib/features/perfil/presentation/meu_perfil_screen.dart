@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import '../../../models/apoiador.dart';
+import '../../../models/assessor.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
+import '../../assessores/providers/assessores_provider.dart'
+    show AtualizarMeuAssessorEnderecoParams, atualizarMeuAssessorEnderecoProvider, meuAssessorRegistroProvider;
 import 'widgets/bandeira_apoiador_editor.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
@@ -365,6 +369,22 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                           );
                         },
                       ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Endereço (opcional)',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      const _EnderecoApoiadorForm(),
+                    ],
+                    if (role == 'assessor') ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        'Endereço (opcional)',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      const _EnderecoAssessorForm(),
                     ],
                     if (isCandidato)
                       Text(
@@ -731,6 +751,292 @@ class _NmVotavelTseField extends ConsumerWidget {
       },
       loading: () => const SizedBox(height: 56, child: Center(child: CircularProgressIndicator(strokeWidth: 2))),
       error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _EnderecoApoiadorForm extends ConsumerWidget {
+  const _EnderecoApoiadorForm();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(meuApoiadorProvider);
+    return async.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (e, _) => Text('Erro: $e', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      data: (ap) {
+        if (ap == null) {
+          return Text(
+            'Cadastro de apoiador não encontrado.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+          );
+        }
+        return _EnderecoApoiadorFormBody(apoiador: ap);
+      },
+    );
+  }
+}
+
+class _EnderecoApoiadorFormBody extends ConsumerStatefulWidget {
+  const _EnderecoApoiadorFormBody({required this.apoiador});
+
+  final Apoiador apoiador;
+
+  @override
+  ConsumerState<_EnderecoApoiadorFormBody> createState() => _EnderecoApoiadorFormBodyState();
+}
+
+class _EnderecoApoiadorFormBodyState extends ConsumerState<_EnderecoApoiadorFormBody> {
+  late final TextEditingController _cep;
+  late final TextEditingController _logradouro;
+  late final TextEditingController _numero;
+  late final TextEditingController _complemento;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final a = widget.apoiador;
+    _cep = TextEditingController(text: a.cep ?? '');
+    _logradouro = TextEditingController(text: a.logradouro ?? '');
+    _numero = TextEditingController(text: a.numero ?? '');
+    _complemento = TextEditingController(text: a.complemento ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _EnderecoApoiadorFormBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.apoiador.id != widget.apoiador.id) {
+      final a = widget.apoiador;
+      _cep.text = a.cep ?? '';
+      _logradouro.text = a.logradouro ?? '';
+      _numero.text = a.numero ?? '';
+      _complemento.text = a.complemento ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _cep.dispose();
+    _logradouro.dispose();
+    _numero.dispose();
+    _complemento.dispose();
+    super.dispose();
+  }
+
+  Future<void> _salvar() async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(atualizarApoiadorProvider)(
+        widget.apoiador.id,
+        AtualizarApoiadorParams(
+          atualizarEndereco: true,
+          cep: _cep.text.trim(),
+          logradouro: _logradouro.text.trim(),
+          numero: _numero.text.trim(),
+          complemento: _complemento.text.trim(),
+        ),
+      );
+      ref.invalidate(meuApoiadorProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Endereço salvo')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: _cep,
+          decoration: const InputDecoration(labelText: 'CEP', prefixIcon: Icon(Icons.pin_outlined)),
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _logradouro,
+          decoration: const InputDecoration(labelText: 'Rua / logradouro', prefixIcon: Icon(Icons.signpost_outlined)),
+          textCapitalization: TextCapitalization.words,
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _numero,
+          decoration: const InputDecoration(labelText: 'Número', prefixIcon: Icon(Icons.numbers_outlined)),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _complemento,
+          decoration: const InputDecoration(labelText: 'Complemento', prefixIcon: Icon(Icons.apartment_outlined)),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.tonal(
+          onPressed: _saving ? null : _salvar,
+          child: _saving
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Salvar endereço'),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Independente do botão "Salvar perfil" acima.',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+class _EnderecoAssessorForm extends ConsumerWidget {
+  const _EnderecoAssessorForm();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(meuAssessorRegistroProvider);
+    return async.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (e, _) => Text('Erro: $e', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      data: (a) {
+        if (a == null) {
+          return Text(
+            'Registro de assessor não encontrado.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error),
+          );
+        }
+        return _EnderecoAssessorFormBody(assessor: a);
+      },
+    );
+  }
+}
+
+class _EnderecoAssessorFormBody extends ConsumerStatefulWidget {
+  const _EnderecoAssessorFormBody({required this.assessor});
+
+  final Assessor assessor;
+
+  @override
+  ConsumerState<_EnderecoAssessorFormBody> createState() => _EnderecoAssessorFormBodyState();
+}
+
+class _EnderecoAssessorFormBodyState extends ConsumerState<_EnderecoAssessorFormBody> {
+  late final TextEditingController _cep;
+  late final TextEditingController _logradouro;
+  late final TextEditingController _numero;
+  late final TextEditingController _complemento;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final a = widget.assessor;
+    _cep = TextEditingController(text: a.cep ?? '');
+    _logradouro = TextEditingController(text: a.logradouro ?? '');
+    _numero = TextEditingController(text: a.numero ?? '');
+    _complemento = TextEditingController(text: a.complemento ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _EnderecoAssessorFormBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.assessor.id != widget.assessor.id) {
+      final a = widget.assessor;
+      _cep.text = a.cep ?? '';
+      _logradouro.text = a.logradouro ?? '';
+      _numero.text = a.numero ?? '';
+      _complemento.text = a.complemento ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _cep.dispose();
+    _logradouro.dispose();
+    _numero.dispose();
+    _complemento.dispose();
+    super.dispose();
+  }
+
+  Future<void> _salvar() async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(atualizarMeuAssessorEnderecoProvider)(
+        AtualizarMeuAssessorEnderecoParams(
+          cep: _cep.text.trim(),
+          logradouro: _logradouro.text.trim(),
+          numero: _numero.text.trim(),
+          complemento: _complemento.text.trim(),
+        ),
+      );
+      ref.invalidate(meuAssessorRegistroProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Endereço salvo')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: _cep,
+          decoration: const InputDecoration(labelText: 'CEP', prefixIcon: Icon(Icons.pin_outlined)),
+          keyboardType: TextInputType.number,
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _logradouro,
+          decoration: const InputDecoration(labelText: 'Rua / logradouro', prefixIcon: Icon(Icons.signpost_outlined)),
+          textCapitalization: TextCapitalization.words,
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _numero,
+          decoration: const InputDecoration(labelText: 'Número', prefixIcon: Icon(Icons.numbers_outlined)),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _complemento,
+          decoration: const InputDecoration(labelText: 'Complemento', prefixIcon: Icon(Icons.apartment_outlined)),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.tonal(
+          onPressed: _saving ? null : _salvar,
+          child: _saving
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Salvar endereço'),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Independente do botão "Salvar perfil" acima.',
+          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
     );
   }
 }

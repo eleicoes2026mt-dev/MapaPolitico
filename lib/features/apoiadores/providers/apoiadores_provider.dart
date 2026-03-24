@@ -1,29 +1,24 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
-import '../../../models/bandeira_visual.dart';
+import '../../../models/municipio.dart';
+import '../../../core/utils/municipio_resolver.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../../core/config/env_config.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../assessores/providers/assessores_provider.dart'
-    show promoverACandidato, messageFromException, assessoresListProvider;
+    show promoverACandidato, messageFromException, assessoresListProvider, meuAssessorIdProvider;
 import '../../benfeitorias/providers/benfeitorias_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
-  final profile = ref.watch(profileProvider).valueOrNull;
+  // Não use select(role) com valueOrNull: em AsyncLoading o role vira null, o provider
+  // reinicia em loop e a lista fica eternamente em loading na web.
+  final profile = await ref.watch(profileProvider.future);
   // Apoiador não deve listar outros apoiadores (tela só para candidato/assessor).
   if (profile?.role == 'apoiador') return [];
 
   final res = await supabase.from('apoiadores').select().order('nome');
   return (res as List).map((e) => Apoiador.fromJson(e as Map<String, dynamic>)).toList();
-});
-
-/// ID do assessor vinculado ao usuário logado (profile_id = current user). Candidato precisa ter ativado acesso em Assessores.
-final meuAssessorIdProvider = FutureProvider<String?>((ref) async {
-  final userId = ref.watch(currentUserProvider)?.id;
-  if (userId == null) return null;
-  final res = await supabase.from('assessores').select('id').eq('profile_id', userId).maybeSingle();
-  return res?['id'] as String?;
 });
 
 /// Linha em `apoiadores` vinculada ao usuário com role `apoiador` (convite por e-mail).
@@ -85,6 +80,10 @@ class NovoApoiadorParams {
     this.votosFuncionarios = 0,
     this.votosPrometidosUltimaEleicao,
     this.benfeitorias = const [],
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
   });
   final String nome;
   final String cidadeNome;
@@ -109,6 +108,10 @@ class NovoApoiadorParams {
   final int votosFuncionarios;
   final int? votosPrometidosUltimaEleicao;
   final List<NovaBenfeitoriaItem> benfeitorias;
+  final String? cep;
+  final String? logradouro;
+  final String? numero;
+  final String? complemento;
 }
 
 final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)>((ref) {
@@ -148,6 +151,13 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
       }
     }
 
+    var municipioIdFinal = params.municipioId;
+    if (municipioIdFinal == null || municipioIdFinal.trim().isEmpty) {
+      final resMun = await client.from('municipios').select();
+      final listaMun = (resMun as List).map((e) => Municipio.fromJson(e as Map<String, dynamic>)).toList();
+      municipioIdFinal = municipioIdParaNomeCidade(params.cidadeNome, listaMun);
+    }
+
     final row = <String, dynamic>{
       'assessor_id': assessorId,
       'nome': params.nome.trim(),
@@ -159,7 +169,7 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
       'cidades_atuacao': [],
       'ativo': true,
       'cidade_nome': params.cidadeNome.trim().isEmpty ? null : params.cidadeNome.trim(),
-      'municipio_id': params.municipioId,
+      'municipio_id': municipioIdFinal,
       'data_nascimento': params.dataNascimento?.toIso8601String().split('T').first,
       'votos_sozinho': params.votosSozinho,
       'qtd_votos_familia': params.qtdVotosFamilia,
@@ -168,6 +178,10 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
       'nome_fantasia': params.nomeFantasia?.trim().isEmpty == true ? null : params.nomeFantasia?.trim(),
       'situacao_cnpj': params.situacaoCnpj?.trim().isEmpty == true ? null : params.situacaoCnpj?.trim(),
       'endereco': params.endereco?.trim().isEmpty == true ? null : params.endereco?.trim(),
+      'cep': params.cep?.trim().isEmpty == true ? null : params.cep?.trim(),
+      'logradouro': params.logradouro?.trim().isEmpty == true ? null : params.logradouro?.trim(),
+      'numero': params.numero?.trim().isEmpty == true ? null : params.numero?.trim(),
+      'complemento': params.complemento?.trim().isEmpty == true ? null : params.complemento?.trim(),
       'contato_responsavel': params.contatoResponsavel?.trim().isEmpty == true ? null : params.contatoResponsavel?.trim(),
       'email_responsavel': params.emailResponsavel?.trim().isEmpty == true ? null : params.emailResponsavel?.trim(),
       'votos_pf': params.votosPf,
@@ -203,6 +217,7 @@ class AtualizarApoiadorParams {
   AtualizarApoiadorParams({
     this.nome,
     this.cidadeNome,
+    this.municipioId,
     this.telefone,
     this.email,
     this.estimativaVotos,
@@ -215,9 +230,16 @@ class AtualizarApoiadorParams {
     this.bandeiraEmoji,
     this.atualizarBandeira = false,
     this.bandeiraVisualJson,
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
+    this.atualizarEndereco = false,
   });
   final String? nome;
   final String? cidadeNome;
+  /// Quando preenchido, atualiza `municipio_id` (UUID da tabela `municipios`).
+  final String? municipioId;
   final String? telefone;
   final String? email;
   final int? estimativaVotos;
@@ -233,6 +255,12 @@ class AtualizarApoiadorParams {
   final bool atualizarBandeira;
   /// JSON do editor visual (`bandeira_visual`); quando preenchido, grava junto com os campos legados.
   final Map<String, dynamic>? bandeiraVisualJson;
+  final String? cep;
+  final String? logradouro;
+  final String? numero;
+  final String? complemento;
+  /// Se true, grava CEP/logradouro/número/complemento (permite limpar com string vazia → null).
+  final bool atualizarEndereco;
 }
 
 final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiadorId, AtualizarApoiadorParams params)>((ref) {
@@ -241,20 +269,23 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     final row = <String, dynamic>{};
     if (params.nome != null) row['nome'] = params.nome!.trim();
     if (params.cidadeNome != null) row['cidade_nome'] = params.cidadeNome!.trim().isEmpty ? null : params.cidadeNome!.trim();
+    if (params.municipioId != null) {
+      row['municipio_id'] = params.municipioId!.trim().isEmpty ? null : params.municipioId!.trim();
+    }
     if (params.telefone != null) row['telefone'] = params.telefone!.trim().isEmpty ? null : params.telefone!.trim();
     if (params.email != null) row['email'] = params.email!.trim().isEmpty ? null : params.email!.trim();
     if (params.estimativaVotos != null) row['estimativa_votos'] = params.estimativaVotos!;
     if (params.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = params.votosPrometidosUltimaEleicao;
+    if (params.atualizarEndereco) {
+      row['cep'] = params.cep?.trim().isEmpty == true ? null : params.cep?.trim();
+      row['logradouro'] = params.logradouro?.trim().isEmpty == true ? null : params.logradouro?.trim();
+      row['numero'] = params.numero?.trim().isEmpty == true ? null : params.numero?.trim();
+      row['complemento'] = params.complemento?.trim().isEmpty == true ? null : params.complemento?.trim();
+    }
     if (params.atualizarBandeira) {
-      if (params.bandeiraVisualJson != null && params.bandeiraVisualJson!.isNotEmpty) {
+      if (params.bandeiraVisualJson != null) {
+        // Só persiste JSON: muitos projetos têm só a coluna `bandeira_visual` (sem colunas legadas).
         row['bandeira_visual'] = params.bandeiraVisualJson;
-        final bv = BandeiraVisual.fromJson(params.bandeiraVisualJson);
-        final iniBv = bv.iniciais?.trim() ?? '';
-        row['bandeira_iniciais'] =
-            iniBv.isEmpty ? null : (iniBv.length > 3 ? iniBv.substring(0, 3) : iniBv);
-        row['bandeira_cor_primaria'] = bv.corPrimariaHex;
-        row['bandeira_cor_secundaria'] = bv.corSecundariaHex;
-        row['bandeira_emoji'] = bv.emoji?.trim().isEmpty == true ? null : bv.emoji?.trim();
       } else {
         final ini = params.bandeiraIniciais?.trim() ?? '';
         row['bandeira_iniciais'] = ini.isEmpty ? null : (ini.length > 3 ? ini.substring(0, 3) : ini);
@@ -273,7 +304,10 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
       }
     }
     if (row.isEmpty) return;
-    await client.from('apoiadores').update(row).eq('id', apoiadorId);
+    final res = await client.from('apoiadores').update(row).eq('id', apoiadorId).select('id').maybeSingle();
+    if (res == null) {
+      throw Exception('Não foi possível salvar os dados do apoiador. Confira sua conexão ou tente de novo.');
+    }
     ref.invalidate(apoiadoresListProvider);
     ref.invalidate(meuApoiadorProvider);
   };

@@ -4,22 +4,29 @@ import '../../../models/votante.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart'
-    show apoiadoresListProvider, meuApoiadorIdProvider, meuAssessorIdProvider;
+    show apoiadoresListProvider, meuApoiadorIdProvider;
 import '../../mapa/providers/benfeitorias_agg_provider.dart';
-import '../../assessores/providers/assessores_provider.dart';
+import '../../assessores/providers/assessores_provider.dart'
+    show assessoresListProvider, meuAssessorIdProvider;
 
 final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
   final profile = await ref.watch(profileProvider.future);
+  if (profile == null) return [];
 
-  if (profile?.role == 'apoiador') {
-    final apoiadorId = await ref.watch(meuApoiadorIdProvider.future);
-    if (apoiadorId == null) return [];
-    final res = await supabase
-        .from('votantes')
-        .select('*, municipios(nome)')
-        .eq('apoiador_id', apoiadorId)
-        .order('nome');
-    return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
+  if (profile.role == 'apoiador') {
+    return ref.watch(meuApoiadorIdProvider).when(
+          data: (apoiadorId) async {
+            if (apoiadorId == null) return [];
+            final res = await supabase
+                .from('votantes')
+                .select('*, municipios(nome)')
+                .eq('apoiador_id', apoiadorId)
+                .order('nome');
+            return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
+          },
+          loading: () async => [],
+          error: (_, __) async => [],
+        );
   }
 
   final res = await supabase.from('votantes').select('*, municipios(nome)').order('nome');
@@ -42,6 +49,10 @@ class NovoVotanteParams {
     this.qtdVotosFamilia = 1,
     /// Quando candidato/assessor cadastram para um apoiador específico.
     this.apoiadorId,
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
   });
   final String nome;
   final String? telefone;
@@ -50,6 +61,10 @@ class NovoVotanteParams {
   final String abrangencia;
   final int qtdVotosFamilia;
   final String? apoiadorId;
+  final String? cep;
+  final String? logradouro;
+  final String? numero;
+  final String? complemento;
 }
 
 final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>((ref) {
@@ -112,6 +127,10 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       'abrangencia': params.abrangencia,
       'qtd_votos_familia': params.qtdVotosFamilia < 1 ? 1 : params.qtdVotosFamilia,
       if (apoiadorId != null && apoiadorId.isNotEmpty) 'apoiador_id': apoiadorId,
+      'cep': params.cep?.trim().isEmpty == true ? null : params.cep?.trim(),
+      'logradouro': params.logradouro?.trim().isEmpty == true ? null : params.logradouro?.trim(),
+      'numero': params.numero?.trim().isEmpty == true ? null : params.numero?.trim(),
+      'complemento': params.complemento?.trim().isEmpty == true ? null : params.complemento?.trim(),
     };
 
     await client.from('votantes').insert(insert);
@@ -127,6 +146,10 @@ class AtualizarVotanteParams {
     this.municipioId,
     this.abrangencia,
     this.qtdVotosFamilia,
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
   });
   final String? nome;
   final String? telefone;
@@ -134,6 +157,10 @@ class AtualizarVotanteParams {
   final String? municipioId;
   final String? abrangencia;
   final int? qtdVotosFamilia;
+  final String? cep;
+  final String? logradouro;
+  final String? numero;
+  final String? complemento;
 }
 
 final atualizarVotanteProvider = Provider<Future<void> Function(String id, AtualizarVotanteParams)>((ref) {
@@ -146,6 +173,10 @@ final atualizarVotanteProvider = Provider<Future<void> Function(String id, Atual
     if (p.municipioId != null) row['municipio_id'] = p.municipioId!.trim().isEmpty ? null : p.municipioId;
     if (p.abrangencia != null) row['abrangencia'] = p.abrangencia;
     if (p.qtdVotosFamilia != null) row['qtd_votos_familia'] = p.qtdVotosFamilia! < 1 ? 1 : p.qtdVotosFamilia!;
+    if (p.cep != null) row['cep'] = p.cep!.trim().isEmpty ? null : p.cep!.trim();
+    if (p.logradouro != null) row['logradouro'] = p.logradouro!.trim().isEmpty ? null : p.logradouro!.trim();
+    if (p.numero != null) row['numero'] = p.numero!.trim().isEmpty ? null : p.numero!.trim();
+    if (p.complemento != null) row['complemento'] = p.complemento!.trim().isEmpty ? null : p.complemento!.trim();
     if (row.isEmpty) return;
     await client.from('votantes').update(row).eq('id', id);
     ref.invalidate(votantesListProvider);

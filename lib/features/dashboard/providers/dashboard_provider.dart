@@ -28,23 +28,28 @@ class DashboardStats {
   final int mensagensCount;
 }
 
+String _nomeMunicipioFromRow(Map<String, dynamic> r) {
+  final mun = r['municipios'];
+  if (mun is Map && mun['nome'] != null) return mun['nome'].toString().trim();
+  return '';
+}
+
 final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   final client = supabase;
   final profile = await ref.watch(profileProvider.future);
+  if (profile == null) return const DashboardStats();
 
-  if (profile?.role == 'apoiador') {
-    final votantesRes = await client.from('votantes').select('id, qtd_votos_familia, municipio_id');
+  if (profile.role == 'apoiador') {
+    final votantesRes = await client.from('votantes').select('id, qtd_votos_familia, municipio_id, municipios(nome)');
     final votantesCount = votantesRes.length;
     var votosVotantes = 0;
     final cidadeCount = <String, int>{};
     for (final r in votantesRes) {
-      final q = (r['qtd_votos_familia'] as num?)?.toInt() ?? 1;
+      final row = Map<String, dynamic>.from(r as Map);
+      final q = (row['qtd_votos_familia'] as num?)?.toInt() ?? 1;
       votosVotantes += q;
-      final mid = r['municipio_id'] as String?;
-      if (mid != null) {
-        final nome = await client.from('municipios').select('nome').eq('id', mid).maybeSingle().then((x) => x?['nome'] as String? ?? '');
-        if (nome.isNotEmpty) cidadeCount[nome] = (cidadeCount[nome] ?? 0) + q;
-      }
+      final nome = _nomeMunicipioFromRow(row);
+      if (nome.isNotEmpty) cidadeCount[nome] = (cidadeCount[nome] ?? 0) + q;
     }
     final votosPorCidade = cidadeCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     return DashboardStats(
@@ -73,18 +78,16 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     perfilCount[p] = (perfilCount[p] ?? 0) + 1;
   }
 
-  final votantesRes = await client.from('votantes').select('id, qtd_votos_familia, municipio_id');
+  final votantesRes = await client.from('votantes').select('id, qtd_votos_familia, municipio_id, municipios(nome)');
   final votantesCount = votantesRes.length;
   int votosVotantes = 0;
   final cidadeCount = <String, int>{};
   for (final r in votantesRes) {
-    final q = (r['qtd_votos_familia'] as num?)?.toInt() ?? 1;
+    final row = Map<String, dynamic>.from(r as Map);
+    final q = (row['qtd_votos_familia'] as num?)?.toInt() ?? 1;
     votosVotantes += q;
-    final mid = r['municipio_id'] as String?;
-    if (mid != null) {
-      final nome = await client.from('municipios').select('nome').eq('id', mid).maybeSingle().then((x) => x?['nome'] as String? ?? '');
-      if (nome.isNotEmpty) cidadeCount[nome] = (cidadeCount[nome] ?? 0) + q;
-    }
+    final nome = _nomeMunicipioFromRow(row);
+    if (nome.isNotEmpty) cidadeCount[nome] = (cidadeCount[nome] ?? 0) + q;
   }
 
   estimativaVotos += votosVotantes;

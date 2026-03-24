@@ -6,6 +6,10 @@ class Assessor {
   final String? email;
   final String? municipioId;
   final bool ativo;
+  final String? cep;
+  final String? logradouro;
+  final String? numero;
+  final String? complemento;
 
   const Assessor({
     required this.id,
@@ -15,6 +19,10 @@ class Assessor {
     this.email,
     this.municipioId,
     this.ativo = true,
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
   });
 
   factory Assessor.fromJson(Map<String, dynamic> json) {
@@ -26,6 +34,10 @@ class Assessor {
       email: json['email'] as String?,
       municipioId: json['municipio_id'] as String?,
       ativo: json['ativo'] as bool? ?? true,
+      cep: json['cep'] as String?,
+      logradouro: json['logradouro'] as String?,
+      numero: json['numero'] as String?,
+      complemento: json['complemento'] as String?,
     );
   }
 
@@ -37,6 +49,10 @@ class Assessor {
         'email': email,
         'municipio_id': municipioId,
         'ativo': ativo,
+        'cep': cep,
+        'logradouro': logradouro,
+        'numero': numero,
+        'complemento': complemento,
       };
 
   String get initial => nome.isNotEmpty ? nome[0].toUpperCase() : '?';

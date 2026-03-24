@@ -22,6 +22,10 @@ class Apoiador {
   final String? nomeFantasia;
   final String? situacaoCnpj;
   final String? endereco;
+  final String? cep;
+  final String? logradouro;
+  final String? numero;
+  final String? complemento;
   final String? contatoResponsavel;
   final String? emailResponsavel;
   final int votosPf;
@@ -58,6 +62,10 @@ class Apoiador {
     this.nomeFantasia,
     this.situacaoCnpj,
     this.endereco,
+    this.cep,
+    this.logradouro,
+    this.numero,
+    this.complemento,
     this.contatoResponsavel,
     this.emailResponsavel,
     this.votosPf = 0,
@@ -97,6 +105,10 @@ class Apoiador {
       nomeFantasia: json['nome_fantasia'] as String?,
       situacaoCnpj: json['situacao_cnpj'] as String?,
       endereco: json['endereco'] as String?,
+      cep: json['cep'] as String?,
+      logradouro: json['logradouro'] as String?,
+      numero: json['numero'] as String?,
+      complemento: json['complemento'] as String?,
       contatoResponsavel: json['contato_responsavel'] as String?,
       emailResponsavel: json['email_responsavel'] as String?,
       votosPf: (json['votos_pf'] as num?)?.toInt() ?? 0,
@@ -136,6 +148,10 @@ class Apoiador {
         'nome_fantasia': nomeFantasia,
         'situacao_cnpj': situacaoCnpj,
         'endereco': endereco,
+        'cep': cep,
+        'logradouro': logradouro,
+        'numero': numero,
+        'complemento': complemento,
         'contato_responsavel': contatoResponsavel,
         'email_responsavel': emailResponsavel,
         'votos_pf': votosPf,

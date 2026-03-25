@@ -197,8 +197,27 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }
 
   Future<void> _notificar(Visita v) async {
+    // Confirmar antes de enviar
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enviar notificação'),
+        content: Text(
+          'Notificar todos os usuários com push ativado sobre a visita a "${v.municipioNome ?? v.titulo}"?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Notificar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
     try {
-      await supabase.functions.invoke('send-push', body: {
+      final r = await supabase.functions.invoke('send-push', body: {
         'title': '📅 Visita: ${v.municipioNome ?? v.titulo}',
         'body':
             'O deputado visitará ${v.municipioNome ?? "sua cidade"} em ${v.dataHoraFormatada}.'
@@ -206,16 +225,39 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         'url': '/#/agenda',
         'tag': 'visita-${v.id}',
       });
-      await supabase.from('reunioes').update({'notificados_em': DateTime.now().toIso8601String()}).eq('id', v.id);
+
+      // Registra a data de envio independente do resultado
+      await supabase
+          .from('reunioes')
+          .update({'notificados_em': DateTime.now().toIso8601String()})
+          .eq('id', v.id);
       ref.invalidate(visitasProvider);
       ref.invalidate(todasVisitasProvider);
+
       if (!mounted) return;
+      final data = r.data as Map<String, dynamic>?;
+      final sent = data?['sent'] ?? 0;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Notificação enviada para todos os usuários!')),
+        SnackBar(content: Text('Notificação enviada para $sent dispositivos.')),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
+      final msg = e.toString();
+      // Edge function não deployada ainda
+      final naoDeployada = msg.contains('404') ||
+          msg.contains('Failed to fetch') ||
+          msg.contains('not found');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            naoDeployada
+                ? 'Edge function "send-push" ainda não foi deployada no Supabase.\n'
+                    'Execute: supabase functions deploy send-push'
+                : 'Erro ao notificar: $msg',
+          ),
+          duration: const Duration(seconds: 6),
+        ),
+      );
     }
   }
 }

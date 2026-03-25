@@ -306,9 +306,12 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
       }
     }
     if (row.isEmpty) return;
-    final res = await client.from('apoiadores').update(row).eq('id', apoiadorId).select('id').maybeSingle();
-    if (res == null) {
-      throw Exception('Não foi possível salvar os dados do apoiador. Confira sua conexão ou tente de novo.');
+    // Usa .update() sem .select() para evitar null quando o RLS permite UPDATE mas não SELECT.
+    // Erro de banco ainda é propagado; ausência de linha no retorno não lança mais exceção.
+    try {
+      await client.from('apoiadores').update(row).eq('id', apoiadorId);
+    } catch (e) {
+      throw Exception('Erro ao salvar dados do apoiador: ${e.toString().replaceFirst('Exception: ', '')}');
     }
     ref.invalidate(apoiadoresListProvider);
     ref.invalidate(meuApoiadorProvider);

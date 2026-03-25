@@ -22,11 +22,17 @@ class DashboardScreen extends ConsumerWidget {
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < _Breakpoint.mobile ? 16.0 : 24.0;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(padding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(dashboardStatsProvider);
+        await ref.read(dashboardStatsProvider.future).then((_) {}).onError((_, __) {});
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.all(padding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           _Header(padding: padding),
           SizedBox(height: padding),
           stats.when(
@@ -67,6 +73,7 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -546,3 +553,4 @@ class _MensagensCard extends StatelessWidget {
     );
   }
 }
+

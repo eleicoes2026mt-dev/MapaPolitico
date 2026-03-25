@@ -97,11 +97,17 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
     final list = ref.watch(assessoresListProvider);
     final filtered = list.valueOrNull?.where((a) => a.nome.toLowerCase().contains(_query.toLowerCase())).toList() ?? [];
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(assessoresListProvider);
+        await ref.read(assessoresListProvider.future).then((_) {}).onError((_, __) {});
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -208,6 +214,7 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -563,3 +570,4 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
     );
   }
 }
+

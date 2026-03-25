@@ -118,11 +118,18 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
       }).toList();
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(votantesListProvider);
+        ref.invalidate(municipiosMTListProvider);
+        await ref.read(votantesListProvider.future).then((_) {}).onError((_, __) {});
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -188,6 +195,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -751,3 +759,4 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     );
   }
 }
+

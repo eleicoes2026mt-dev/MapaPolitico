@@ -24,11 +24,17 @@ class _BenfeitoriasScreenState extends ConsumerState<BenfeitoriasScreen> {
     final filtered = list.where((b) => b.titulo.toLowerCase().contains(_query.toLowerCase())).toList();
     final format = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(benfeitoriasListProvider);
+        await ref.read(benfeitoriasListProvider.future).then((_) {}).onError((_, __) {});
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -74,6 +80,7 @@ class _BenfeitoriasScreenState extends ConsumerState<BenfeitoriasScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -127,3 +134,4 @@ class _BenfeitoriaCard extends StatelessWidget {
     );
   }
 }
+

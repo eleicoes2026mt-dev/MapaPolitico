@@ -58,11 +58,17 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
       filtered = filtered.where((a) => a.perfil == _perfilFilter).toList();
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(apoiadoresListProvider);
+        await ref.read(apoiadoresListProvider.future).then((_) {}).onError((_, __) {});
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -168,6 +174,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }
+

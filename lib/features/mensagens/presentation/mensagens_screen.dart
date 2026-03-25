@@ -65,8 +65,11 @@ class _MensagensTab extends ConsumerWidget {
     final theme = Theme.of(context);
     final count = ref.watch(mensagensCountProvider);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(mensagensCountProvider),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -101,6 +104,7 @@ class _MensagensTab extends ConsumerWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -120,8 +124,14 @@ class _AniversariantesTab extends ConsumerWidget {
     return allAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Erro: $e')),
-      data: (_) => SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+      data: (_) => RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(aniversariantesProvider);
+          await ref.read(aniversariantesProvider.future).then((_) {}).onError((_, __) {});
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -203,6 +213,7 @@ class _AniversariantesTab extends ConsumerWidget {
               },
             ),
           ],
+        ),
         ),
       ),
     );
@@ -305,3 +316,4 @@ class _AniversarianteCard extends StatelessWidget {
     );
   }
 }
+

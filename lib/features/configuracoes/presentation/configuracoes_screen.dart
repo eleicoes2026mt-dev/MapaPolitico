@@ -16,11 +16,17 @@ class ConfiguracoesScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final async = ref.watch(campanhaAuditLogProvider);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(campanhaAuditLogProvider);
+        await ref.read(campanhaAuditLogProvider.future).then((_) {}).onError((_, __) {});
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Text('Configurações', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           const PwaInstallBanner(),
@@ -95,6 +101,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -205,3 +212,4 @@ class _AuditTile extends StatelessWidget {
     );
   }
 }
+

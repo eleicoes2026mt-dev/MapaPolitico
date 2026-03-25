@@ -33,11 +33,22 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
     final proximaAsync = isApoiador ? ref.watch(proximaVisitaMinhaCidadeProvider) : null;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(visitasProvider);
+        ref.invalidate(todasVisitasProvider);
+        ref.invalidate(proximaVisitaMinhaCidadeProvider);
+        await Future.any([
+          ref.read(visitasProvider.future).then((_) {}).onError((_, __) {}),
+          ref.read(todasVisitasProvider.future).then((_) {}).onError((_, __) {}),
+        ]);
+      },
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // ── Cabeçalho ────────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -161,6 +172,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -813,3 +825,4 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     );
   }
 }
+

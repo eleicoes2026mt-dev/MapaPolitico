@@ -9,15 +9,11 @@ ALTER TABLE reunioes
 CREATE INDEX IF NOT EXISTS idx_reunioes_municipio ON reunioes(municipio_id);
 CREATE INDEX IF NOT EXISTS idx_reunioes_visivel ON reunioes(visivel_apoiadores, data_reuniao);
 
--- Apoiadores podem ler visitas marcadas como visíveis para a cidade deles.
--- (Filtragem extra por municipio_id é feita no app; a RLS permite ler qualquer
---  reunião visível para não criar dependência de join complexo aqui.)
+-- Qualquer usuário autenticado pode ler reuniões visíveis para apoiadores.
+-- A filtragem por cidade (municipio_id) é feita no app.
 CREATE POLICY "reunioes_apoiador_visivel" ON reunioes
   FOR SELECT TO authenticated
-  USING (
-    visivel_apoiadores = true
-    AND auth.my_assessor_id() IS NOT NULL  -- só quem é apoiador tem assessor_id
-  );
+  USING (visivel_apoiadores = true);
 
 COMMENT ON COLUMN reunioes.municipio_id       IS 'Cidade da visita (FK municipios).';
 COMMENT ON COLUMN reunioes.descricao          IS 'Informações extras: local, horário, agenda do dia.';

@@ -30,6 +30,13 @@ class EnvConfig {
     defaultValue: '',
   );
 
+  /// Chave pública VAPID para Web Push (PWA).
+  /// A chave privada fica somente nos Supabase Secrets (VAPID_PRIVATE_KEY).
+  static const String vapidPublicKey = String.fromEnvironment(
+    'VAPID_PUBLIC_KEY',
+    defaultValue: 'BBDwFPKAU0cMMay9-WE1DadHmv_lFmGts80CaorhOl2zKW1HTSw4sQLpboixKQkerXexwYwJxSF4PcOK35Qa2DY',
+  );
+
   /// URL pública do app (usada no link do e-mail de convite para assessores).
   /// Em produção use --dart-define=APP_URL=https://seu-dominio.vercel.app
   static const String appUrl = String.fromEnvironment(

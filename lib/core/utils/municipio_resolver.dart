@@ -5,10 +5,10 @@ import '../../features/mapa/data/mt_municipios_coords.dart';
 /// Resolve [municipio_id] a partir do nome da cidade (tabela `municipios`).
 String? municipioIdParaNomeCidade(String? cidadeNome, List<Municipio> municipios) {
   if (cidadeNome == null || cidadeNome.trim().isEmpty) return null;
-  final key = normalizarNomeMunicipioMT(cidadeNome);
+  final key = normalizarNomeMunicipioMT(cidadeNome.trim());
   for (final m in municipios) {
-    if (normalizarNomeMunicipioMT(m.nome) == key) return m.id;
-    if (normalizarNomeMunicipioMT(m.nomeNormalizado) == key) return m.id;
+    if (normalizarNomeMunicipioMT(m.nome.trim()) == key) return m.id;
+    if (normalizarNomeMunicipioMT(m.nomeNormalizado.trim()) == key) return m.id;
   }
   return null;
 }

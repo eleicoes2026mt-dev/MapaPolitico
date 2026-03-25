@@ -24,6 +24,9 @@ supabase/.temp/
 .env.*
 !.env.example
 
+# Chave ArcGIS local (gerada por build_apk.ps1)
+arcgis_key.txt
+
 # IntelliJ related
 *.iml
 *.ipr

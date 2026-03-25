@@ -396,6 +396,9 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         ),
       ),
       SizedBox(height: padding * 0.5),
+      // ── Controles rápidos de camadas ──────────────────────────────
+      _CamadasToggleRow(filtros: filtros),
+      SizedBox(height: padding * 0.5),
       if (votosAjustados.isNotEmpty) ...[
         MapaTseLegenda(votosPorCidade: votosAjustados),
         SizedBox(height: padding * 0.5),
@@ -450,5 +453,80 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     if (f.topBenfeitoriasMunicipios > 0) parts.add('Top ${f.topBenfeitoriasMunicipios} benfeitorias');
     if (parts.isEmpty) return 'Nenhum filtro ativo';
     return parts.join(' · ');
+  }
+}
+
+/// Botões de ligar/desligar camadas do mapa: fonte da estimativa e TSE.
+class _CamadasToggleRow extends ConsumerWidget {
+  const _CamadasToggleRow({required this.filtros});
+  final MapaFiltros filtros;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(mapaFiltrosProvider.notifier);
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    Widget chipFonte(String label, IconData icon, FonteEstimativaMapa value) {
+      final active = filtros.fonteEstimativa == value;
+      return FilterChip(
+        avatar: Icon(icon, size: 16, color: active ? colorScheme.onPrimary : colorScheme.primary),
+        label: Text(label, style: TextStyle(color: active ? colorScheme.onPrimary : null)),
+        selected: active,
+        selectedColor: colorScheme.primary,
+        checkmarkColor: colorScheme.onPrimary,
+        showCheckmark: false,
+        onSelected: (_) => notifier.setFonteEstimativa(value),
+      );
+    }
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Camadas',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.8,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                // ── Toggle Eleição passada (TSE) ──
+                FilterChip(
+                  avatar: Icon(
+                    Icons.how_to_vote_outlined,
+                    size: 16,
+                    color: filtros.mostrarTSE ? colorScheme.onPrimary : colorScheme.primary,
+                  ),
+                  label: Text(
+                    'Eleição 2022 (TSE)',
+                    style: TextStyle(color: filtros.mostrarTSE ? colorScheme.onPrimary : null),
+                  ),
+                  selected: filtros.mostrarTSE,
+                  selectedColor: colorScheme.primary,
+                  checkmarkColor: colorScheme.onPrimary,
+                  showCheckmark: false,
+                  onSelected: (_) => notifier.toggleTSE(),
+                ),
+                const SizedBox(width: 4),
+                // ── Fonte da estimativa ──
+                chipFonte('Todos', Icons.groups_outlined, FonteEstimativaMapa.todos),
+                chipFonte('Só votantes', Icons.how_to_reg_outlined, FonteEstimativaMapa.apenasVotantes),
+                chipFonte('Só apoiadores', Icons.handshake_outlined, FonteEstimativaMapa.apenasApoiadores),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

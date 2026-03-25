@@ -13,6 +13,7 @@ import 'core/auth/supabase_auth_fragment.dart';
 import 'core/bootstrap/arcgis_environment.dart';
 import 'core/config/env_config.dart';
 import 'core/router/app_router.dart';
+import 'core/services/pwa_service.dart';
 import 'core/theme/app_theme.dart';
 
 void main() {
@@ -28,6 +29,7 @@ void main() {
 Future<void> _mainAsync() async {
   WidgetsFlutterBinding.ensureInitialized();
   initArcgisEnvironment();
+  if (kIsWeb) PwaService.instance.init();
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
     anonKey: EnvConfig.supabaseAnonKey,

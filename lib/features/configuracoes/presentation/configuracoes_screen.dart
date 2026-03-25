@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import '../../../core/widgets/pwa_install_banner.dart';
 import '../../../models/campanha_audit_log.dart';
 import '../providers/campanha_audit_provider.dart';
 
@@ -21,13 +22,20 @@ class ConfiguracoesScreen extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Configurações', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
+          const PwaInstallBanner(),
+          const SizedBox(height: 24),
           Text(
-            'Registro de tudo que foi incluído, editado ou excluído na sua campanha. '
+            'Registro de alterações',
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tudo que foi incluído, editado ou excluído na sua campanha. '
             'Apenas você (candidato) vê esta área. É possível restaurar exclusões e reverter edições.',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           Row(
             children: [
               FilledButton.tonalIcon(

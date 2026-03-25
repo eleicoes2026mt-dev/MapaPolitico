@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/municipio_resolver.dart';
 import '../../../../models/apoiador.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
-import '../../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider;
+import '../../../votantes/providers/votantes_provider.dart' show refreshMunicipiosMTList;
 import '../../providers/apoiadores_provider.dart' show atualizarApoiadorProvider, AtualizarApoiadorParams;
 import '../utils/apoiadores_form_utils.dart';
 
@@ -71,7 +71,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
       _error = null;
     });
     try {
-      final municipios = await ref.read(municipiosMTListProvider.future);
+      final municipios = await refreshMunicipiosMTList(ref);
       final mid = municipioIdParaNomeCidade(_cidadeNome, municipios);
       final atualizar = ref.read(atualizarApoiadorProvider);
       await atualizar(

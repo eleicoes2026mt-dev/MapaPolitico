@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/municipio.dart';
 import '../../../models/votante.dart';
+import '../../../core/supabase/municipios_seed.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart'
@@ -33,11 +34,18 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
   return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
 });
 
-/// Municípios MT (para cadastro de votante).
+/// Municípios MT — tenta seed automático client-side se a tabela estiver vazia.
 final municipiosMTListProvider = FutureProvider<List<Municipio>>((ref) async {
+  await ensureMunicipiosMtSeeded(supabase);
   final res = await supabase.from('municipios').select().order('nome');
   return (res as List).map((e) => Municipio.fromJson(e as Map<String, dynamic>)).toList();
 });
+
+/// Força re-leitura da tabela [municipios] (evita cache após seed).
+Future<List<Municipio>> refreshMunicipiosMTList(WidgetRef ref) async {
+  ref.invalidate(municipiosMTListProvider);
+  return ref.read(municipiosMTListProvider.future);
+}
 
 class NovoVotanteParams {
   NovoVotanteParams({
@@ -45,9 +53,9 @@ class NovoVotanteParams {
     this.telefone,
     this.email,
     this.municipioId,
+    required this.cidadeNome,
     this.abrangencia = 'Individual',
     this.qtdVotosFamilia = 1,
-    /// Quando candidato/assessor cadastram para um apoiador específico.
     this.apoiadorId,
     this.cep,
     this.logradouro,
@@ -58,6 +66,7 @@ class NovoVotanteParams {
   final String? telefone;
   final String? email;
   final String? municipioId;
+  final String cidadeNome;
   final String abrangencia;
   final int qtdVotosFamilia;
   final String? apoiadorId;
@@ -124,6 +133,7 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
           ? null
           : params.email!.trim().toLowerCase(),
       'municipio_id': params.municipioId,
+      'cidade_nome': params.cidadeNome.trim().isEmpty ? null : params.cidadeNome.trim(),
       'abrangencia': params.abrangencia,
       'qtd_votos_familia': params.qtdVotosFamilia < 1 ? 1 : params.qtdVotosFamilia,
       if (apoiadorId != null && apoiadorId.isNotEmpty) 'apoiador_id': apoiadorId,
@@ -144,6 +154,7 @@ class AtualizarVotanteParams {
     this.telefone,
     this.email,
     this.municipioId,
+    this.cidadeNome,
     this.abrangencia,
     this.qtdVotosFamilia,
     this.cep,
@@ -155,6 +166,7 @@ class AtualizarVotanteParams {
   final String? telefone;
   final String? email;
   final String? municipioId;
+  final String? cidadeNome;
   final String? abrangencia;
   final int? qtdVotosFamilia;
   final String? cep;
@@ -171,6 +183,7 @@ final atualizarVotanteProvider = Provider<Future<void> Function(String id, Atual
     if (p.telefone != null) row['telefone'] = p.telefone!.trim().isEmpty ? null : p.telefone!.trim();
     if (p.email != null) row['email'] = p.email!.trim().isEmpty ? null : p.email!.trim().toLowerCase();
     if (p.municipioId != null) row['municipio_id'] = p.municipioId!.trim().isEmpty ? null : p.municipioId;
+    if (p.cidadeNome != null) row['cidade_nome'] = p.cidadeNome!.trim().isEmpty ? null : p.cidadeNome!.trim();
     if (p.abrangencia != null) row['abrangencia'] = p.abrangencia;
     if (p.qtdVotosFamilia != null) row['qtd_votos_familia'] = p.qtdVotosFamilia! < 1 ? 1 : p.qtdVotosFamilia!;
     if (p.cep != null) row['cep'] = p.cep!.trim().isEmpty ? null : p.cep!.trim();

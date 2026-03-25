@@ -15,23 +15,33 @@ Map<String, int> buildEstimativaPorCidadeFromLists(
   List<Apoiador> apoiadores,
   List<Votante> votantes, {
   String? onlyApoiadorId,
+  FonteEstimativaMapa fonte = FonteEstimativaMapa.todos,
 }) {
   final result = <String, int>{};
-  for (final a in apoiadores) {
-    if (onlyApoiadorId != null && a.id != onlyApoiadorId) continue;
-    final cidade = a.cidadeParaMapa ?? a.cidadeNome;
-    if (cidade == null || cidade.trim().isEmpty) continue;
-    final key = normalizarNomeMunicipioMT(cidade);
-    result[key] = (result[key] ?? 0) + a.estimativaVotos;
+
+  // Apoiadores
+  if (fonte == FonteEstimativaMapa.todos || fonte == FonteEstimativaMapa.apenasApoiadores) {
+    for (final a in apoiadores) {
+      if (onlyApoiadorId != null && a.id != onlyApoiadorId) continue;
+      final cidade = a.cidadeParaMapa ?? a.cidadeNome;
+      if (cidade == null || cidade.trim().isEmpty) continue;
+      final key = normalizarNomeMunicipioMT(cidade);
+      result[key] = (result[key] ?? 0) + a.estimativaVotos;
+    }
   }
-  for (final v in votantes) {
-    if (onlyApoiadorId != null && v.apoiadorId != onlyApoiadorId) continue;
-    final nome = v.municipioNome;
-    if (nome == null || nome.trim().isEmpty) continue;
-    final key = normalizarNomeMunicipioMT(nome);
-    final q = v.qtdVotosFamilia < 1 ? 1 : v.qtdVotosFamilia;
-    result[key] = (result[key] ?? 0) + q;
+
+  // Votantes — usa municipioNome (join) ou cidadeNome (texto livre) como fallback
+  if (fonte == FonteEstimativaMapa.todos || fonte == FonteEstimativaMapa.apenasVotantes) {
+    for (final v in votantes) {
+      if (onlyApoiadorId != null && v.apoiadorId != onlyApoiadorId) continue;
+      final nome = v.municipioNome ?? v.cidadeNome;
+      if (nome == null || nome.trim().isEmpty) continue;
+      final key = normalizarNomeMunicipioMT(nome);
+      final q = v.qtdVotosFamilia < 1 ? 1 : v.qtdVotosFamilia;
+      result[key] = (result[key] ?? 0) + q;
+    }
   }
+
   return result;
 }
 
@@ -55,6 +65,7 @@ final mapaEstimativaFiltradaProvider = Provider<Map<String, int>>((ref) {
     apoiadores,
     votantes,
     onlyApoiadorId: filtros.apoiadorId,
+    fonte: filtros.fonteEstimativa,
   );
 
   final cdRgintCache = ref.watch(municipioCdRgintCacheProvider).valueOrNull;
@@ -67,7 +78,8 @@ final mapaEstimativaFiltradaProvider = Provider<Map<String, int>>((ref) {
   }
 
   if (filtros.regiaoCdRgint != null && filtros.regiaoCdRgint!.isNotEmpty && cdRgintCache != null) {
-    final permitidas = cdRgintCache.entries.where((e) => e.value == filtros.regiaoCdRgint).map((e) => e.key).toSet();
+    final permitidas =
+        cdRgintCache.entries.where((e) => e.value == filtros.regiaoCdRgint).map((e) => e.key).toSet();
     map = _intersecionarChaves(map, permitidas);
   }
 
@@ -99,7 +111,8 @@ final mapaMarcadoresFiltradosProvider = Provider<Map<String, MapaMarcadorCidade>
   }
 
   if (filtros.regiaoCdRgint != null && filtros.regiaoCdRgint!.isNotEmpty && cdRgintCache != null) {
-    final permitidas = cdRgintCache.entries.where((e) => e.value == filtros.regiaoCdRgint).map((e) => e.key).toSet();
+    final permitidas =
+        cdRgintCache.entries.where((e) => e.value == filtros.regiaoCdRgint).map((e) => e.key).toSet();
     map = _intersecionarChaves(map, permitidas);
   }
 
@@ -110,10 +123,14 @@ final mapaMarcadoresFiltradosProvider = Provider<Map<String, MapaMarcadorCidade>
   return map;
 });
 
-/// Votos TSE: mapa completo ou restrito às cidades que ainda aparecem com os filtros ativos.
+/// Votos TSE: mapa completo, restrito por filtros, ou vazio quando TSE está desligado.
 final mapaVotosTseAjustadosProvider = Provider<Map<String, int>>((ref) {
-  final full = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
   final filtros = ref.watch(mapaFiltrosProvider);
+
+  // TSE desligado → não passa dados para o widget (círculos somem)
+  if (!filtros.mostrarTSE) return {};
+
+  final full = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
 
   final temFiltro = filtros.cidadeKey != null ||
       (filtros.regiaoCdRgint != null && filtros.regiaoCdRgint!.isNotEmpty) ||

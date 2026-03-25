@@ -9,6 +9,8 @@ class Votante {
   final String? municipioId;
   /// Preenchido quando a lista vem com join `municipios(nome)`.
   final String? municipioNome;
+  /// Nome de cidade em texto livre — salvo mesmo quando municipio_id não pôde ser resolvido.
+  final String? cidadeNome;
   final String abrangencia; // Individual | Familiar
   final int qtdVotosFamilia;
   final String? cep;
@@ -26,6 +28,7 @@ class Votante {
     this.email,
     this.municipioId,
     this.municipioNome,
+    this.cidadeNome,
     this.abrangencia = 'Individual',
     this.qtdVotosFamilia = 1,
     this.cep,
@@ -33,6 +36,9 @@ class Votante {
     this.numero,
     this.complemento,
   });
+
+  /// Nome de exibição da cidade: join > texto livre > '—'.
+  String get cidadeDisplay => municipioNome ?? cidadeNome ?? '';
 
   factory Votante.fromJson(Map<String, dynamic> json) {
     final mun = json['municipios'];
@@ -50,6 +56,7 @@ class Votante {
       email: json['email'] as String?,
       municipioId: json['municipio_id'] as String?,
       municipioNome: munNome,
+      cidadeNome: json['cidade_nome'] as String?,
       abrangencia: json['abrangencia'] as String? ?? 'Individual',
       qtdVotosFamilia: (json['qtd_votos_familia'] as num?)?.toInt() ?? 1,
       cep: json['cep'] as String?,
@@ -68,6 +75,7 @@ class Votante {
         'telefone': telefone,
         'email': email,
         'municipio_id': municipioId,
+        'cidade_nome': cidadeNome,
         'abrangencia': abrangencia,
         'qtd_votos_familia': qtdVotosFamilia,
         'cep': cep,

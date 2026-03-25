@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
 import '../../../models/municipio.dart';
 import '../../../core/utils/municipio_resolver.dart';
+import '../../../core/supabase/municipios_seed.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../../core/config/env_config.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -153,6 +154,7 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
 
     var municipioIdFinal = params.municipioId;
     if (municipioIdFinal == null || municipioIdFinal.trim().isEmpty) {
+      await ensureMunicipiosMtSeeded(client);
       final resMun = await client.from('municipios').select();
       final listaMun = (resMun as List).map((e) => Municipio.fromJson(e as Map<String, dynamic>)).toList();
       municipioIdFinal = municipioIdParaNomeCidade(params.cidadeNome, listaMun);

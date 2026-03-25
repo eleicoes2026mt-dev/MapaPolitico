@@ -1,19 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
@@ -21,29 +8,125 @@
   <meta name="description" content="CampanhaMT - Gestão Eleitoral MT. Campanha eleitoral no Mato Grosso.">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 
-  <!-- iOS meta tags & icons -->
+  <!-- PWA / iOS -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="CampanhaMT">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/Icon-512.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/x-icon" href="favicon.ico"/>
 
   <title>CampanhaMT - Gestão Eleitoral</title>
   <link rel="manifest" href="manifest.json">
-  <!-- Google Maps API (Maps JavaScript API) -->
+
+  <!-- Google Maps API -->
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDgeOvier1TIBJJd3o0ElQoMiugqrnOrCI"></script>
+
+  <script>
+    // ── PWA: captura o prompt de instalação ──────────────────────────────────
+    window._pwaInstallPrompt = null;
+    window._pwaInstalled = false;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      window._pwaInstallPrompt = e;
+      // Notifica o Flutter via CustomEvent (sem necessitar de allowInterop)
+      window.dispatchEvent(new CustomEvent('pwa-install-available'));
+    });
+
+    window.addEventListener('appinstalled', () => {
+      window._pwaInstalled = true;
+      window._pwaInstallPrompt = null;
+      window.dispatchEvent(new CustomEvent('pwa-app-installed'));
+    });
+
+    // Chamado pelo Flutter para abrir o prompt de instalação
+    window.pwaInstall = function() {
+      if (!window._pwaInstallPrompt) return Promise.resolve('unavailable');
+      return window._pwaInstallPrompt.prompt().then(() =>
+        window._pwaInstallPrompt.userChoice
+      ).then((choice) => {
+        window._pwaInstallPrompt = null;
+        return choice.outcome; // 'accepted' | 'dismissed'
+      });
+    };
+
+    window.pwaCanInstall = function() {
+      return window._pwaInstallPrompt !== null;
+    };
+
+    window.pwaIsInstalled = function() {
+      return window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+    };
+
+    // ── Notificações: permissão e subscrição push ────────────────────────────
+    window.notifPermission = function() {
+      return Notification.permission; // 'default' | 'granted' | 'denied'
+    };
+
+    window.notifRequestPermission = function() {
+      return Notification.requestPermission();
+    };
+
+    // Registra o service worker de push e retorna a subscrição JSON
+    window.pushSubscribe = function(vapidPublicKey) {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        return Promise.reject('Push não suportado neste browser');
+      }
+      return navigator.serviceWorker.register('/push-sw.js', { scope: '/' })
+        .then((reg) => {
+          const appServerKey = _urlB64ToUint8Array(vapidPublicKey);
+          return reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: appServerKey,
+          });
+        })
+        .then((sub) => JSON.stringify(sub));
+    };
+
+    window.pushUnsubscribe = function() {
+      if (!('serviceWorker' in navigator)) return Promise.resolve(false);
+      return navigator.serviceWorker.ready
+        .then((reg) => reg.pushManager.getSubscription())
+        .then((sub) => sub ? sub.unsubscribe() : false);
+    };
+
+    window.pushCurrentSubscription = function() {
+      if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+      return navigator.serviceWorker.ready
+        .then((reg) => reg.pushManager.getSubscription())
+        .then((sub) => sub ? JSON.stringify(sub) : null);
+    };
+
+    // Helper: converte VAPID public key de base64url para Uint8Array
+    function _urlB64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    // Notificação local (quando o app está em foco)
+    window.showLocalNotification = function(title, body, url) {
+      if (Notification.permission !== 'granted') return;
+      const n = new Notification(title, {
+        body: body,
+        icon: '/icons/Icon-192.png',
+        badge: '/icons/Icon-192.png',
+      });
+      if (url) n.onclick = () => { window.focus(); window.location.href = url; };
+    };
+  </script>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

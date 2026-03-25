@@ -84,6 +84,7 @@ String _titleForRoute(String path) {
     '/assessores': 'Assessores',
     '/apoiadores': 'Apoiadores',
     '/votantes': 'Votantes',
+    '/agenda': 'Agenda',
     '/mensagens': 'Mensagens',
     '/benfeitorias': 'Benfeitorias',
     '/estrategia': 'Estratégia',
@@ -152,6 +153,7 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/assessores', 'Assessores', Icons.people_outline),
     _NavItem('/apoiadores', 'Apoiadores', Icons.person_add_alt_1_outlined),
     _NavItem('/votantes', 'Votantes', Icons.checklist_outlined),
+    _NavItem('/agenda', 'Agenda', Icons.event_outlined),
     _NavItem('/mensagens', 'Mensagens', Icons.chat_bubble_outline),
     _NavItem('/benfeitorias', 'Benfeitorias', Icons.favorite_border),
     _NavItem('/estrategia', 'Estratégia', Icons.location_on_outlined),
@@ -160,7 +162,7 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
-  /// Apoiador: só votantes, mapa e perfil — sem apoiadores (só candidato/assessor).
+  /// Apoiador: votantes, agenda (visitas da cidade), mapa e perfil.
   static const _pathsOcultosApoiador = {
     '/',
     '/assessores',

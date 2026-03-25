@@ -35,7 +35,38 @@ class DataNascimentoInputFormatter extends TextInputFormatter {
   }
 }
 
-/// Formata telefone ao digitar: (00) 0 0000-0000 (11 dígitos: DDD + 9 + 8).
+/// Celular: (DD) 9 NNNN-NNNN — até 11 dígitos. Fixo: (DD) NNNN-NNNN — até 10 dígitos.
+/// Se o 3.º dígito for 9, assume celular; caso contrário, fixo.
+String _formatMobileBr(String digits) {
+  if (digits.isEmpty) return '';
+  if (digits.length == 1) return '($digits';
+  if (digits.length == 2) return '($digits)';
+  final dd = digits.substring(0, 2);
+  final rest = digits.substring(2);
+  if (rest.length == 1) return '($dd) $rest';
+  if (rest.length <= 5) return '($dd) ${rest[0]} ${rest.substring(1)}';
+  return '($dd) ${rest[0]} ${rest.substring(1, 5)}-${rest.substring(5)}';
+}
+
+String _formatLandlineBr(String digits) {
+  if (digits.isEmpty) return '';
+  if (digits.length == 1) return '($digits';
+  if (digits.length == 2) return '($digits)';
+  final dd = digits.substring(0, 2);
+  final rest = digits.substring(2);
+  if (rest.length <= 4) return '($dd) $rest';
+  return '($dd) ${rest.substring(0, 4)}-${rest.substring(4)}';
+}
+
+/// Exibe telefone a partir só de dígitos (ex.: valor vindo do banco).
+String formatTelefoneBrFromDigits(String? stored) {
+  final d = telefoneSoDigitos(stored);
+  if (d.isEmpty) return '';
+  final mobile = d.length >= 3 && d[2] == '9';
+  return mobile ? _formatMobileBr(d) : _formatLandlineBr(d);
+}
+
+/// Formata telefone ao digitar: (00) 0 0000-0000 (celular) ou (00) 0000-0000 (fixo).
 class TelefoneInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -43,19 +74,40 @@ class TelefoneInputFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     final digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
-    if (digits.length > 11) return oldValue;
     if (digits.isEmpty) return newValue;
-    String s;
-    if (digits.length <= 2) {
-      s = digits.isEmpty ? '' : '($digits';
-    } else if (digits.length <= 7) {
-      s = '(${digits.substring(0, 2)}) ${digits[2]} ${digits.substring(3)}';
-    } else {
-      s = '(${digits.substring(0, 2)}) ${digits[2]} ${digits.substring(3, 7)}-${digits.substring(7)}';
-    }
+    final mobile = digits.length >= 3 && digits[2] == '9';
+    final maxLen = mobile ? 11 : 10;
+    if (digits.length > maxLen) return oldValue;
+    final s = mobile ? _formatMobileBr(digits) : _formatLandlineBr(digits);
     return TextEditingValue(text: s, selection: TextSelection.collapsed(offset: s.length));
   }
 }
+
+/// CEP: 00000-000
+class CepInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.length > 8) return oldValue;
+    if (digits.isEmpty) return newValue;
+    final s =
+        digits.length <= 5 ? digits : '${digits.substring(0, 5)}-${digits.substring(5)}';
+    return TextEditingValue(text: s, selection: TextSelection.collapsed(offset: s.length));
+  }
+}
+
+/// Exibe CEP a partir de até 8 dígitos.
+String formatCepDisplayFromDigits(String? stored) {
+  final d = (stored ?? '').replaceAll(RegExp(r'[^\d]'), '');
+  if (d.length <= 5) return d;
+  if (d.length <= 8) return '${d.substring(0, 5)}-${d.substring(5)}';
+  return '${d.substring(0, 5)}-${d.substring(5, 8)}';
+}
+
+String cepSoDigitos(String? s) => (s ?? '').replaceAll(RegExp(r'[^\d]'), '');
 
 String telefoneSoDigitos(String? s) => (s ?? '').replaceAll(RegExp(r'[^\d]'), '');
 

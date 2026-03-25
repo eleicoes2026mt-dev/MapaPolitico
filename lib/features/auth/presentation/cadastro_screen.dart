@@ -314,3 +314,4 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
     );
   }
 }
+

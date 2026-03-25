@@ -88,3 +88,4 @@ class _EstrategiaScreenState extends ConsumerState<EstrategiaScreen> with Single
     );
   }
 }
+

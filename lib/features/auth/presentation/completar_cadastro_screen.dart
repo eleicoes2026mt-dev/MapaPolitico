@@ -371,3 +371,4 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
     );
   }
 }
+

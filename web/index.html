@@ -2,7 +2,6 @@
 <html>
 <head>
   <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="CampanhaMT - Gestão Eleitoral MT. Campanha eleitoral no Mato Grosso.">
@@ -26,32 +25,35 @@
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDgeOvier1TIBJJd3o0ElQoMiugqrnOrCI"></script>
 
   <script>
+    // ── Detecção de plataforma ────────────────────────────────────────────────
+    window.pwaIsIOS = function() {
+      return /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+    };
+
+    window.pwaIsSafari = function() {
+      const ua = navigator.userAgent.toLowerCase();
+      return ua.includes('safari') && !ua.includes('chrome') && !ua.includes('chromium');
+    };
+
     // ── PWA: captura o prompt de instalação ──────────────────────────────────
     window._pwaInstallPrompt = null;
-    window._pwaInstalled = false;
 
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       window._pwaInstallPrompt = e;
-      // Notifica o Flutter via CustomEvent (sem necessitar de allowInterop)
       window.dispatchEvent(new CustomEvent('pwa-install-available'));
     });
 
     window.addEventListener('appinstalled', () => {
-      window._pwaInstalled = true;
       window._pwaInstallPrompt = null;
       window.dispatchEvent(new CustomEvent('pwa-app-installed'));
     });
 
-    // Chamado pelo Flutter para abrir o prompt de instalação
     window.pwaInstall = function() {
-      if (!window._pwaInstallPrompt) return Promise.resolve('unavailable');
-      return window._pwaInstallPrompt.prompt().then(() =>
-        window._pwaInstallPrompt.userChoice
-      ).then((choice) => {
-        window._pwaInstallPrompt = null;
-        return choice.outcome; // 'accepted' | 'dismissed'
-      });
+      if (!window._pwaInstallPrompt) return null;
+      window._pwaInstallPrompt.prompt();
+      window._pwaInstallPrompt = null;
+      return true;
     };
 
     window.pwaCanInstall = function() {
@@ -60,32 +62,26 @@
 
     window.pwaIsInstalled = function() {
       return window.matchMedia('(display-mode: standalone)').matches
-        || window.navigator.standalone === true;
+          || window.navigator.standalone === true;
     };
 
-    // ── Notificações: permissão e subscrição push ────────────────────────────
+    // ── Notificações ─────────────────────────────────────────────────────────
     window.notifPermission = function() {
-      return Notification.permission; // 'default' | 'granted' | 'denied'
+      return Notification.permission;
     };
 
     window.notifRequestPermission = function() {
       return Notification.requestPermission();
     };
 
-    // Registra o service worker de push e retorna a subscrição JSON
     window.pushSubscribe = function(vapidPublicKey) {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        return Promise.reject('Push não suportado neste browser');
+        return Promise.reject('Push não suportado');
       }
-      return navigator.serviceWorker.register('/push-sw.js', { scope: '/' })
-        .then((reg) => {
-          const appServerKey = _urlB64ToUint8Array(vapidPublicKey);
-          return reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: appServerKey,
-          });
-        })
-        .then((sub) => JSON.stringify(sub));
+      return navigator.serviceWorker.ready.then((reg) => {
+        const key = _urlB64ToUint8Array(vapidPublicKey);
+        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      }).then((sub) => JSON.stringify(sub));
     };
 
     window.pushUnsubscribe = function() {
@@ -102,28 +98,36 @@
         .then((sub) => sub ? JSON.stringify(sub) : null);
     };
 
-    // Helper: converte VAPID public key de base64url para Uint8Array
-    function _urlB64ToUint8Array(base64String) {
-      const padding = '='.repeat((4 - base64String.length % 4) % 4);
-      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-      const rawData = window.atob(base64);
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
-      return outputArray;
-    }
-
-    // Notificação local (quando o app está em foco)
     window.showLocalNotification = function(title, body, url) {
       if (Notification.permission !== 'granted') return;
       const n = new Notification(title, {
-        body: body,
+        body,
         icon: '/icons/Icon-192.png',
         badge: '/icons/Icon-192.png',
       });
       if (url) n.onclick = () => { window.focus(); window.location.href = url; };
     };
+
+    function _urlB64ToUint8Array(b64) {
+      const pad = '='.repeat((4 - b64.length % 4) % 4);
+      const base64 = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+      const raw = atob(base64);
+      const out = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+      return out;
+    }
+
+    // ── Registrar service worker de push ─────────────────────────────────────
+    // Registrado logo ao carregar para garantir que o SW está ativo quando
+    // o app solicitar push (o SW do Flutter gerencia o cache de assets).
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/push-sw.js', { scope: '/' })
+          .catch(() => {
+            // Falha silenciosa se o flutter_service_worker.js já ocupa o escopo.
+          });
+      });
+    }
   </script>
 </head>
 <body>

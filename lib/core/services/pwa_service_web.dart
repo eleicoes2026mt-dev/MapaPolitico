@@ -3,35 +3,19 @@ import 'dart:js_interop';
 
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:js' as js;
 
-// ── Declarações JS externas (dart:js_interop) ────────────────────────────────
+// ── Declarações JS externas ───────────────────────────────────────────────────
 
-@JS('pwaCanInstall')
-external bool _jsCanInstall();
-
-@JS('pwaIsInstalled')
-external bool _jsIsInstalled();
-
-@JS('pwaInstall')
-external JSPromise _jsInstall();
-
-@JS('notifPermission')
-external String _jsNotifPermission();
-
-@JS('notifRequestPermission')
-external JSPromise _jsRequestPermission();
-
-@JS('pushSubscribe')
-external JSPromise _jsPushSubscribe(String vapidKey);
-
-@JS('pushUnsubscribe')
-external JSPromise _jsPushUnsubscribe();
-
-@JS('pushCurrentSubscription')
-external JSPromise _jsCurrentSubscription();
-
-@JS('showLocalNotification')
-external void _jsShowLocal(String title, String body, String url);
+@JS('pwaCanInstall') external bool _jsCanInstall();
+@JS('pwaIsInstalled') external bool _jsIsInstalled();
+@JS('notifPermission') external String _jsNotifPermission();
+@JS('notifRequestPermission') external JSPromise _jsRequestPermission();
+@JS('pushSubscribe') external JSPromise _jsPushSubscribe(String vapidKey);
+@JS('pushUnsubscribe') external JSPromise _jsPushUnsubscribe();
+@JS('pushCurrentSubscription') external JSPromise _jsCurrentSubscription();
+@JS('showLocalNotification') external void _jsShowLocal(String title, String body, String url);
 
 // ── PwaService (implementação web real) ──────────────────────────────────────
 
@@ -41,35 +25,57 @@ class PwaService {
 
   final _installAvailableCtrl = StreamController<bool>.broadcast();
   Stream<bool> get onInstallAvailable => _installAvailableCtrl.stream;
-
   bool _initialized = false;
 
   void init() {
     if (_initialized) return;
     _initialized = true;
-    // Escuta eventos customizados disparados pelo index.html em vez de usar allowInterop
-    html.window.addEventListener('pwa-install-available', (e) {
-      _installAvailableCtrl.add(true);
-    });
-    html.window.addEventListener('pwa-app-installed', (e) {
-      _installAvailableCtrl.add(false);
-    });
+    html.window.addEventListener('pwa-install-available', (_) => _installAvailableCtrl.add(true));
+    html.window.addEventListener('pwa-app-installed', (_) => _installAvailableCtrl.add(false));
   }
 
-  bool get canInstall {
-    try { return _jsCanInstall(); } catch (_) { return false; }
+  // ── Detecção ──────────────────────────────────────────────────────────────
+
+  bool get isIOS {
+    try {
+      final ua = html.window.navigator.userAgent.toLowerCase();
+      return ua.contains('iphone') || ua.contains('ipad') || ua.contains('ipod');
+    } catch (_) { return false; }
   }
 
-  bool get isInstalled {
-    try { return _jsIsInstalled(); } catch (_) { return false; }
+  bool get isSafari {
+    try {
+      final ua = html.window.navigator.userAgent.toLowerCase();
+      return ua.contains('safari') && !ua.contains('chrome') && !ua.contains('chromium');
+    } catch (_) { return false; }
   }
 
+  // ── Onboarding ────────────────────────────────────────────────────────────
+
+  bool get hasSeenOnboarding {
+    try { return html.window.localStorage['pwa_onboarded'] == 'true'; }
+    catch (_) { return false; }
+  }
+
+  void markOnboardingSeen() {
+    try { html.window.localStorage['pwa_onboarded'] = 'true'; } catch (_) {}
+  }
+
+  // ── Install ───────────────────────────────────────────────────────────────
+
+  bool get canInstall { try { return _jsCanInstall(); } catch (_) { return false; } }
+  bool get isInstalled { try { return _jsIsInstalled(); } catch (_) { return false; } }
+
+  /// Dispara o prompt de instalação. Retorna 'triggered', 'unavailable' ou 'error'.
+  /// O resultado (accepted/dismissed) é tratado pelo evento 'pwa-app-installed'.
   Future<String> install() async {
     try {
-      final result = await _jsInstall().toDart;
-      return result?.dartify()?.toString() ?? 'dismissed';
+      final result = js.context.callMethod('pwaInstall');
+      return result != null ? 'triggered' : 'unavailable';
     } catch (_) { return 'unavailable'; }
   }
+
+  // ── Notificações ──────────────────────────────────────────────────────────
 
   String get notificationPermission {
     try { return _jsNotifPermission(); } catch (_) { return 'default'; }

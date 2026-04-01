@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../core/constants/app_constants.dart';
+import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../models/profile.dart';
 
@@ -18,6 +20,26 @@ class MainScaffold extends ConsumerStatefulWidget {
 class _MainScaffoldState extends ConsumerState<MainScaffold> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _sidebarExpanded = true;
+  bool _onboardingDisparado = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _triggerOnboarding());
+    }
+  }
+
+  Future<void> _triggerOnboarding() async {
+    if (_onboardingDisparado || !mounted) return;
+    // Aguarda o profile carregar para garantir que o usuário está autenticado
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    final profile = ref.read(profileProvider).valueOrNull;
+    if (profile == null) return; // não logado
+    setState(() => _onboardingDisparado = true);
+    await mostrarPwaOnboarding(context, ref);
+  }
 
   @override
   Widget build(BuildContext context) {

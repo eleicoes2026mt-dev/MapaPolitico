@@ -10,6 +10,10 @@ class PwaService {
   void init() {}
   bool get canInstall => false;
   bool get isInstalled => false;
+  bool get isIOS => false;
+  bool get isSafari => false;
+  bool get hasSeenOnboarding => true;
+  void markOnboardingSeen() {}
   Future<String> install() async => 'unavailable';
   String get notificationPermission => 'denied';
   bool get notificationsGranted => false;

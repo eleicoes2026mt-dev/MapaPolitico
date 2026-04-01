@@ -610,6 +610,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                   GraphicsOverlay(),
                   GraphicsOverlay(),
                 ]);
+                // Desabilita rotação — o mapa sempre fica com norte para cima.
+                ctrl.interactionOptions.rotateEnabled = false;
                 _mapController = ctrl;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   _loadGeo();

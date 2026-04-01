@@ -52,7 +52,7 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
     };
 
     final res = await supabase.from('mensagens').insert(row).select().single();
-    final mensagem = Mensagem.fromJson(res as Map<String, dynamic>);
+    final mensagem = Mensagem.fromJson(res);
 
     // Envia push notification se solicitado
     if (p.enviarPush) {

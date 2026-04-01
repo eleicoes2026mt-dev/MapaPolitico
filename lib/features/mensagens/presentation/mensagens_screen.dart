@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
 import '../../agenda/providers/agenda_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../providers/mensagens_provider.dart';
 
 class MensagensScreen extends ConsumerWidget {
@@ -57,54 +59,405 @@ class _Header extends ConsumerWidget {
 
 // ── Tab Mensagens ─────────────────────────────────────────────────────────────
 
-class _MensagensTab extends ConsumerWidget {
+class _MensagensTab extends ConsumerStatefulWidget {
   const _MensagensTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MensagensTab> createState() => _MensagensTabState();
+}
+
+class _MensagensTabState extends ConsumerState<_MensagensTab> {
+  Future<void> _abrirFormulario() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const _NovaMensagemDialog(),
+    );
+    ref.invalidate(mensagensListProvider);
+  }
+
+  Future<void> _excluir(Mensagem m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir mensagem'),
+        content: Text('Remover "${m.titulo}"?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(excluirMensagemProvider)(m.id);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mensagem removida.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _enviarPush(Mensagem m) async {
+    try {
+      await ref.read(enviarPushMensagemProvider)(m);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notificação enviada!')));
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString();
+        final naoDeployada = msg.contains('404') || msg.contains('Failed to fetch');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(naoDeployada
+              ? 'Edge function não deployada. Execute: supabase functions deploy send-push'
+              : 'Erro: $msg'),
+          duration: const Duration(seconds: 5),
+        ));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final count = ref.watch(mensagensCountProvider);
+    final profile = ref.watch(profileProvider).valueOrNull;
+    final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
+    final listAsync = ref.watch(mensagensListProvider);
 
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(mensagensCountProvider),
+      onRefresh: () async {
+        ref.invalidate(mensagensListProvider);
+        await ref.read(mensagensListProvider.future).then((_) {}).onError((_, __) {});
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Chip(
-                avatar: const Icon(Icons.chat_bubble_outline, size: 16),
-                label: Text('${count.valueOrNull ?? 0} mensagens'),
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.add),
-                label: const Text('Nova Mensagem'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 48),
-          Center(
-            child: Column(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Icon(Icons.send, size: 64, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
-                const SizedBox(height: 16),
-                Text('Nenhuma mensagem', style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
+                Chip(
+                  avatar: const Icon(Icons.chat_bubble_outline, size: 16),
+                  label: Text('${listAsync.valueOrNull?.length ?? 0} mensagens'),
+                ),
+                const Spacer(),
+                if (podeEditar)
+                  FilledButton.icon(
+                    onPressed: _abrirFormulario,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nova Mensagem'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            listAsync.when(
+              loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
+              error: (e, _) => Text('Erro: $e'),
+              data: (lista) {
+                if (lista.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 48),
+                      child: Column(
+                        children: [
+                          Icon(Icons.send, size: 64, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+                          const SizedBox(height: 16),
+                          Text('Nenhuma mensagem', style: theme.textTheme.titleMedium),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Crie mensagens globais, regionais ou de reunião',
+                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: lista.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (_, i) => _MensagemCard(
+                    mensagem: lista[i],
+                    podeEditar: podeEditar,
+                    onDelete: () => _excluir(lista[i]),
+                    onNotificar: () => _enviarPush(lista[i]),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Card de mensagem ──────────────────────────────────────────────────────────
+
+class _MensagemCard extends StatelessWidget {
+  const _MensagemCard({
+    required this.mensagem,
+    required this.podeEditar,
+    required this.onDelete,
+    required this.onNotificar,
+  });
+
+  final Mensagem mensagem;
+  final bool podeEditar;
+  final VoidCallback onDelete;
+  final VoidCallback onNotificar;
+
+  static const _escopoLabel = {
+    'global': 'Global',
+    'polo': 'Por polo',
+    'cidade': 'Por cidade',
+    'performance': 'Por performance',
+    'reuniao': 'Reunião',
+  };
+
+  static const _escopoIcon = {
+    'global': Icons.public,
+    'polo': Icons.hub_outlined,
+    'cidade': Icons.location_city_outlined,
+    'performance': Icons.trending_up_outlined,
+    'reuniao': Icons.event_outlined,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final m = mensagem;
+    final enviada = m.enviadaEm != null;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _escopoIcon[m.escopo] ?? Icons.public,
+                    size: 20,
+                    color: theme.colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(m.titulo, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(
+                        _escopoLabel[m.escopo] ?? m.escopo,
+                        style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.secondary),
+                      ),
+                    ],
+                  ),
+                ),
+                if (podeEditar)
+                  PopupMenuButton<String>(
+                    onSelected: (v) {
+                      if (v == 'notify') onNotificar();
+                      if (v == 'delete') onDelete();
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'notify',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.notifications_active_outlined),
+                          title: Text('Notificar todos'),
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(Icons.delete_outline),
+                          title: Text('Excluir'),
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+            if (m.corpo != null && m.corpo!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(m.corpo!, style: theme.textTheme.bodyMedium),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  enviada ? Icons.check_circle : Icons.schedule,
+                  size: 14,
+                  color: enviada ? Colors.green : theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
                 Text(
-                  'Crie mensagens globais, regionais ou de reunião',
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  enviada
+                      ? 'Enviada em ${DateFormat('dd/MM/yyyy HH:mm').format(m.enviadaEm!.toLocal())}'
+                      : 'Não enviada por push',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: enviada ? Colors.green : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (!enviada && podeEditar) ...[
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: onNotificar,
+                    icon: const Icon(Icons.notifications_active_outlined, size: 16),
+                    label: const Text('Enviar push'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Diálogo Nova Mensagem ─────────────────────────────────────────────────────
+
+class _NovaMensagemDialog extends ConsumerStatefulWidget {
+  const _NovaMensagemDialog();
+
+  @override
+  ConsumerState<_NovaMensagemDialog> createState() => _NovaMensagemDialogState();
+}
+
+class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _titulo = TextEditingController();
+  final _corpo = TextEditingController();
+  String _escopo = 'global';
+  bool _enviarPush = false;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _titulo.dispose();
+    _corpo.dispose();
+    super.dispose();
+  }
+
+  Future<void> _salvar() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _loading = true);
+    try {
+      await ref.read(criarMensagemProvider)(
+        NovaMensagemParams(
+          titulo: _titulo.text.trim(),
+          corpo: _corpo.text.trim().isEmpty ? null : _corpo.text.trim(),
+          escopo: _escopo,
+          enviarPush: _enviarPush,
+        ),
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_enviarPush ? 'Mensagem criada e notificação enviada!' : 'Mensagem criada.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Nova Mensagem'),
+      content: SizedBox(
+        width: 480,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _titulo,
+                  decoration: const InputDecoration(
+                    labelText: 'Título *',
+                    hintText: 'Ex.: Reunião em Cuiabá — 15/04',
+                  ),
+                  textCapitalization: TextCapitalization.sentences,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o título' : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _corpo,
+                  decoration: const InputDecoration(
+                    labelText: 'Conteúdo da mensagem',
+                    hintText: 'Descreva a mensagem para os apoiadores...',
+                    alignLabelWithHint: true,
+                  ),
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _escopo,
+                  decoration: const InputDecoration(
+                    labelText: 'Abrangência',
+                    prefixIcon: Icon(Icons.public_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'global', child: Text('Global — todos os usuários')),
+                    DropdownMenuItem(value: 'polo', child: Text('Por polo regional')),
+                    DropdownMenuItem(value: 'cidade', child: Text('Por cidade')),
+                  ],
+                  onChanged: (v) => setState(() => _escopo = v ?? 'global'),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enviar notificação push'),
+                  subtitle: const Text('Notifica todos os usuários com push ativado.'),
+                  value: _enviarPush,
+                  onChanged: (v) => setState(() => _enviarPush = v),
+                  secondary: const Icon(Icons.notifications_active_outlined),
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
-    ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _loading ? null : _salvar,
+          child: _loading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Criar mensagem'),
+        ),
+      ],
     );
   }
 }

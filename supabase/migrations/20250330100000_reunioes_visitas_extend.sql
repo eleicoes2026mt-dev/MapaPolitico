@@ -11,6 +11,7 @@ CREATE INDEX IF NOT EXISTS idx_reunioes_visivel ON reunioes(visivel_apoiadores, 
 
 -- Qualquer usuário autenticado pode ler reuniões visíveis para apoiadores.
 -- A filtragem por cidade (municipio_id) é feita no app.
+DROP POLICY IF EXISTS "reunioes_apoiador_visivel" ON reunioes;
 CREATE POLICY "reunioes_apoiador_visivel" ON reunioes
   FOR SELECT TO authenticated
   USING (visivel_apoiadores = true);

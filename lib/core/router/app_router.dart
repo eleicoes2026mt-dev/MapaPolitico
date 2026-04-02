@@ -12,6 +12,7 @@ import '../../features/assessores/presentation/assessores_screen.dart';
 import '../../features/apoiadores/presentation/apoiadores_screen.dart';
 import '../../features/votantes/presentation/votantes_screen.dart';
 import '../../features/agenda/presentation/agenda_screen.dart';
+import '../../features/apoiador_home/presentation/apoiador_home_screen.dart';
 import '../../features/mensagens/presentation/mensagens_screen.dart';
 import '../../features/benfeitorias/presentation/benfeitorias_screen.dart';
 import '../../features/estrategia/presentation/estrategia_screen.dart';
@@ -85,7 +86,7 @@ GoRouter createAppRouter({String? initialLocation}) {
           return homePathForProfileRole(role);
         }
         if (role == 'apoiador' && path == '/apoiadores') {
-          return '/votantes';
+          return '/apoiador-home';
         }
         if (role == 'assessor' && path == '/assessores') {
           return '/apoiadores';
@@ -131,6 +132,10 @@ GoRouter createAppRouter({String? initialLocation}) {
           GoRoute(
             path: '/votantes',
             pageBuilder: (_, state) => const NoTransitionPage(child: VotantesScreen()),
+          ),
+          GoRoute(
+            path: '/apoiador-home',
+            pageBuilder: (_, state) => const NoTransitionPage(child: ApoiadorHomeScreen()),
           ),
           GoRoute(
             path: '/agenda',

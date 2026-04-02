@@ -102,6 +102,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
 
 String _titleForRoute(String path) {
   const map = {
+    '/apoiador-home': 'Início',
     '/': 'Dashboard',
     '/assessores': 'Assessores',
     '/apoiadores': 'Apoiadores',
@@ -171,6 +172,7 @@ class _Sidebar extends StatelessWidget {
   final bool expanded;
 
   static const _items = [
+    _NavItem('/apoiador-home', 'Início', Icons.home_outlined),
     _NavItem('/', 'Dashboard', Icons.dashboard_outlined),
     _NavItem('/assessores', 'Assessores', Icons.people_outline),
     _NavItem('/apoiadores', 'Apoiadores', Icons.person_add_alt_1_outlined),
@@ -184,13 +186,12 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
-  /// Apoiador: votantes, agenda (visitas da cidade), mapa e perfil.
+  /// Apoiador: início (home), votantes, agenda, mensagens (notificações), mapa e perfil.
   static const _pathsOcultosApoiador = {
     '/',
     '/assessores',
     '/apoiadores',
     '/benfeitorias',
-    '/mensagens',
     '/estrategia',
     '/configuracoes',
   };

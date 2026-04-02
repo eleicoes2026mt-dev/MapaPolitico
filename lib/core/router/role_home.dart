@@ -4,7 +4,7 @@ String homePathForProfileRole(String? role) {
     case 'assessor':
       return '/apoiadores';
     case 'apoiador':
-      return '/votantes';
+      return '/apoiador-home';
     case 'candidato':
     case 'votante':
     default:

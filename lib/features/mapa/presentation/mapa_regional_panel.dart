@@ -201,6 +201,8 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final votosAjustados = ref.watch(mapaVotosTseAjustadosProvider);
+    // Dados TSE reais para o ranking (independente do toggle mostrarTSE)
+    final votosTseRawProvider = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
     final estimativaPorCidade = ref.watch(mapaEstimativaFiltradaProvider);
     final marcadores = ref.watch(mapaMarcadoresFiltradosProvider);
     final filtros = ref.watch(mapaFiltrosProvider);
@@ -223,7 +225,9 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
       margin: EdgeInsets.zero,
       child: MapaRegionalWidget(
         height: mapH,
-        votosPorMunicipio: votosAjustados.isEmpty ? null : votosAjustados,
+        // Passa os dados brutos TSE para o ranking (sempre visível no painel lateral)
+        // Os círculos no mapa usam votosAjustados (respeita o toggle mostrarTSE)
+        votosPorMunicipio: votosTseRawProvider.isNotEmpty ? votosTseRawProvider : (votosAjustados.isEmpty ? null : votosAjustados),
         estimativaPorCidade: estimativaPorCidade.isEmpty ? null : estimativaPorCidade,
         cidadesMarcadoresMapa: marcadores.isEmpty ? null : marcadores,
         regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,

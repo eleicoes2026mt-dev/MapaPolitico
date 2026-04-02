@@ -845,8 +845,6 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final totalVotosTseGeral = _totalVotosTseSomados();
     final totalEstimativaGeral = _totalEstimativaSomada();
 
-    // O ranking é exibido sempre que houver dados (TSE ou campanha) — controlado pelo botão toggle.
-    final temDadosRanking = ranking.isNotEmpty;
 
     // Dashboard/mobile embutido: mapa e ranking em coluna — o mapa deixa de ser tapado pelo painel.
     if (widget.embedRankingBelowMap) {
@@ -967,10 +965,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               Positioned.fill(
                 child: _buildMapStackContent(context, polygons, heatMarkers, markers),
               ),
-              // Botão toggle sempre visível quando há dados
-              if (temDadosRanking) buildToggleBtn(),
+              // Botão toggle sempre visível (independente de haver dados)
+              buildToggleBtn(),
               // Painel ranking — visível conforme toggle
-              if (temDadosRanking && _rankingVisivel)
+              if (_rankingVisivel)
                 narrow
                     ? Positioned(
                         left: 8,

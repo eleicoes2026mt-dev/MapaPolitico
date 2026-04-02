@@ -1054,7 +1054,7 @@ class _RankingPanel extends StatefulWidget {
   State<_RankingPanel> createState() => _RankingPanelState();
 }
 
-enum _ModoRanking { tse, rede, comparativo }
+enum _ModoRanking { nenhum, tse, rede, comparativo }
 
 // Cores de atingimento: ratio = estimativa / votos_tse
 String _corAtingimento(double ratio) {
@@ -1085,20 +1085,8 @@ class _RankingPanelState extends State<_RankingPanel> {
   @override
   void initState() {
     super.initState();
-    if (widget.mostrarMarcadores && !widget.mostrarTSE) {
-      _modo = _ModoRanking.rede;
-    }
-    // Ao montar pela primeira vez, ativa a camada correspondente ao tab padrão
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (_modo == _ModoRanking.tse) {
-        widget.onMostrarTSE?.call(true);
-        widget.onMostrarMarcadores?.call(false);
-      } else if (_modo == _ModoRanking.rede) {
-        widget.onMostrarTSE?.call(false);
-        widget.onMostrarMarcadores?.call(true);
-      }
-    });
+    // Começa sempre sem nenhuma seleção — usuário escolhe ao clicar
+    _modo = _ModoRanking.nenhum;
   }
 
   static const _medals = ['🥇', '🥈', '🥉'];
@@ -1145,6 +1133,7 @@ class _RankingPanelState extends State<_RankingPanel> {
     final temDadosRede = totalEstimativaGeral > 0;
     final modoRede = _modo == _ModoRanking.rede;
     final modoComparativo = _modo == _ModoRanking.comparativo;
+    final modoNenhum = _modo == _ModoRanking.nenhum;
 
     return Material(
       elevation: 4,
@@ -1192,7 +1181,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                     ),
                     const SizedBox(height: 8),
 
-                    // ── Toggle TSE / Rede (só aparece quando há dados de rede) ──
+                    // ── Tabs: clique ativa; clique duplo limpa o mapa ──
                     if (temDadosRede) ...[
                       Wrap(
                         spacing: 6,
@@ -1204,10 +1193,18 @@ class _RankingPanelState extends State<_RankingPanel> {
                             active: _modo == _ModoRanking.tse,
                             color: const Color(0xFF1565C0),
                             onTap: () {
-                              setState(() => _modo = _ModoRanking.tse);
-                              widget.onMostrarTSE?.call(true);
-                              widget.onMostrarMarcadores?.call(false);
-                              widget.onComparativoColors?.call(null);
+                              if (_modo == _ModoRanking.tse) {
+                                // Clique duplo → limpa
+                                setState(() => _modo = _ModoRanking.nenhum);
+                                widget.onMostrarTSE?.call(false);
+                                widget.onMostrarMarcadores?.call(false);
+                                widget.onComparativoColors?.call(null);
+                              } else {
+                                setState(() => _modo = _ModoRanking.tse);
+                                widget.onMostrarTSE?.call(true);
+                                widget.onMostrarMarcadores?.call(false);
+                                widget.onComparativoColors?.call(null);
+                              }
                             },
                           ),
                           _TabBtn(
@@ -1216,10 +1213,17 @@ class _RankingPanelState extends State<_RankingPanel> {
                             active: _modo == _ModoRanking.rede,
                             color: cs.secondary,
                             onTap: () {
-                              setState(() => _modo = _ModoRanking.rede);
-                              widget.onMostrarTSE?.call(false);
-                              widget.onMostrarMarcadores?.call(true);
-                              widget.onComparativoColors?.call(null);
+                              if (_modo == _ModoRanking.rede) {
+                                setState(() => _modo = _ModoRanking.nenhum);
+                                widget.onMostrarTSE?.call(false);
+                                widget.onMostrarMarcadores?.call(false);
+                                widget.onComparativoColors?.call(null);
+                              } else {
+                                setState(() => _modo = _ModoRanking.rede);
+                                widget.onMostrarTSE?.call(false);
+                                widget.onMostrarMarcadores?.call(true);
+                                widget.onComparativoColors?.call(null);
+                              }
                             },
                           ),
                           _TabBtn(
@@ -1228,17 +1232,21 @@ class _RankingPanelState extends State<_RankingPanel> {
                             active: _modo == _ModoRanking.comparativo,
                             color: Colors.teal,
                             onTap: () {
-                              setState(() => _modo = _ModoRanking.comparativo);
-                              widget.onMostrarTSE?.call(true);
-                              widget.onMostrarMarcadores?.call(true);
-                              // Calcula cores de atingimento para os polígonos
-                              final cores = <String, String>{};
-                              for (final r in ranking) {
-                                if (r.total > 0) {
-                                  cores[r.id] = _corAtingimento(r.totalEstimativa / r.total);
+                              if (_modo == _ModoRanking.comparativo) {
+                                setState(() => _modo = _ModoRanking.nenhum);
+                                widget.onMostrarTSE?.call(false);
+                                widget.onMostrarMarcadores?.call(false);
+                                widget.onComparativoColors?.call(null);
+                              } else {
+                                setState(() => _modo = _ModoRanking.comparativo);
+                                widget.onMostrarTSE?.call(true);
+                                widget.onMostrarMarcadores?.call(true);
+                                final cores = <String, String>{};
+                                for (final r in ranking) {
+                                  if (r.total > 0) cores[r.id] = _corAtingimento(r.totalEstimativa / r.total);
                                 }
+                                widget.onComparativoColors?.call(cores.isEmpty ? null : cores);
                               }
-                              widget.onComparativoColors?.call(cores.isEmpty ? null : cores);
                             },
                           ),
                         ],
@@ -1273,7 +1281,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          modoRede
+                          (modoRede || modoNenhum)
                               ? 'Toque na região para filtrar o mapa'
                               : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
                           style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
@@ -1283,9 +1291,11 @@ class _RankingPanelState extends State<_RankingPanel> {
                 ),
               ),
 
-              // ── Lista de regiões: TSE, Rede ou Comparativo ─────────────
+              // ── Lista: nenhum / TSE / Rede / Comparativo ───────────────
               Expanded(
-                child: modoComparativo
+                child: modoNenhum
+                    ? _buildListaNenhum(cs, theme)
+                    : modoComparativo
                     ? _buildListaComparativo(ranking, totalVotosTseGeral, totalEstimativaGeral, fmt, cs, theme)
                     : modoRede
                     ? _buildListaRede(rankingRede, totalEstimativaGeral, fmt, cs, theme)
@@ -1541,6 +1551,34 @@ class _RankingPanelState extends State<_RankingPanel> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ── Estado vazio: nenhuma camada selecionada ──────────────────────────────
+
+  Widget _buildListaNenhum(ColorScheme cs, ThemeData theme) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.touch_app_outlined, size: 40, color: cs.primary.withValues(alpha: 0.5)),
+            const SizedBox(height: 12),
+            Text(
+              'Selecione uma visualização',
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Toque em "Eleição 2022", "Minha Rede" ou "Comparativo" acima para carregar os dados no mapa.',
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
@@ -1998,26 +2036,34 @@ class _KpiChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 6),
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color.withValues(alpha: 0.8))),
+                Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
                 Text(
                   value,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: color,
+                    height: 1.1,
                   ),
                 ),
               ],

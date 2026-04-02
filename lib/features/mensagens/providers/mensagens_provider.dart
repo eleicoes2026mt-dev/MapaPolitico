@@ -87,18 +87,31 @@ final excluirMensagemProvider = Provider<Future<void> Function(String id)>((ref)
 
 // ── Enviar push de mensagem existente ─────────────────────────────────────────
 
-final enviarPushMensagemProvider = Provider<Future<void> Function(Mensagem)>((ref) {
+/// Retorna `{'sent': N, 'failed': N, 'total': N}` em caso de sucesso.
+/// Lança [Exception] com mensagem legível em caso de erro.
+final enviarPushMensagemProvider = Provider<Future<Map<String, dynamic>> Function(Mensagem)>((ref) {
   return (Mensagem m) async {
-    await supabase.functions.invoke('send-push', body: {
+    final res = await supabase.functions.invoke('send-push', body: {
       'title': m.titulo,
       'body': m.corpo ?? 'Nova mensagem da campanha.',
       'url': '/#/mensagens',
       'tag': 'mensagem-${m.id}',
     });
+
+    // status != 200 → lança com a mensagem real do servidor
+    if (res.status >= 400) {
+      final detail = res.data is Map ? (res.data as Map)['error'] ?? res.data.toString() : res.data?.toString() ?? '';
+      throw Exception('Erro ${res.status}: $detail');
+    }
+
     await supabase
         .from('mensagens')
         .update({'enviada_em': DateTime.now().toIso8601String()})
         .eq('id', m.id);
     ref.invalidate(mensagensListProvider);
+
+    return res.data is Map<String, dynamic>
+        ? res.data as Map<String, dynamic>
+        : {'sent': 0, 'failed': 0, 'total': 0};
   };
 });

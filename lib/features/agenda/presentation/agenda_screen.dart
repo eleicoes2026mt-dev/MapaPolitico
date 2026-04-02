@@ -238,7 +238,11 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         'tag': 'visita-${v.id}',
       });
 
-      // Registra a data de envio independente do resultado
+      if (r.status != null && r.status! >= 400) {
+        final detail = r.data is Map ? r.data['error'] ?? r.data.toString() : r.data?.toString() ?? '';
+        throw Exception('Erro ${r.status}: $detail');
+      }
+
       await supabase
           .from('reunioes')
           .update({'notificados_em': DateTime.now().toIso8601String()})
@@ -247,27 +251,24 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       ref.invalidate(todasVisitasProvider);
 
       if (!mounted) return;
-      final data = r.data as Map<String, dynamic>?;
+      final data = r.data is Map<String, dynamic> ? r.data as Map<String, dynamic> : null;
       final sent = data?['sent'] ?? 0;
+      final total = data?['total'] ?? 0;
+      final msg2 = total == 0
+          ? 'Enviado! Nenhum dispositivo inscrito ainda.\nVá em Configurações → ative Notificações.'
+          : 'Notificação enviada para $sent de $total dispositivos.';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Notificação enviada para $sent dispositivos.')),
+        SnackBar(content: Text(msg2), duration: const Duration(seconds: 5)),
       );
     } catch (e) {
       if (!mounted) return;
-      final msg = e.toString();
-      // Edge function não deployada ainda
-      final naoDeployada = msg.contains('404') ||
-          msg.contains('Failed to fetch') ||
-          msg.contains('not found');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            naoDeployada
-                ? 'Edge function "send-push" ainda não foi deployada no Supabase.\n'
-                    'Execute: supabase functions deploy send-push'
-                : 'Erro ao notificar: $msg',
-          ),
-          duration: const Duration(seconds: 6),
+          content: SelectableText('Erro ao notificar:\n${e.toString().replaceFirst("Exception: ", "")}'),
+          backgroundColor: Theme.of(context).colorScheme.errorContainer,
+          duration: const Duration(seconds: 8),
+          // placeholder para o restante do catch
+          // ignore
         ),
       );
     }

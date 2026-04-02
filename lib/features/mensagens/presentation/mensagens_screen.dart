@@ -98,19 +98,25 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
 
   Future<void> _enviarPush(Mensagem m) async {
     try {
-      await ref.read(enviarPushMensagemProvider)(m);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notificação enviada!')));
+      final result = await ref.read(enviarPushMensagemProvider)(m);
+      if (!mounted) return;
+      final sent = result['sent'] ?? 0;
+      final total = result['total'] ?? 0;
+      final msg = total == 0
+          ? 'Enviado! Nenhum dispositivo inscrito ainda.\n'
+              'Vá em Configurações → ative Notificações para se inscrever.'
+          : 'Enviado para $sent de $total dispositivos!';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg), duration: const Duration(seconds: 5)),
+      );
     } catch (e) {
-      if (mounted) {
-        final msg = e.toString();
-        final naoDeployada = msg.contains('404') || msg.contains('Failed to fetch');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(naoDeployada
-              ? 'Edge function não deployada. Execute: supabase functions deploy send-push'
-              : 'Erro: $msg'),
-          duration: const Duration(seconds: 5),
-        ));
-      }
+      if (!mounted) return;
+      // Mostra o erro REAL do servidor para facilitar diagnóstico
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: SelectableText('Erro ao enviar push:\n${e.toString().replaceFirst("Exception: ", "")}'),
+        duration: const Duration(seconds: 8),
+        backgroundColor: Theme.of(context).colorScheme.errorContainer,
+      ));
     }
   }
 

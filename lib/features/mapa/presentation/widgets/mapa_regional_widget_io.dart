@@ -59,6 +59,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onMostrarMarcadores,
     this.mostrarTSE = false,
     this.mostrarMarcadores = false,
+    this.onComparativoColors,
   });
 
   final double height;
@@ -82,6 +83,7 @@ class MapaRegionalWidget extends StatefulWidget {
   final void Function(bool)? onMostrarMarcadores;
   final bool mostrarTSE;
   final bool mostrarMarcadores;
+  final void Function(Map<String, String>?)? onComparativoColors;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();

@@ -256,6 +256,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         onMostrarMarcadores: (v) {
           if (v != filtros.mostrarMarcadores) ref.read(mapaFiltrosProvider.notifier).toggleMarcadores();
         },
+        onComparativoColors: (_) {}, // Cores tratadas internamente no widget
         mostrarTSE: filtros.mostrarTSE,
         mostrarMarcadores: filtros.mostrarMarcadores,
         locaisVotacaoContent: _selectedMunicipio != null
@@ -287,8 +288,9 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         ),
         SizedBox(height: padding * 0.75),
       ],
-      if (votosAjustados.isNotEmpty) ...[
-        MapaTseLegenda(votosPorCidade: votosAjustados),
+      // Legenda TSE sempre visível quando o candidato tem dados TSE
+      if (votosTseRaw.isNotEmpty) ...[
+        MapaTseLegenda(votosPorCidade: votosTseRaw),
         SizedBox(height: padding * 0.5),
       ],
       const MapaKpisRegiaoPanel(),

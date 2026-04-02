@@ -190,11 +190,11 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final w = MediaQuery.sizeOf(context).width;
     final h = MediaQuery.sizeOf(context).height;
     if (w < 600) {
-      // ~72% do viewport: mapa (metade superior) + ranking com ~5 regiões visíveis ao scroll.
-      return (h * 0.72).clamp(560.0, 840.0);
+      // Mobile: 88% do viewport — mapa + ranking com espaço generoso para o painel.
+      return (h * 0.88).clamp(640.0, 980.0);
     }
-    if (w < 1100) return (h * 0.52).clamp(440.0, 680.0);
-    return (h * 0.54).clamp(520.0, 720.0);
+    if (w < 1100) return (h * 0.60).clamp(500.0, 760.0);
+    return (h * 0.58).clamp(560.0, 780.0);
   }
 
   @override

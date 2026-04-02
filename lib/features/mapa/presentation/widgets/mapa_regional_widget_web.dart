@@ -957,12 +957,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Mapa: 45% — ranking: 55% no modo embutido mobile
             Expanded(
-              flex: 13,
+              flex: 9,
               child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels),
             ),
             Expanded(
-              flex: 11,
+              flex: 13,
               child: _RankingPanel(
                 ranking: ranking,
                 totalVotosTseGeral: totalVotosTseGeral,

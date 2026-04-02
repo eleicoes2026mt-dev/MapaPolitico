@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/geo/lat_lng.dart';
@@ -956,7 +957,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   }
 }
 
-/// Painel lateral analítico: ranking de regiões com votos e percentual; expande com cidades (estimativa vs TSE); toque na cidade abre locais de votação (explodindo dentro deste bloco).
+/// Painel lateral analítico — redesenhado com barras, medalhas e filtragem por clique.
 class _RankingPanel extends StatelessWidget {
   const _RankingPanel({
     required this.ranking,
@@ -984,289 +985,420 @@ class _RankingPanel extends StatelessWidget {
   /// Alterna foco: se já for [id], o mapa volta a mostrar todo o estado.
   final void Function(String regiaoId) onToggleFocusRegiao;
 
+  static const _medals = ['🥇', '🥈', '🥉'];
+
+  // Cor da barra de progresso por posição (gradiente de intensidade)
+  static Color _barColor(int rank, ColorScheme cs) {
+    if (rank == 0) return const Color(0xFFFFB300); // ouro
+    if (rank == 1) return const Color(0xFF78909C); // prata
+    if (rank == 2) return const Color(0xFF8D6E63); // bronze
+    return cs.primary;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final showLocais = locaisVotacaoContent != null;
-    final totalVotos = totalVotosTseGeral;
-    final totalEstimativa = totalEstimativaGeral;
+    final fmt = NumberFormat('#,##0', 'pt_BR');
     final screenW = MediaQuery.sizeOf(context).width;
-    // Lateral: ~42% da largura (200–400 px). Compacto: barra inferior em largura total.
     final panelWidth = layoutCompact
         ? double.infinity
-        : math.min(400.0, math.max(200.0, screenW * 0.42));
+        : math.min(400.0, math.max(220.0, screenW * 0.42));
+
     return Material(
       elevation: 4,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: panelWidth,
-        padding: EdgeInsets.symmetric(vertical: layoutCompact ? 4 : 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.max,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Ranking por região (votos)',
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  if (onCityTap != null && !layoutCompact)
-                    Text(
-                      'Toque numa cidade para ver locais de votação',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            // Resumo geral: votos totais e estimativa
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: layoutCompact ? 4 : 8),
-              child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 10, vertical: layoutCompact ? 6 : 8),
+      borderRadius: BorderRadius.circular(12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: panelWidth,
+          color: theme.colorScheme.surface,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Cabeçalho ──────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  color: cs.primaryContainer.withValues(alpha: 0.35),
+                  border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Resultado geral',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.how_to_vote_outlined, size: 16, color: theme.colorScheme.primary),
-                        const SizedBox(width: 6),
+                        Icon(Icons.leaderboard_outlined, size: 18, color: cs.primary),
+                        const SizedBox(width: 8),
                         Text(
-                          'Votos totais (TSE): ',
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          'Ranking por Região',
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                         ),
-                        Text(
-                          '$totalVotos',
-                          style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700, color: theme.colorScheme.primary),
-                        ),
-                      ],
-                    ),
-                    if (totalEstimativa > 0) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Icon(Icons.analytics_outlined, size: 16, color: theme.colorScheme.primary),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Estimativa (campanha): ',
-                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                          Text(
-                            '$totalEstimativa',
-                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.primary),
+                        if (focusedRegiaoId != null) ...[
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: () => onToggleFocusRegiao(focusedRegiaoId!),
+                            icon: const Icon(Icons.zoom_out_map, size: 14),
+                            label: const Text('Ver tudo', style: TextStyle(fontSize: 11)),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
                           ),
                         ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // KPIs resumo
+                    Row(
+                      children: [
+                        Expanded(child: _KpiChip(
+                          icon: Icons.how_to_vote_outlined,
+                          label: 'TSE 2022',
+                          value: fmt.format(totalVotosTseGeral),
+                          color: cs.primary,
+                          theme: theme,
+                        )),
+                        const SizedBox(width: 8),
+                        if (totalEstimativaGeral > 0)
+                          Expanded(child: _KpiChip(
+                            icon: Icons.analytics_outlined,
+                            label: 'Campanha',
+                            value: fmt.format(totalEstimativaGeral),
+                            color: cs.secondary,
+                            theme: theme,
+                          )),
+                      ],
+                    ),
+                    if (onCityTap != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
+                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                        ),
                       ),
-                    ],
                   ],
                 ),
               ),
-            ),
-            const Divider(height: 1),
-            // Cabeçalho analítico: # | Região | Votos | %
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Row(
-                children: [
-                  SizedBox(width: 22, child: Text('#', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant))),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text('Região', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant))),
-                  Text('Votos', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant)),
-                  const SizedBox(width: 8),
-                  SizedBox(width: 44, child: Text('%', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.right)),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView.builder(
-                // shrinkWrap aqui dentro de Expanded faz a lista pedir altura total → overflow.
-                itemCount: ranking.length,
-                itemBuilder: (context, i) {
-                  final r = ranking[i];
-                  final regionContainsSelected = selectedMunicipioKey != null &&
-                      r.cidades.any((c) => c.key == selectedMunicipioKey);
-                  return Container(
-                    decoration: regionContainsSelected
-                        ? BoxDecoration(
-                            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(4),
-                          )
-                        : null,
-                    child: ExpansionTile(
-                      initiallyExpanded: regionContainsSelected || (focusedRegiaoId == r.id && ranking.length == 1),
-                      visualDensity: layoutCompact ? VisualDensity.compact : VisualDensity.standard,
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                      title: Row(
-                        children: [
-                          IconButton(
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                            style: IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                            icon: Icon(
-                              focusedRegiaoId == r.id ? Icons.filter_alt : Icons.filter_alt_outlined,
-                              size: 20,
-                              color: focusedRegiaoId == r.id
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.onSurfaceVariant,
-                            ),
-                            tooltip: focusedRegiaoId == r.id ? 'Mostrar todo o estado' : 'Só esta região no mapa',
-                            onPressed: () => onToggleFocusRegiao(r.id),
-                          ),
-                          SizedBox(
-                            width: 18,
-                            child: Text(
-                              '${i + 1}',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: theme.colorScheme.primary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              r.nome,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontWeight: regionContainsSelected ? FontWeight.w600 : null,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (r.totalEstimativa > 0)
-                            Text(
-                              'est. ${r.totalEstimativa} | ',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          Text(
-                            '${r.total}',
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 44,
-                            child: Text(
-                              '${r.pct.toStringAsFixed(1)}%',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: theme.colorScheme.primary,
-                              ),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                        ],
+
+              // ── Lista de regiões ────────────────────────────────────────
+              Expanded(
+                child: ListView.builder(
+                  itemCount: ranking.length,
+                  itemBuilder: (context, i) {
+                    final r = ranking[i];
+                    final isFocused = focusedRegiaoId == r.id;
+                    final containsSelected = selectedMunicipioKey != null &&
+                        r.cidades.any((c) => c.key == selectedMunicipioKey);
+                    final barColor = _barColor(i, cs);
+                    final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: isFocused
+                            ? Border.all(color: cs.primary, width: 2)
+                            : containsSelected
+                                ? Border.all(color: cs.secondary, width: 1)
+                                : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+                        color: isFocused
+                            ? cs.primaryContainer.withValues(alpha: 0.25)
+                            : containsSelected
+                                ? cs.secondaryContainer.withValues(alpha: 0.15)
+                                : null,
                       ),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(left: 12, right: 12, bottom: 4),
-                          child: Row(
-                            children: [
-                              const SizedBox(width: 28),
-                              Expanded(child: Text('Cidade', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant))),
-                              Text('Votos', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant)),
-                              const SizedBox(width: 8),
-                              SizedBox(width: 44, child: Text('%', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.right)),
-                            ],
+                      child: ExpansionTile(
+                        initiallyExpanded: containsSelected || isFocused,
+                        shape: const RoundedRectangleBorder(),
+                        collapsedShape: const RoundedRectangleBorder(),
+                        tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                        title: InkWell(
+                          onTap: () => onToggleFocusRegiao(r.id),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    // Medal / rank
+                                    Text(
+                                      medalLabel,
+                                      style: TextStyle(
+                                        fontSize: i < 3 ? 18 : 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: i >= 3 ? cs.onSurfaceVariant : null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        r.nome,
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    // % badge
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: barColor.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        '${r.pct.toStringAsFixed(1)}%',
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: barColor,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isFocused)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.map, size: 16, color: cs.primary),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                // Barra de progresso TSE
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: r.pct / 100,
+                                    minHeight: 5,
+                                    backgroundColor: barColor.withValues(alpha: 0.12),
+                                    valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                // Números TSE + estimativa
+                                Row(
+                                  children: [
+                                    Icon(Icons.how_to_vote_outlined, size: 12, color: cs.onSurfaceVariant),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      fmt.format(r.total),
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: cs.onSurface,
+                                      ),
+                                    ),
+                                    Text(
+                                      ' votos TSE',
+                                      style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                                    ),
+                                    if (r.totalEstimativa > 0) ...[
+                                      const SizedBox(width: 8),
+                                      Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        fmt.format(r.totalEstimativa),
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: cs.secondary,
+                                        ),
+                                      ),
+                                      Text(
+                                        ' camp.',
+                                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    Text(
+                                      isFocused ? 'Ver tudo' : 'Filtrar mapa',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: cs.primary,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        ...r.cidades.map((c) {
-                          final isSelected = c.key == selectedMunicipioKey;
-                          return InkWell(
-                            onTap: () => onCityTap?.call(c.key),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 8, right: 8, bottom: 4),
-                              padding: const EdgeInsets.only(left: 20, right: 12, top: 6, bottom: 8),
-                              decoration: isSelected
-                                  ? BoxDecoration(
-                                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.7),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: theme.colorScheme.primary, width: 1.5),
-                                    )
-                                  : null,
-                              child: Row(
-                                children: [
-                                  if (isSelected)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: Icon(Icons.place, size: 16, color: theme.colorScheme.primary),
-                                    ),
-                                  Expanded(
-                                    child: Text(
-                                      c.cidade,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
-                                        fontWeight: isSelected ? FontWeight.w600 : null,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  if (!isSelected)
-                                    Icon(Icons.place_outlined, size: 14, color: theme.colorScheme.primary),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    c.estimativa > 0 ? 'est. ${c.estimativa} | ${c.votos}' : '${c.votos}',
+                        children: [
+                          const Divider(height: 1),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Cidade',
                                     style: theme.textTheme.labelSmall?.copyWith(
-                                      fontWeight: isSelected ? FontWeight.w600 : null,
+                                      fontWeight: FontWeight.w700,
+                                      color: cs.onSurfaceVariant,
+                                      letterSpacing: 0.5,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  SizedBox(
-                                    width: 44,
-                                    child: Text(
-                                      '${c.pct.toStringAsFixed(1)}%',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: theme.colorScheme.onSurfaceVariant,
-                                        fontWeight: isSelected ? FontWeight.w600 : null,
-                                      ),
-                                      textAlign: TextAlign.right,
+                                ),
+                                SizedBox(
+                                  width: 90,
+                                  child: Text(
+                                    'TSE',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: cs.onSurfaceVariant,
                                     ),
+                                    textAlign: TextAlign.right,
                                   ),
-                                ],
-                              ),
+                                ),
+                                SizedBox(
+                                  width: 40,
+                                  child: Text(
+                                    '%',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.right,
+                                  ),
+                                ),
+                              ],
                             ),
-                          );
-                        }),
-                      ],
-                    ),
-                  );
-                },
+                          ),
+                          ...r.cidades.map((c) {
+                            final isSelected = c.key == selectedMunicipioKey;
+                            return InkWell(
+                              onTap: () => onCityTap?.call(c.key),
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                decoration: isSelected
+                                    ? BoxDecoration(
+                                        color: cs.primaryContainer.withValues(alpha: 0.5),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: cs.primary, width: 1),
+                                      )
+                                    : null,
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      isSelected ? Icons.place : Icons.circle,
+                                      size: isSelected ? 14 : 6,
+                                      color: isSelected ? cs.primary : barColor.withValues(alpha: 0.6),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            c.cidade,
+                                            style: theme.textTheme.bodySmall?.copyWith(
+                                              fontWeight: isSelected ? FontWeight.bold : null,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (c.estimativa > 0)
+                                            Text(
+                                              '${fmt.format(c.estimativa)} campanha',
+                                              style: theme.textTheme.labelSmall?.copyWith(
+                                                color: cs.secondary,
+                                                fontSize: 9,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 90,
+                                      child: Text(
+                                        fmt.format(c.votos),
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 40,
+                                      child: Text(
+                                        '${c.pct.toStringAsFixed(1)}%',
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                        textAlign: TextAlign.right,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 4),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-            if (showLocais) ...[
-              const Divider(height: 1),
-              Expanded(
-                flex: 1,
-                child: locaisVotacaoContent!,
-              ),
+
+              if (showLocais) ...[
+                const Divider(height: 1),
+                Expanded(flex: 1, child: locaisVotacaoContent!),
+              ],
             ],
-          ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Chip de KPI no cabeçalho do ranking.
+class _KpiChip extends StatelessWidget {
+  const _KpiChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.theme,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: theme.textTheme.labelSmall?.copyWith(color: color.withValues(alpha: 0.8))),
+                Text(
+                  value,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

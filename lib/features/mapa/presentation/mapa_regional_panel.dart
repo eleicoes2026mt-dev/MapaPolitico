@@ -465,65 +465,99 @@ class _CamadasToggleRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(mapaFiltrosProvider.notifier);
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final cs = theme.colorScheme;
 
-    Widget chipFonte(String label, IconData icon, FonteEstimativaMapa value) {
-      final active = filtros.fonteEstimativa == value;
+    Widget chip({
+      required String label,
+      required IconData icon,
+      required bool active,
+      required VoidCallback onTap,
+      Color? activeColor,
+    }) {
+      final bg = activeColor ?? cs.primary;
       return FilterChip(
-        avatar: Icon(icon, size: 16, color: active ? colorScheme.onPrimary : colorScheme.primary),
-        label: Text(label, style: TextStyle(color: active ? colorScheme.onPrimary : null)),
+        avatar: Icon(icon, size: 16, color: active ? cs.onPrimary : bg),
+        label: Text(label, style: TextStyle(color: active ? cs.onPrimary : null)),
         selected: active,
-        selectedColor: colorScheme.primary,
-        checkmarkColor: colorScheme.onPrimary,
+        selectedColor: bg,
+        checkmarkColor: cs.onPrimary,
         showCheckmark: false,
-        onSelected: (_) => notifier.setFonteEstimativa(value),
+        onSelected: (_) => onTap(),
       );
     }
 
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Camadas',
+              'CAMADAS DO MAPA',
               style: theme.textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.8,
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.0,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
+
+            // ── Linha 1: camadas principais ──────────────────────────────
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: [
-                // ── Toggle Eleição passada (TSE) ──
-                FilterChip(
-                  avatar: Icon(
-                    Icons.how_to_vote_outlined,
-                    size: 16,
-                    color: filtros.mostrarTSE ? colorScheme.onPrimary : colorScheme.primary,
-                  ),
-                  label: Text(
-                    'Eleição 2022 (TSE)',
-                    style: TextStyle(color: filtros.mostrarTSE ? colorScheme.onPrimary : null),
-                  ),
-                  selected: filtros.mostrarTSE,
-                  selectedColor: colorScheme.primary,
-                  checkmarkColor: colorScheme.onPrimary,
-                  showCheckmark: false,
-                  onSelected: (_) => notifier.toggleTSE(),
+                chip(
+                  label: 'Eleição 2022 (TSE)',
+                  icon: Icons.how_to_vote_outlined,
+                  active: filtros.mostrarTSE,
+                  onTap: notifier.toggleTSE,
+                  activeColor: const Color(0xFF1565C0),
                 ),
-                const SizedBox(width: 4),
-                // ── Fonte da estimativa ──
-                chipFonte('Todos', Icons.groups_outlined, FonteEstimativaMapa.todos),
-                chipFonte('Só votantes', Icons.how_to_reg_outlined, FonteEstimativaMapa.apenasVotantes),
-                chipFonte('Só apoiadores', Icons.handshake_outlined, FonteEstimativaMapa.apenasApoiadores),
+                chip(
+                  label: 'Minha rede (marcadores)',
+                  icon: Icons.groups_outlined,
+                  active: filtros.mostrarMarcadores,
+                  onTap: notifier.toggleMarcadores,
+                  activeColor: cs.secondary,
+                ),
               ],
             ),
+
+            // ── Linha 2: filtro de fonte (só quando marcadores ligados) ──
+            if (filtros.mostrarMarcadores) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Mostrar na rede:',
+                style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  chip(
+                    label: 'Todos',
+                    icon: Icons.groups_outlined,
+                    active: filtros.fonteEstimativa == FonteEstimativaMapa.todos,
+                    onTap: () => notifier.setFonteEstimativa(FonteEstimativaMapa.todos),
+                  ),
+                  chip(
+                    label: 'Só votantes',
+                    icon: Icons.how_to_reg_outlined,
+                    active: filtros.fonteEstimativa == FonteEstimativaMapa.apenasVotantes,
+                    onTap: () => notifier.setFonteEstimativa(FonteEstimativaMapa.apenasVotantes),
+                  ),
+                  chip(
+                    label: 'Só apoiadores',
+                    icon: Icons.handshake_outlined,
+                    active: filtros.fonteEstimativa == FonteEstimativaMapa.apenasApoiadores,
+                    onTap: () => notifier.setFonteEstimativa(FonteEstimativaMapa.apenasApoiadores),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

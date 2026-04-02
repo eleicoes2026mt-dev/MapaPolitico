@@ -2,11 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Quais dados compõem a estimativa de votos exibida no mapa.
 enum FonteEstimativaMapa {
-  /// Votantes + apoiadores (padrão).
+  /// Votantes + apoiadores.
   todos,
-  /// Apenas votantes cadastrados (sem contar estimativa dos apoiadores).
+  /// Apenas votantes cadastrados.
   apenasVotantes,
-  /// Apenas apoiadores (sem contar os votantes individuais).
+  /// Apenas apoiadores.
   apenasApoiadores,
 }
 
@@ -17,24 +17,29 @@ class MapaFiltros {
     this.regiaoCdRgint,
     this.apoiadorId,
     this.topBenfeitoriasMunicipios = 0,
-    this.mostrarTSE = true,
+    // Padrão LIMPO — o usuário liga o que quiser ver
+    this.mostrarTSE = false,
+    this.mostrarMarcadores = false,
     this.fonteEstimativa = FonteEstimativaMapa.todos,
   });
 
-  /// Chave normalizada do município (`normalizarNomeMunicipioMT`).
+  /// Chave normalizada do município.
   final String? cidadeKey;
 
   /// Região intermediária (5101–5105).
   final String? regiaoCdRgint;
 
-  /// Mostrar apenas rede deste apoiador (estimativa + marcadores).
+  /// Mostrar apenas rede deste apoiador.
   final String? apoiadorId;
 
-  /// 0 = desligado. >0 = restringe a N municípios com mais benfeitorias (contagem).
+  /// 0 = desligado. >0 = top N municípios com mais benfeitorias.
   final int topBenfeitoriasMunicipios;
 
-  /// Ligar/desligar os círculos de votos TSE (eleição passada) no mapa.
+  /// Círculos de votos TSE (eleição passada) — desligado por padrão.
   final bool mostrarTSE;
+
+  /// Marcadores de apoiadores/votantes — desligado por padrão.
+  final bool mostrarMarcadores;
 
   /// Quais dados incluir no cálculo da estimativa da campanha.
   final FonteEstimativaMapa fonteEstimativa;
@@ -45,6 +50,7 @@ class MapaFiltros {
     Object? apoiadorId = _sentinel,
     int? topBenfeitoriasMunicipios,
     bool? mostrarTSE,
+    bool? mostrarMarcadores,
     FonteEstimativaMapa? fonteEstimativa,
   }) {
     return MapaFiltros(
@@ -54,6 +60,7 @@ class MapaFiltros {
       apoiadorId: apoiadorId == _sentinel ? this.apoiadorId : apoiadorId as String?,
       topBenfeitoriasMunicipios: topBenfeitoriasMunicipios ?? this.topBenfeitoriasMunicipios,
       mostrarTSE: mostrarTSE ?? this.mostrarTSE,
+      mostrarMarcadores: mostrarMarcadores ?? this.mostrarMarcadores,
       fonteEstimativa: fonteEstimativa ?? this.fonteEstimativa,
     );
   }
@@ -71,6 +78,7 @@ class MapaFiltrosNotifier extends StateNotifier<MapaFiltros> {
   void setTopBenfeitorias(int n) =>
       state = state.copyWith(topBenfeitoriasMunicipios: n < 0 ? 0 : n);
   void toggleTSE() => state = state.copyWith(mostrarTSE: !state.mostrarTSE);
+  void toggleMarcadores() => state = state.copyWith(mostrarMarcadores: !state.mostrarMarcadores);
   void setFonteEstimativa(FonteEstimativaMapa f) => state = state.copyWith(fonteEstimativa: f);
   void limpar() => state = const MapaFiltros();
 }

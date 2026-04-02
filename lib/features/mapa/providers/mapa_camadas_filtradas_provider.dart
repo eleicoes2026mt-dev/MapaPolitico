@@ -58,6 +58,7 @@ Map<String, T> _intersecionarChaves<T>(Map<String, T> map, Set<String> permitida
 /// Estimativa por cidade respeitando filtros da tela Mapa.
 final mapaEstimativaFiltradaProvider = Provider<Map<String, int>>((ref) {
   final filtros = ref.watch(mapaFiltrosProvider);
+  if (!filtros.mostrarMarcadores) return {};
   final apoiadores = ref.watch(apoiadoresParaMapaProvider).valueOrNull ?? [];
   final votantes = ref.watch(votantesListProvider).valueOrNull ?? [];
   var map = buildEstimativaPorCidadeFromLists(
@@ -92,6 +93,7 @@ final mapaEstimativaFiltradaProvider = Provider<Map<String, int>>((ref) {
 /// Marcadores (apoiadores/votantes) com os mesmos filtros.
 final mapaMarcadoresFiltradosProvider = Provider<Map<String, MapaMarcadorCidade>>((ref) {
   final filtros = ref.watch(mapaFiltrosProvider);
+  if (!filtros.mostrarMarcadores) return {};
   final apoiadores = ref.watch(apoiadoresParaMapaProvider).valueOrNull ?? [];
   final votantes = ref.watch(votantesListProvider).valueOrNull ?? [];
   var map = buildMarcadoresCidadesMap(

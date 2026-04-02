@@ -110,14 +110,22 @@ async function sendWebPush(
 
 // ── Handler principal ─────────────────────────────────────────────────────────
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function jsonResponse(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
@@ -126,10 +134,7 @@ serve(async (req: Request) => {
   const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:eleicoes2026mt@gmail.com";
 
   if (!vapidPrivateKey) {
-    return new Response(
-      JSON.stringify({ error: "VAPID_PRIVATE_KEY não configurada nos Secrets." }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
-    );
+    return jsonResponse({ error: "VAPID_PRIVATE_KEY não configurada nos Secrets." }, 500);
   }
 
   const body = await req.json().catch(() => ({}));
@@ -143,10 +148,7 @@ serve(async (req: Request) => {
   };
 
   if (!title || !msgBody) {
-    return new Response(
-      JSON.stringify({ error: "title e body são obrigatórios." }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
+    return jsonResponse({ error: "title e body são obrigatórios." }, 400);
   }
 
   // Usa service_role para ler todas as subscrições
@@ -162,10 +164,7 @@ serve(async (req: Request) => {
 
   const { data: subs, error } = await query;
   if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: error.message }, 500);
   }
 
   const payload = JSON.stringify({
@@ -202,8 +201,5 @@ serve(async (req: Request) => {
   const sent = results.filter((r) => r.status === "fulfilled" && (r as PromiseFulfilledResult<{ ok: boolean }>).value.ok).length;
   const failed = results.length - sent;
 
-  return new Response(
-    JSON.stringify({ sent, failed, total: results.length }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
+  return jsonResponse({ sent, failed, total: results.length });
 });

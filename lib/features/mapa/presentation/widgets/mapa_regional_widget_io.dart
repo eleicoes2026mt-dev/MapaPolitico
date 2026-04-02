@@ -54,6 +54,11 @@ class MapaRegionalWidget extends StatefulWidget {
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
     this.embedRankingBelowMap = false,
+    // Ignorados no ArcGIS — só usados na versão web
+    this.onMostrarTSE,
+    this.onMostrarMarcadores,
+    this.mostrarTSE = false,
+    this.mostrarMarcadores = false,
   });
 
   final double height;
@@ -72,8 +77,11 @@ class MapaRegionalWidget extends StatefulWidget {
   final Widget? locaisVotacaoContent;
   /// Na web, evidencia a linha da cidade no ranking; em mobile ignorado.
   final String? selectedMunicipioKey;
-  /// Só usado na web; ignorado no ArcGIS.
   final bool embedRankingBelowMap;
+  final void Function(bool)? onMostrarTSE;
+  final void Function(bool)? onMostrarMarcadores;
+  final bool mostrarTSE;
+  final bool mostrarMarcadores;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();

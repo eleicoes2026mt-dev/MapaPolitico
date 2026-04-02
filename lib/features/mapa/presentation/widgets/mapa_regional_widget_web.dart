@@ -31,15 +31,16 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onCityTap,
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
-    /// Dashboard/mobile: ranking em coluna abaixo do mapa (sem sobrepor o mapa).
     this.embedRankingBelowMap = false,
+    this.onMostrarTSE,
+    this.onMostrarMarcadores,
+    this.mostrarTSE = false,
+    this.mostrarMarcadores = false,
   });
 
   final double height;
   final Map<String, int>? votosPorMunicipio;
-  /// Estimativa de votos por cidade (chave normalizada). Para comparativo com votos TSE.
   final Map<String, int>? estimativaPorCidade;
-  /// Marcadores por cidade (contagem + bandeira opcional do apoiador).
   final Map<String, MapaMarcadorCidade>? cidadesMarcadoresMapa;
   final List<RegiaoFundida>? regioesFundidas;
   final Map<String, String>? nomesCustomizados;
@@ -48,13 +49,15 @@ class MapaRegionalWidget extends StatefulWidget {
   final void Function(String cdRgint)? onRemoverDaFusao;
   final void Function(String cdRgint, String hexCor)? onSaveCorRegiao;
   final bool Function(String id, String nome, String? cdRgint)? onRegionTap;
-  /// Ao clicar numa cidade (mapa ou legenda), recebe o nome do município (chave em votosPorMunicipio) para exibir locais de votação.
   final void Function(String nomeMunicipio)? onCityTap;
-  /// Conteúdo "Locais de votação" para exibir dentro do painel lateral (ranking). Quando definido, aparece expandido no bloco do ranking.
   final Widget? locaisVotacaoContent;
-  /// Chave do município atualmente selecionado (para evidenciar a linha no ranking).
   final String? selectedMunicipioKey;
   final bool embedRankingBelowMap;
+  /// Callbacks chamados pelo ranking quando o usuário troca de tab (TSE / Minha Rede).
+  final void Function(bool)? onMostrarTSE;
+  final void Function(bool)? onMostrarMarcadores;
+  final bool mostrarTSE;
+  final bool mostrarMarcadores;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetWebState();
@@ -871,7 +874,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                 selectedMunicipioKey: widget.selectedMunicipioKey,
                 layoutCompact: true,
                 focusedRegiaoId: _regiaoDrillDownId,
-                onToggleFocusRegiao: (id) {
+                onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores, onToggleFocusRegiao: (id) {
                   if (_regiaoDrillDownId == id) {
                     _setDrillDownRegiao(null);
                   } else {
@@ -918,7 +921,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                           selectedMunicipioKey: widget.selectedMunicipioKey,
                           layoutCompact: true,
                           focusedRegiaoId: _regiaoDrillDownId,
-                          onToggleFocusRegiao: (id) {
+                          onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores, onToggleFocusRegiao: (id) {
                             if (_regiaoDrillDownId == id) {
                               _setDrillDownRegiao(null);
                             } else {
@@ -940,7 +943,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                           selectedMunicipioKey: widget.selectedMunicipioKey,
                           layoutCompact: false,
                           focusedRegiaoId: _regiaoDrillDownId,
-                          onToggleFocusRegiao: (id) {
+                          onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores, onToggleFocusRegiao: (id) {
                             if (_regiaoDrillDownId == id) {
                               _setDrillDownRegiao(null);
                             } else {
@@ -969,6 +972,10 @@ class _RankingPanel extends StatefulWidget {
     this.layoutCompact = false,
     this.focusedRegiaoId,
     required this.onToggleFocusRegiao,
+    this.onMostrarTSE,
+    this.onMostrarMarcadores,
+    this.mostrarTSE = false,
+    this.mostrarMarcadores = false,
   });
 
   final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
@@ -980,14 +987,24 @@ class _RankingPanel extends StatefulWidget {
   final bool layoutCompact;
   final String? focusedRegiaoId;
   final void Function(String regiaoId) onToggleFocusRegiao;
+  final void Function(bool)? onMostrarTSE;
+  final void Function(bool)? onMostrarMarcadores;
+  final bool mostrarTSE;
+  final bool mostrarMarcadores;
 
   @override
   State<_RankingPanel> createState() => _RankingPanelState();
 }
 
 class _RankingPanelState extends State<_RankingPanel> {
-  /// false = TSE 2022 | true = Minha Rede (campanha)
-  bool _modoRede = false;
+  late bool _modoRede;
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicia no modo da rede se marcadores estiverem ativos e TSE não
+    _modoRede = widget.mostrarMarcadores && !widget.mostrarTSE;
+  }
 
   static const _medals = ['🥇', '🥈', '🥉'];
 
@@ -1087,7 +1104,11 @@ class _RankingPanelState extends State<_RankingPanel> {
                             icon: Icons.how_to_vote_outlined,
                             active: !_modoRede,
                             color: const Color(0xFF1565C0),
-                            onTap: () => setState(() => _modoRede = false),
+                            onTap: () {
+                              setState(() => _modoRede = false);
+                              widget.onMostrarTSE?.call(true);
+                              widget.onMostrarMarcadores?.call(false);
+                            },
                           ),
                           const SizedBox(width: 8),
                           _TabBtn(
@@ -1095,7 +1116,11 @@ class _RankingPanelState extends State<_RankingPanel> {
                             icon: Icons.groups_outlined,
                             active: _modoRede,
                             color: cs.secondary,
-                            onTap: () => setState(() => _modoRede = true),
+                            onTap: () {
+                              setState(() => _modoRede = true);
+                              widget.onMostrarTSE?.call(false);
+                              widget.onMostrarMarcadores?.call(true);
+                            },
                           ),
                         ],
                       ),
@@ -1701,3 +1726,4 @@ class _KpiChip extends StatelessWidget {
     );
   }
 }
+

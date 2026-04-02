@@ -2,10 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/constants/regioes_mt.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
-import '../../apoiadores/providers/apoiadores_provider.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../../estrategia/providers/regioes_fundidas_provider.dart';
 import '../data/mt_municipios_coords.dart';
@@ -211,9 +208,6 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final nomesCustomizados = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
     final coresCustomizadas = ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
     final isAdmin = ref.watch(isAdminProvider);
-    final profile = ref.watch(profileProvider).valueOrNull;
-    final apoiadoresLista = ref.watch(apoiadoresListProvider).valueOrNull ?? [];
-    final podeFiltrarApoiador = profile?.role == 'candidato' || profile?.role == 'assessor';
 
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < 600 ? 16.0 : 20.0;
@@ -251,6 +245,14 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
               }
             : null,
         onCityTap: (nome) => setState(() => _selectedMunicipio = nome),
+        onMostrarTSE: (v) {
+          if (v != filtros.mostrarTSE) ref.read(mapaFiltrosProvider.notifier).toggleTSE();
+        },
+        onMostrarMarcadores: (v) {
+          if (v != filtros.mostrarMarcadores) ref.read(mapaFiltrosProvider.notifier).toggleMarcadores();
+        },
+        mostrarTSE: filtros.mostrarTSE,
+        mostrarMarcadores: filtros.mostrarMarcadores,
         locaisVotacaoContent: _selectedMunicipio != null
             ? LocaisVotacaoPanel(
                 nomeMunicipio: _selectedMunicipio!,
@@ -280,125 +282,6 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         ),
         SizedBox(height: padding * 0.75),
       ],
-      Card(
-        margin: EdgeInsets.zero,
-        child: ExpansionTile(
-          title: Text(
-            'Filtros do mapa',
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            _subtituloFiltros(filtros),
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  DropdownButtonFormField<String?>(
-                    key: ValueKey<String?>('mapa_filtro_cidade_${filtros.cidadeKey}'),
-                    initialValue: filtros.cidadeKey,
-                    decoration: const InputDecoration(
-                      labelText: 'Cidade',
-                      prefixIcon: Icon(Icons.location_city_outlined),
-                    ),
-                    isExpanded: true,
-                    items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('Todas')),
-                      ...listCidadesMTNomesNormalizados.map(
-                        (k) => DropdownMenuItem<String?>(
-                          value: k,
-                          child: Text(displayNomeCidadeMT(k), overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ],
-                    onChanged: (v) => ref.read(mapaFiltrosProvider.notifier).setCidade(v),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String?>(
-                    key: ValueKey<String?>('mapa_filtro_regiao_${filtros.regiaoCdRgint}'),
-                    initialValue: filtros.regiaoCdRgint,
-                    decoration: const InputDecoration(
-                      labelText: 'Região intermediária',
-                      prefixIcon: Icon(Icons.map_outlined),
-                    ),
-                    isExpanded: true,
-                    items: [
-                      const DropdownMenuItem<String?>(value: null, child: Text('Todas')),
-                      ...regioesIntermediariasMT.map(
-                        (r) => DropdownMenuItem<String?>(
-                          value: r.id,
-                          child: Text(r.nome, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ],
-                    onChanged: (v) => ref.read(mapaFiltrosProvider.notifier).setRegiao(v),
-                  ),
-                  if (podeFiltrarApoiador && apoiadoresLista.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String?>(
-                      key: ValueKey<String?>('mapa_filtro_apoiador_${filtros.apoiadorId}'),
-                      initialValue: filtros.apoiadorId,
-                      decoration: const InputDecoration(
-                        labelText: 'Rede do apoiador',
-                        prefixIcon: Icon(Icons.people_outline),
-                      ),
-                      isExpanded: true,
-                      items: [
-                        const DropdownMenuItem<String?>(value: null, child: Text('Campanha inteira')),
-                        ...apoiadoresLista.map(
-                          (a) => DropdownMenuItem<String?>(
-                            value: a.id,
-                            child: Text(a.nome, overflow: TextOverflow.ellipsis),
-                          ),
-                        ),
-                      ],
-                      onChanged: (v) => ref.read(mapaFiltrosProvider.notifier).setApoiador(v),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
-                    key: ValueKey<int>(filtros.topBenfeitoriasMunicipios),
-                    initialValue: filtros.topBenfeitoriasMunicipios,
-                    decoration: const InputDecoration(
-                      labelText: 'Municípios com mais benfeitorias',
-                      prefixIcon: Icon(Icons.volunteer_activism_outlined),
-                    ),
-                    isExpanded: true,
-                    items: const [
-                      DropdownMenuItem(value: 0, child: Text('Sem filtro')),
-                      DropdownMenuItem(value: 5, child: Text('Top 5')),
-                      DropdownMenuItem(value: 10, child: Text('Top 10')),
-                      DropdownMenuItem(value: 15, child: Text('Top 15')),
-                      DropdownMenuItem(value: 20, child: Text('Top 20')),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) ref.read(mapaFiltrosProvider.notifier).setTopBenfeitorias(v);
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () => ref.read(mapaFiltrosProvider.notifier).limpar(),
-                      icon: const Icon(Icons.filter_alt_off, size: 18),
-                      label: const Text('Limpar filtros'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      SizedBox(height: padding * 0.5),
-      // ── Controles rápidos de camadas ──────────────────────────────
-      _CamadasToggleRow(filtros: filtros),
-      SizedBox(height: padding * 0.5),
       if (votosAjustados.isNotEmpty) ...[
         MapaTseLegenda(votosPorCidade: votosAjustados),
         SizedBox(height: padding * 0.5),
@@ -433,134 +316,6 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: embedded ? MainAxisSize.min : MainAxisSize.max,
       children: children,
-    );
-  }
-
-  String _subtituloFiltros(MapaFiltros f) {
-    final parts = <String>[];
-    if (f.cidadeKey != null) parts.add(displayNomeCidadeMT(f.cidadeKey!));
-    if (f.regiaoCdRgint != null) {
-      String? nomeRg;
-      for (final x in regioesIntermediariasMT) {
-        if (x.id == f.regiaoCdRgint) {
-          nomeRg = x.nome;
-          break;
-        }
-      }
-      parts.add(nomeRg ?? 'Região');
-    }
-    if (f.apoiadorId != null) parts.add('Por apoiador');
-    if (f.topBenfeitoriasMunicipios > 0) parts.add('Top ${f.topBenfeitoriasMunicipios} benfeitorias');
-    if (parts.isEmpty) return 'Nenhum filtro ativo';
-    return parts.join(' · ');
-  }
-}
-
-/// Botões de ligar/desligar camadas do mapa: fonte da estimativa e TSE.
-class _CamadasToggleRow extends ConsumerWidget {
-  const _CamadasToggleRow({required this.filtros});
-  final MapaFiltros filtros;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(mapaFiltrosProvider.notifier);
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    Widget chip({
-      required String label,
-      required IconData icon,
-      required bool active,
-      required VoidCallback onTap,
-      Color? activeColor,
-    }) {
-      final bg = activeColor ?? cs.primary;
-      return FilterChip(
-        avatar: Icon(icon, size: 16, color: active ? cs.onPrimary : bg),
-        label: Text(label, style: TextStyle(color: active ? cs.onPrimary : null)),
-        selected: active,
-        selectedColor: bg,
-        checkmarkColor: cs.onPrimary,
-        showCheckmark: false,
-        onSelected: (_) => onTap(),
-      );
-    }
-
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'CAMADAS DO MAPA',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.0,
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // ── Linha 1: camadas principais ──────────────────────────────
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                chip(
-                  label: 'Eleição 2022 (TSE)',
-                  icon: Icons.how_to_vote_outlined,
-                  active: filtros.mostrarTSE,
-                  onTap: notifier.toggleTSE,
-                  activeColor: const Color(0xFF1565C0),
-                ),
-                chip(
-                  label: 'Minha rede (marcadores)',
-                  icon: Icons.groups_outlined,
-                  active: filtros.mostrarMarcadores,
-                  onTap: notifier.toggleMarcadores,
-                  activeColor: cs.secondary,
-                ),
-              ],
-            ),
-
-            // ── Linha 2: filtro de fonte (só quando marcadores ligados) ──
-            if (filtros.mostrarMarcadores) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Mostrar na rede:',
-                style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  chip(
-                    label: 'Todos',
-                    icon: Icons.groups_outlined,
-                    active: filtros.fonteEstimativa == FonteEstimativaMapa.todos,
-                    onTap: () => notifier.setFonteEstimativa(FonteEstimativaMapa.todos),
-                  ),
-                  chip(
-                    label: 'Só votantes',
-                    icon: Icons.how_to_reg_outlined,
-                    active: filtros.fonteEstimativa == FonteEstimativaMapa.apenasVotantes,
-                    onTap: () => notifier.setFonteEstimativa(FonteEstimativaMapa.apenasVotantes),
-                  ),
-                  chip(
-                    label: 'Só apoiadores',
-                    icon: Icons.handshake_outlined,
-                    active: filtros.fonteEstimativa == FonteEstimativaMapa.apenasApoiadores,
-                    onTap: () => notifier.setFonteEstimativa(FonteEstimativaMapa.apenasApoiadores),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

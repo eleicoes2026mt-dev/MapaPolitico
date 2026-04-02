@@ -135,6 +135,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   bool _rankingVisivel = false; // começa fechado — usuário abre quando quiser
   /// Cores de atingimento por região (modo Comparativo). null = desativado.
   Map<String, String>? _comparativoColors;
+  /// Ratio de atingimento por região (estimativa/TSE). Para exibir % no mapa.
+  Map<String, double>? _comparativoRatios;
 
   RegiaoIntermediariaMT? get _regiaoDrillDown {
     final id = _regiaoDrillDownId;
@@ -353,6 +355,64 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       }
     }
     return polygons;
+  }
+
+  /// Labels de percentual de atingimento por região (modo Comparativo).
+  List<Marker> _buildComparativoLabels() {
+    final ratios = _comparativoRatios;
+    final cores = _comparativoColors;
+    if (ratios == null || ratios.isEmpty || _regioesMT == null) return [];
+
+    final markers = <Marker>[];
+    for (final regiao in _regioesMT!) {
+      final ratio = ratios[regiao.id];
+      if (ratio == null) continue;
+      final hexCor = cores?[regiao.id] ?? '#78909C';
+      final cor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
+      final pct = (ratio * 100).toStringAsFixed(0);
+
+      // Centróide: média de lat/lng dos pontos do maior polígono da região
+      if (regiao.polygons.isEmpty) continue;
+      final geoPoly = regiao.polygons.reduce((a, b) => a.points.length >= b.points.length ? a : b);
+      final pts = geoPoly.points;
+      if (pts.isEmpty) continue;
+      final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
+      final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
+
+      markers.add(Marker(
+        point: ll.LatLng(lat, lng),
+        width: 72,
+        height: 52,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: cor,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4)],
+              ),
+              child: Text(
+                '$pct%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            Container(
+              width: 2,
+              height: 6,
+              color: cor.withValues(alpha: 0.7),
+            ),
+          ],
+        ),
+      ));
+    }
+    return markers;
   }
 
   /// Votos TSE: círculos com degradê (centro → transparente) e cor por faixa (vermelho … verde).
@@ -578,6 +638,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     List<Polygon<String>> polygons,
     List<Marker> heatMarkers,
     List<Marker> markers,
+    List<Marker> comparativoLabels,
   ) {
     final drillNome = _regiaoDrillDown?.nome;
     return Stack(
@@ -618,6 +679,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               ),
               if (heatMarkers.isNotEmpty) MarkerLayer(markers: heatMarkers),
               if (markers.isNotEmpty) MarkerLayer(markers: markers),
+              if (comparativoLabels.isNotEmpty) MarkerLayer(markers: comparativoLabels),
             ],
           ),
         ),
@@ -859,6 +921,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final polygons = _buildPolygons();
     final heatMarkers = _buildHeatMarkers();
     final markers = _buildMarkers();
+    final comparativoLabels = _buildComparativoLabels();
     final ranking = _rankingRegioes();
     final totalVotosTseGeral = _totalVotosTseSomados();
     final totalEstimativaGeral = _totalEstimativaSomada();
@@ -870,7 +933,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         return SizedBox(
           height: widget.height,
           width: double.infinity,
-          child: _buildMapStackContent(context, polygons, heatMarkers, markers),
+          child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels),
         );
       }
       return SizedBox(
@@ -881,7 +944,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           children: [
             Expanded(
               flex: 13,
-              child: _buildMapStackContent(context, polygons, heatMarkers, markers),
+              child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels),
             ),
             Expanded(
               flex: 11,
@@ -932,7 +995,21 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             onMostrarMarcadores: widget.onMostrarMarcadores,
             mostrarTSE: widget.mostrarTSE,
             mostrarMarcadores: widget.mostrarMarcadores,
-            onComparativoColors: (cores) => setState(() => _comparativoColors = cores),
+            onComparativoColors: (cores) => setState(() {
+              _comparativoColors = cores;
+              // Recalcula ratios a partir das cores quando ativando
+              if (cores == null) {
+                _comparativoRatios = null;
+              } else {
+                // Ratios são re-calculados pelo ranking atualizado
+                final r = _rankingRegioes();
+                final ratioMap = <String, double>{};
+                for (final reg in r) {
+                  if (reg.total > 0) ratioMap[reg.id] = reg.totalEstimativa / reg.total;
+                }
+                _comparativoRatios = ratioMap.isEmpty ? null : ratioMap;
+              }
+            }),
             onToggleFocusRegiao: (id) {
               if (_regiaoDrillDownId == id) {
                 _setDrillDownRegiao(null);
@@ -986,7 +1063,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: _buildMapStackContent(context, polygons, heatMarkers, markers),
+                child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels),
               ),
               // Botão toggle sempre visível (independente de haver dados)
               buildToggleBtn(),
@@ -1236,16 +1313,24 @@ class _RankingPanelState extends State<_RankingPanel> {
                                 setState(() => _modo = _ModoRanking.nenhum);
                                 widget.onMostrarTSE?.call(false);
                                 widget.onMostrarMarcadores?.call(false);
-                                widget.onComparativoColors?.call(null);
+                                widget.onComparativoColors?.call(null); // null limpa os ratios no pai
                               } else {
-                                setState(() => _modo = _ModoRanking.comparativo);
-                                widget.onMostrarTSE?.call(true);
-                                widget.onMostrarMarcadores?.call(true);
                                 final cores = <String, String>{};
+                                final ratios = <String, double>{};
                                 for (final r in ranking) {
-                                  if (r.total > 0) cores[r.id] = _corAtingimento(r.totalEstimativa / r.total);
+                                  if (r.total > 0) {
+                                    final ratio = r.totalEstimativa / r.total;
+                                    cores[r.id] = _corAtingimento(ratio);
+                                    ratios[r.id] = ratio;
+                                  }
                                 }
+                                setState(() => _modo = _ModoRanking.comparativo);
+                                // Comparativo: só marca regiões, SEM bolhas TSE
+                                widget.onMostrarTSE?.call(false);
+                                widget.onMostrarMarcadores?.call(false);
                                 widget.onComparativoColors?.call(cores.isEmpty ? null : cores);
+                                // Atualiza ratios no widget pai via um canal separado (setState no widget)
+                                // Os ratios ficam em _comparativoRatios no state do widget pai
                               }
                             },
                           ),
@@ -2074,4 +2159,5 @@ class _KpiChip extends StatelessWidget {
     );
   }
 }
+
 

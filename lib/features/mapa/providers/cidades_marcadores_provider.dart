@@ -12,7 +12,7 @@ class _MarcadorAgg {
   BandeiraVisual? visual;
 }
 
-/// Monta mapa de marcadores por cidade (contagem + primeira bandeira encontrada por apoiador).
+/// Monta mapa de marcadores por cidade (contagem + bandeira do apoiador que indicou).
 Map<String, MapaMarcadorCidade> buildMarcadoresCidadesMap(
   List<Apoiador> apoiadores,
   List<Votante> votantes, {
@@ -20,10 +20,11 @@ Map<String, MapaMarcadorCidade> buildMarcadoresCidadesMap(
 }) {
   final aggs = <String, _MarcadorAgg>{};
 
+  // Índice rápido: apoiador_id → Apoiador (para resolver bandeira dos votantes)
+  final apoiadorById = {for (final a in apoiadores) a.id: a};
+
   void aplicarBandeira(_MarcadorAgg g, Apoiador a) {
-    if (g.visual == null) {
-      g.visual = a.bandeiraVisualResolvida;
-    }
+    g.visual ??= a.bandeiraVisualResolvida;
   }
 
   for (final a in apoiadores) {
@@ -38,11 +39,17 @@ Map<String, MapaMarcadorCidade> buildMarcadoresCidadesMap(
 
   for (final v in votantes) {
     if (onlyApoiadorId != null && v.apoiadorId != onlyApoiadorId) continue;
-    final nome = v.municipioNome;
+    // Usa municipioNome (join) OU cidade_nome (texto livre) — o que estiver preenchido
+    final nome = v.municipioNome ?? v.cidadeNome;
     if (nome == null || nome.trim().isEmpty) continue;
     final key = normalizarNomeMunicipioMT(nome);
     final g = aggs.putIfAbsent(key, _MarcadorAgg.new);
     g.count++;
+    // Aplica a bandeira do apoiador que indicou o votante
+    if (v.apoiadorId != null) {
+      final ap = apoiadorById[v.apoiadorId];
+      if (ap != null) aplicarBandeira(g, ap);
+    }
   }
 
   return {

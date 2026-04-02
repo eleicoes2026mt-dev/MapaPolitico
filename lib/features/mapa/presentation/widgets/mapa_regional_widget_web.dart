@@ -1179,44 +1179,57 @@ class _RankingPanel extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 3),
-                                // Números TSE + estimativa
-                                Row(
+                                // Números TSE + estimativa (sem Spacer — usa Wrap para não transbordar)
+                                Wrap(
+                                  spacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    Icon(Icons.how_to_vote_outlined, size: 12, color: cs.onSurfaceVariant),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      fmt.format(r.total),
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        color: cs.onSurface,
-                                      ),
-                                    ),
-                                    Text(
-                                      ' votos TSE',
-                                      style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                                    ),
-                                    if (r.totalEstimativa > 0) ...[
-                                      const SizedBox(width: 8),
-                                      Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        fmt.format(r.totalEstimativa),
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          color: cs.secondary,
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.how_to_vote_outlined, size: 12, color: cs.onSurfaceVariant),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          fmt.format(r.total),
+                                          style: theme.textTheme.labelSmall?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
+                                        Text(
+                                          ' TSE',
+                                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                                        ),
+                                      ],
+                                    ),
+                                    if (r.totalEstimativa > 0)
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                            fmt.format(r.totalEstimativa),
+                                            style: theme.textTheme.labelSmall?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: cs.secondary,
+                                            ),
+                                          ),
+                                          Text(
+                                            ' camp.',
+                                            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                                          ),
+                                        ],
                                       ),
-                                      Text(
-                                        ' camp.',
-                                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                                      ),
-                                    ],
-                                    const Spacer(),
-                                    Text(
-                                      isFocused ? 'Ver tudo' : 'Filtrar mapa',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: cs.primary,
-                                        decoration: TextDecoration.underline,
+                                    // Botão filtrar — no Wrap não estoura
+                                    GestureDetector(
+                                      onTap: () => onToggleFocusRegiao(r.id),
+                                      child: Text(
+                                        isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: cs.primary,
+                                          fontWeight: FontWeight.w600,
+                                          decoration: TextDecoration.underline,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1227,40 +1240,26 @@ class _RankingPanel extends StatelessWidget {
                         ),
                         children: [
                           const Divider(height: 1),
+                          // Cabeçalho cidades — sem colunas fixas
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+                            padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
                             child: Row(
                               children: [
+                                const SizedBox(width: 20),
                                 Expanded(
                                   child: Text(
                                     'Cidade',
                                     style: theme.textTheme.labelSmall?.copyWith(
                                       fontWeight: FontWeight.w700,
                                       color: cs.onSurfaceVariant,
-                                      letterSpacing: 0.5,
                                     ),
                                   ),
                                 ),
-                                SizedBox(
-                                  width: 90,
-                                  child: Text(
-                                    'TSE',
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                    textAlign: TextAlign.right,
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 40,
-                                  child: Text(
-                                    '%',
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                    textAlign: TextAlign.right,
+                                Text(
+                                  'TSE   %',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: cs.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -1271,7 +1270,7 @@ class _RankingPanel extends StatelessWidget {
                             return InkWell(
                               onTap: () => onCityTap?.call(c.key),
                               child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                                 decoration: isSelected
                                     ? BoxDecoration(
@@ -1288,6 +1287,7 @@ class _RankingPanel extends StatelessWidget {
                                       color: isSelected ? cs.primary : barColor.withValues(alpha: 0.6),
                                     ),
                                     const SizedBox(width: 6),
+                                    // Nome da cidade — ocupa o espaço disponível
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1301,7 +1301,7 @@ class _RankingPanel extends StatelessWidget {
                                           ),
                                           if (c.estimativa > 0)
                                             Text(
-                                              '${fmt.format(c.estimativa)} campanha',
+                                              '${fmt.format(c.estimativa)} camp.',
                                               style: theme.textTheme.labelSmall?.copyWith(
                                                 color: cs.secondary,
                                                 fontSize: 9,
@@ -1310,24 +1310,13 @@ class _RankingPanel extends StatelessWidget {
                                         ],
                                       ),
                                     ),
-                                    SizedBox(
-                                      width: 90,
-                                      child: Text(
-                                        fmt.format(c.votos),
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        textAlign: TextAlign.right,
-                                      ),
-                                    ),
-                                    SizedBox(
-                                      width: 40,
-                                      child: Text(
-                                        '${c.pct.toStringAsFixed(1)}%',
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          color: cs.onSurfaceVariant,
-                                        ),
-                                        textAlign: TextAlign.right,
+                                    const SizedBox(width: 8),
+                                    // Votos + % em texto compacto sem SizedBox fixo
+                                    Text(
+                                      '${fmt.format(c.votos)}  ${c.pct.toStringAsFixed(1)}%',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        fontWeight: isSelected ? FontWeight.w600 : null,
+                                        color: cs.onSurfaceVariant,
                                       ),
                                     ),
                                   ],

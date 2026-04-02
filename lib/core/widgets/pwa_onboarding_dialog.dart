@@ -139,10 +139,15 @@ class _PwaOnboardingDialogState extends ConsumerState<_PwaOnboardingDialog> {
   // ── Passo 1: Instalar ─────────────────────────────────────────────────────
 
   Widget _buildInstallStep(ThemeData theme) {
-    final isIOS = _pwa.isIOS;
-    final isSafari = _pwa.isSafari;
-    final canInstall = _pwa.canInstall;
     final isInstalled = _pwa.isInstalled;
+    final isIOSSafari = _pwa.isIOS && _pwa.isSafari;
+
+    // Já instalado → avança direto
+    if (isInstalled) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) { if (mounted) setState(() => _step = 1); });
+      return const SizedBox.shrink();
+    }
 
     return Column(
       children: [
@@ -155,44 +160,14 @@ class _PwaOnboardingDialogState extends ConsumerState<_PwaOnboardingDialog> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Use o CampanhaMT como um app nativo — abre direto, sem precisar do navegador.',
+          'Acesse como um app nativo — ícone na tela inicial, sem abrir o browser.',
           style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
 
-        if (isInstalled) ...[
-          // Já instalado
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle, color: theme.colorScheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'App já instalado!',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: () => setState(() => _step = 1),
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text('Continuar'),
-          ),
-        ] else if (isIOS && isSafari) ...[
-          // iOS Safari: instruções manuais
+        if (isIOSSafari) ...[
+          // Safari iOS: único browser sem API de install automático
           _SafariInstallGuide(theme: theme),
           const SizedBox(height: 20),
           Row(
@@ -200,7 +175,7 @@ class _PwaOnboardingDialogState extends ConsumerState<_PwaOnboardingDialog> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => setState(() => _step = 1),
-                  child: const Text('Pular por agora'),
+                  child: const Text('Pular'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -213,41 +188,47 @@ class _PwaOnboardingDialogState extends ConsumerState<_PwaOnboardingDialog> {
               ),
             ],
           ),
-        ] else if (canInstall) ...[
-          // Chrome/Edge: prompt nativo
-          FilledButton.icon(
-            onPressed: _loading ? null : () async {
-              setState(() => _loading = true);
-              await _pwa.install();
-              // Aguarda o evento pwa-app-installed ou avança após delay
-              await Future.delayed(const Duration(seconds: 2));
-              if (mounted) setState(() { _loading = false; _step = 1; });
-            },
-            icon: _loading
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.download_outlined),
-            label: Text(_loading ? 'Instalando...' : 'Instalar agora'),
+        ] else ...[
+          // Chrome / Edge / outros: um clique → o browser exibe o prompt nativo
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _loading ? null : _instalarAgora,
+              icon: _loading
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download_outlined),
+              label: Text(_loading ? 'Aguarde...' : 'Instalar o app'),
+            ),
           ),
           const SizedBox(height: 12),
           TextButton(
             onPressed: () => setState(() => _step = 1),
-            child: const Text('Pular por agora'),
-          ),
-        ] else ...[
-          // Sem prompt disponível (já aberto como PWA ou browser não suporta)
-          Text(
-            'Abra este site no Chrome ou Safari e use a opção "Adicionar à tela inicial".',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: () => setState(() => _step = 1),
-            child: const Text('Continuar'),
+            child: Text(
+              _pwa.canInstall ? 'Pular por agora' : 'Continuar sem instalar',
+              style: theme.textTheme.bodySmall,
+            ),
           ),
         ],
       ],
     );
+  }
+
+  Future<void> _instalarAgora() async {
+    setState(() => _loading = true);
+    // Se o prompt ainda não está pronto, aguarda até 3s
+    if (!_pwa.canInstall) {
+      for (var i = 0; i < 6; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (_pwa.canInstall || !mounted) break;
+      }
+    }
+    if (_pwa.canInstall) {
+      await _pwa.install();
+      // Aguarda o evento pwa-app-installed ou avança após 3s
+      await Future.delayed(const Duration(seconds: 3));
+    }
+    if (mounted) setState(() { _loading = false; _step = 1; });
   }
 
   // ── Passo 2: Notificações ─────────────────────────────────────────────────

@@ -119,6 +119,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   String? _regiaoDrillDownId;
   bool _loading = true;
   String? _error;
+  bool _rankingVisivel = true;
 
   RegiaoIntermediariaMT? get _regiaoDrillDown {
     final id = _regiaoDrillDownId;
@@ -844,6 +845,9 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final totalVotosTseGeral = _totalVotosTseSomados();
     final totalEstimativaGeral = _totalEstimativaSomada();
 
+    // O ranking é exibido sempre que houver dados (TSE ou campanha) — controlado pelo botão toggle.
+    final temDadosRanking = ranking.isNotEmpty;
+
     // Dashboard/mobile embutido: mapa e ranking em coluna — o mapa deixa de ser tapado pelo painel.
     if (widget.embedRankingBelowMap) {
       if (ranking.isEmpty) {
@@ -899,58 +903,87 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             168.0,
             math.min(300.0, constraints.maxHeight * 0.36),
           );
+          Widget buildRankingPanel({required bool compact}) => _RankingPanel(
+            ranking: ranking,
+            totalVotosTseGeral: totalVotosTseGeral,
+            totalEstimativaGeral: totalEstimativaGeral,
+            onCityTap: widget.onCityTap,
+            locaisVotacaoContent: widget.locaisVotacaoContent,
+            selectedMunicipioKey: widget.selectedMunicipioKey,
+            layoutCompact: compact,
+            focusedRegiaoId: _regiaoDrillDownId,
+            onMostrarTSE: widget.onMostrarTSE,
+            onMostrarMarcadores: widget.onMostrarMarcadores,
+            mostrarTSE: widget.mostrarTSE,
+            mostrarMarcadores: widget.mostrarMarcadores,
+            onToggleFocusRegiao: (id) {
+              if (_regiaoDrillDownId == id) {
+                _setDrillDownRegiao(null);
+              } else {
+                _setDrillDownRegiao(id);
+              }
+            },
+          );
+
+          // Botão flutuante para mostrar/ocultar o ranking
+          Widget buildToggleBtn() => Positioned(
+            right: 8,
+            top: 8,
+            child: Material(
+              elevation: 3,
+              borderRadius: BorderRadius.circular(24),
+              color: Theme.of(context).colorScheme.surface,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () => setState(() => _rankingVisivel = !_rankingVisivel),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _rankingVisivel ? Icons.leaderboard : Icons.leaderboard_outlined,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _rankingVisivel ? 'Ocultar ranking' : 'Ver ranking',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+
           return Stack(
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
                 child: _buildMapStackContent(context, polygons, heatMarkers, markers),
               ),
-              if (ranking.isNotEmpty)
+              // Botão toggle sempre visível quando há dados
+              if (temDadosRanking) buildToggleBtn(),
+              // Painel ranking — visível conforme toggle
+              if (temDadosRanking && _rankingVisivel)
                 narrow
                     ? Positioned(
                         left: 8,
                         right: 8,
                         bottom: 8,
                         height: bottomPanelH,
-                        child: _RankingPanel(
-                          ranking: ranking,
-                          totalVotosTseGeral: totalVotosTseGeral,
-                          totalEstimativaGeral: totalEstimativaGeral,
-                          onCityTap: widget.onCityTap,
-                          locaisVotacaoContent: widget.locaisVotacaoContent,
-                          selectedMunicipioKey: widget.selectedMunicipioKey,
-                          layoutCompact: true,
-                          focusedRegiaoId: _regiaoDrillDownId,
-                          onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores, onToggleFocusRegiao: (id) {
-                            if (_regiaoDrillDownId == id) {
-                              _setDrillDownRegiao(null);
-                            } else {
-                              _setDrillDownRegiao(id);
-                            }
-                          },
-                        ),
+                        child: buildRankingPanel(compact: true),
                       )
                     : Positioned(
                         right: 8,
-                        top: _regiaoDrillDownId != null ? 56 : 8,
+                        top: 44,
                         bottom: 8,
-                        child: _RankingPanel(
-                          ranking: ranking,
-                          totalVotosTseGeral: totalVotosTseGeral,
-                          totalEstimativaGeral: totalEstimativaGeral,
-                          onCityTap: widget.onCityTap,
-                          locaisVotacaoContent: widget.locaisVotacaoContent,
-                          selectedMunicipioKey: widget.selectedMunicipioKey,
-                          layoutCompact: false,
-                          focusedRegiaoId: _regiaoDrillDownId,
-                          onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores, onToggleFocusRegiao: (id) {
-                            if (_regiaoDrillDownId == id) {
-                              _setDrillDownRegiao(null);
-                            } else {
-                              _setDrillDownRegiao(id);
-                            }
-                          },
-                        ),
+                        child: buildRankingPanel(compact: false),
                       ),
             ],
           );

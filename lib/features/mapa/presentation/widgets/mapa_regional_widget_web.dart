@@ -958,7 +958,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
 }
 
 /// Painel lateral analítico — redesenhado com barras, medalhas e filtragem por clique.
-class _RankingPanel extends StatelessWidget {
+class _RankingPanel extends StatefulWidget {
   const _RankingPanel({
     required this.ranking,
     required this.totalVotosTseGeral,
@@ -972,18 +972,22 @@ class _RankingPanel extends StatelessWidget {
   });
 
   final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
-  /// Soma real dos votos TSE (todos os municípios); o ranking por região pode somar menos se algum município não cair no polígono.
   final int totalVotosTseGeral;
   final int totalEstimativaGeral;
   final void Function(String nomeMunicipio)? onCityTap;
   final Widget? locaisVotacaoContent;
   final String? selectedMunicipioKey;
-  /// Em ecrãs estreitos o painel fica na parte inferior do mapa; usa largura total.
   final bool layoutCompact;
-  /// Região em modo drill-down no mapa (só essa região visível).
   final String? focusedRegiaoId;
-  /// Alterna foco: se já for [id], o mapa volta a mostrar todo o estado.
   final void Function(String regiaoId) onToggleFocusRegiao;
+
+  @override
+  State<_RankingPanel> createState() => _RankingPanelState();
+}
+
+class _RankingPanelState extends State<_RankingPanel> {
+  /// false = TSE 2022 | true = Minha Rede (campanha)
+  bool _modoRede = false;
 
   static const _medals = ['🥇', '🥈', '🥉'];
 
@@ -999,12 +1003,34 @@ class _RankingPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final showLocais = locaisVotacaoContent != null;
+    final showLocais = widget.locaisVotacaoContent != null;
     final fmt = NumberFormat('#,##0', 'pt_BR');
     final screenW = MediaQuery.sizeOf(context).width;
-    final panelWidth = layoutCompact
+    final panelWidth = widget.layoutCompact
         ? double.infinity
         : math.min(400.0, math.max(220.0, screenW * 0.42));
+
+    final ranking = widget.ranking;
+    final totalVotosTseGeral = widget.totalVotosTseGeral;
+    final totalEstimativaGeral = widget.totalEstimativaGeral;
+    final focusedRegiaoId = widget.focusedRegiaoId;
+
+    // ── Ranking da rede: agrega estimativa por região (flat lista de cidades) ──
+    // Ranking da rede: agrega estimativa por região
+    final rankingRede = <({String id, String nome, int estimativaTotal, List<({String cidade, String key, int estimativa})> cidades})>[];
+    if (totalEstimativaGeral > 0) {
+      for (final r in ranking.where((r) => r.totalEstimativa > 0)) {
+        final cidades = r.cidades
+            .where((c) => c.estimativa > 0)
+            .map((c) => (cidade: c.cidade, key: c.key, estimativa: c.estimativa))
+            .toList()
+          ..sort((a, b) => b.estimativa.compareTo(a.estimativa));
+        rankingRede.add((id: r.id, nome: r.nome, estimativaTotal: r.totalEstimativa, cidades: cidades));
+      }
+      rankingRede.sort((a, b) => b.estimativaTotal.compareTo(a.estimativaTotal));
+    }
+
+    final temDadosRede = totalEstimativaGeral > 0;
 
     return Material(
       elevation: 4,
@@ -1038,7 +1064,7 @@ class _RankingPanel extends StatelessWidget {
                         if (focusedRegiaoId != null) ...[
                           const Spacer(),
                           TextButton.icon(
-                            onPressed: () => onToggleFocusRegiao(focusedRegiaoId!),
+                            onPressed: () => widget.onToggleFocusRegiao(focusedRegiaoId),
                             icon: const Icon(Icons.zoom_out_map, size: 14),
                             label: const Text('Ver tudo', style: TextStyle(fontSize: 11)),
                             style: TextButton.styleFrom(
@@ -1051,6 +1077,31 @@ class _RankingPanel extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
+
+                    // ── Toggle TSE / Rede (só aparece quando há dados de rede) ──
+                    if (temDadosRede) ...[
+                      Row(
+                        children: [
+                          _TabBtn(
+                            label: 'Eleição 2022',
+                            icon: Icons.how_to_vote_outlined,
+                            active: !_modoRede,
+                            color: const Color(0xFF1565C0),
+                            onTap: () => setState(() => _modoRede = false),
+                          ),
+                          const SizedBox(width: 8),
+                          _TabBtn(
+                            label: 'Minha Rede',
+                            icon: Icons.groups_outlined,
+                            active: _modoRede,
+                            color: cs.secondary,
+                            onTap: () => setState(() => _modoRede = true),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+
                     // KPIs resumo
                     Row(
                       children: [
@@ -1072,11 +1123,13 @@ class _RankingPanel extends StatelessWidget {
                           )),
                       ],
                     ),
-                    if (onCityTap != null)
+                    if (widget.onCityTap != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
+                          _modoRede
+                              ? 'Toque na região para filtrar o mapa'
+                              : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
                           style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ),
@@ -1084,15 +1137,17 @@ class _RankingPanel extends StatelessWidget {
                 ),
               ),
 
-              // ── Lista de regiões ────────────────────────────────────────
+              // ── Lista de regiões: TSE ou Rede ──────────────────────────
               Expanded(
-                child: ListView.builder(
+                child: _modoRede
+                    ? _buildListaRede(rankingRede, totalEstimativaGeral, fmt, cs, theme)
+                    : ListView.builder(
                   itemCount: ranking.length,
                   itemBuilder: (context, i) {
                     final r = ranking[i];
                     final isFocused = focusedRegiaoId == r.id;
-                    final containsSelected = selectedMunicipioKey != null &&
-                        r.cidades.any((c) => c.key == selectedMunicipioKey);
+                    final containsSelected = widget.selectedMunicipioKey != null &&
+                        r.cidades.any((c) => c.key == widget.selectedMunicipioKey);
                     final barColor = _barColor(i, cs);
                     final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
 
@@ -1117,7 +1172,7 @@ class _RankingPanel extends StatelessWidget {
                         collapsedShape: const RoundedRectangleBorder(),
                         tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
                         title: InkWell(
-                          onTap: () => onToggleFocusRegiao(r.id),
+                          onTap: () => widget.onToggleFocusRegiao(r.id),
                           borderRadius: BorderRadius.circular(8),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1222,7 +1277,7 @@ class _RankingPanel extends StatelessWidget {
                                       ),
                                     // Botão filtrar — no Wrap não estoura
                                     GestureDetector(
-                                      onTap: () => onToggleFocusRegiao(r.id),
+                                      onTap: () => widget.onToggleFocusRegiao(r.id),
                                       child: Text(
                                         isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
                                         style: theme.textTheme.labelSmall?.copyWith(
@@ -1266,9 +1321,9 @@ class _RankingPanel extends StatelessWidget {
                             ),
                           ),
                           ...r.cidades.map((c) {
-                            final isSelected = c.key == selectedMunicipioKey;
+                            final isSelected = c.key == widget.selectedMunicipioKey;
                             return InkWell(
-                              onTap: () => onCityTap?.call(c.key),
+                              onTap: () => widget.onCityTap?.call(c.key),
                               child: Container(
                                 margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -1334,10 +1389,264 @@ class _RankingPanel extends StatelessWidget {
 
               if (showLocais) ...[
                 const Divider(height: 1),
-                Expanded(flex: 1, child: locaisVotacaoContent!),
+                Expanded(flex: 1, child: widget.locaisVotacaoContent!),
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ── Lista da rede (campanha) ────────────────────────────────────────────────
+
+  Widget _buildListaRede(
+    List<({String id, String nome, int estimativaTotal, List<({String cidade, String key, int estimativa})> cidades})> rankingRede,
+    int totalEstimativa,
+    NumberFormat fmt,
+    ColorScheme cs,
+    ThemeData theme,
+  ) {
+    if (rankingRede.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.groups_outlined, size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+              const SizedBox(height: 12),
+              Text(
+                'Nenhum dado da rede ainda.',
+                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Ative "Minha rede" nas camadas e cadastre votantes e apoiadores.',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: rankingRede.length,
+      itemBuilder: (context, i) {
+        final r = rankingRede[i];
+        final isFocused = widget.focusedRegiaoId == r.id;
+        final pct = totalEstimativa > 0 ? r.estimativaTotal / totalEstimativa * 100 : 0.0;
+        final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: isFocused
+                ? Border.all(color: cs.secondary, width: 2)
+                : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+            color: isFocused ? cs.secondaryContainer.withValues(alpha: 0.2) : null,
+          ),
+          child: ExpansionTile(
+            shape: const RoundedRectangleBorder(),
+            collapsedShape: const RoundedRectangleBorder(),
+            tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            title: InkWell(
+              onTap: () => widget.onToggleFocusRegiao(r.id),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          medalLabel,
+                          style: TextStyle(
+                            fontSize: i < 3 ? 18 : 13,
+                            fontWeight: FontWeight.bold,
+                            color: i >= 3 ? cs.onSurfaceVariant : null,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            r.nome,
+                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: cs.secondary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${pct.toStringAsFixed(1)}%',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: cs.secondary,
+                            ),
+                          ),
+                        ),
+                        if (isFocused)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(Icons.map, size: 16, color: cs.secondary),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // Barra de progresso campanha
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: pct / 100,
+                        minHeight: 5,
+                        backgroundColor: cs.secondary.withValues(alpha: 0.12),
+                        valueColor: AlwaysStoppedAnimation<Color>(cs.secondary),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
+                            const SizedBox(width: 3),
+                            Text(
+                              fmt.format(r.estimativaTotal),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: cs.secondary,
+                              ),
+                            ),
+                            Text(
+                              ' votos campanha',
+                              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () => widget.onToggleFocusRegiao(r.id),
+                          child: Text(
+                            isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: cs.secondary,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            children: [
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Text(
+                        'Cidade',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Votos   %',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...r.cidades.map((c) {
+                final cpct = totalEstimativa > 0 ? c.estimativa / totalEstimativa * 100 : 0.0;
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  child: Row(
+                    children: [
+                      Icon(Icons.circle, size: 6, color: cs.secondary.withValues(alpha: 0.6)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          c.cidade,
+                          style: theme.textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${fmt.format(c.estimativa)}  ${cpct.toStringAsFixed(1)}%',
+                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Botão de aba no cabeçalho do ranking (TSE / Minha Rede).
+class _TabBtn extends StatelessWidget {
+  const _TabBtn({required this.label, required this.icon, required this.active, required this.color, required this.onTap});
+  final String label;
+  final IconData icon;
+  final bool active;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: active ? color : color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? color : color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: active ? Colors.white : color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : color,
+              ),
+            ),
+          ],
         ),
       ),
     );

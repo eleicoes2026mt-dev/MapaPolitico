@@ -201,8 +201,9 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final votosAjustados = ref.watch(mapaVotosTseAjustadosProvider);
-    // Dados TSE reais para o ranking (independente do toggle mostrarTSE)
-    final votosTseRawProvider = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
+    // Dados brutos para o ranking (independentes dos toggles de visibilidade)
+    final votosTseRaw = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
+    final estimativaRaw = ref.watch(mapaEstimativaRawProvider);
     final estimativaPorCidade = ref.watch(mapaEstimativaFiltradaProvider);
     final marcadores = ref.watch(mapaMarcadoresFiltradosProvider);
     final filtros = ref.watch(mapaFiltrosProvider);
@@ -225,10 +226,10 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
       margin: EdgeInsets.zero,
       child: MapaRegionalWidget(
         height: mapH,
-        // Passa os dados brutos TSE para o ranking (sempre visível no painel lateral)
-        // Os círculos no mapa usam votosAjustados (respeita o toggle mostrarTSE)
-        votosPorMunicipio: votosTseRawProvider.isNotEmpty ? votosTseRawProvider : (votosAjustados.isEmpty ? null : votosAjustados),
-        estimativaPorCidade: estimativaPorCidade.isEmpty ? null : estimativaPorCidade,
+        // TSE: para ranking usa dados brutos; para círculos no mapa usa dados ajustados pelo toggle
+        votosPorMunicipio: votosTseRaw.isNotEmpty ? votosTseRaw : (votosAjustados.isEmpty ? null : votosAjustados),
+        // Estimativa: para ranking usa dados brutos; para marcadores no mapa usa dados filtrados
+        estimativaPorCidade: estimativaRaw.isNotEmpty ? estimativaRaw : (estimativaPorCidade.isEmpty ? null : estimativaPorCidade),
         cidadesMarcadoresMapa: marcadores.isEmpty ? null : marcadores,
         regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,
         nomesCustomizados: nomesCustomizados.isEmpty ? null : nomesCustomizados,

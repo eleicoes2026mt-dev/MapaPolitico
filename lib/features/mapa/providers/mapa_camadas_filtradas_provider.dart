@@ -55,6 +55,13 @@ Map<String, T> _intersecionarChaves<T>(Map<String, T> map, Set<String> permitida
   return {for (final e in map.entries) if (permitidas.contains(e.key)) e.key: e.value};
 }
 
+/// Estimativa bruta (sem gate de mostrarMarcadores) — usada no ranking independente do toggle.
+final mapaEstimativaRawProvider = Provider<Map<String, int>>((ref) {
+  final apoiadores = ref.watch(apoiadoresParaMapaProvider).valueOrNull ?? [];
+  final votantes = ref.watch(votantesListProvider).valueOrNull ?? [];
+  return buildEstimativaPorCidadeFromLists(apoiadores, votantes);
+});
+
 /// Estimativa por cidade respeitando filtros da tela Mapa.
 final mapaEstimativaFiltradaProvider = Provider<Map<String, int>>((ref) {
   final filtros = ref.watch(mapaFiltrosProvider);

@@ -238,8 +238,8 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         'tag': 'visita-${v.id}',
       });
 
-      if (r.status != null && r.status! >= 400) {
-        final detail = r.data is Map ? r.data['error'] ?? r.data.toString() : r.data?.toString() ?? '';
+      if (r.status >= 400) {
+        final detail = r.data is Map ? (r.data as Map)['error'] ?? r.data.toString() : r.data?.toString() ?? '';
         throw Exception('Erro ${r.status}: $detail');
       }
 

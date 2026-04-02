@@ -366,61 +366,68 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   }
 
   /// Labels de percentual de atingimento por região (modo Comparativo).
+  /// Oculta regiões sem dado (ratio = 0) e evita sobreposição por distância mínima.
   List<Marker> _buildComparativoLabels() {
     final ratios = _comparativoRatios;
     final cores = _comparativoColors;
     if (ratios == null || ratios.isEmpty || _regioesMT == null) return [];
 
-    final markers = <Marker>[];
+    // 1ª passagem: coleta centróides apenas onde há dado real (ratio > 0)
+    final candidatos = <({ll.LatLng pos, Color cor, String pct, double ratio})>[];
     for (final regiao in _regioesMT!) {
       final ratio = ratios[regiao.id];
-      if (ratio == null) continue;
+      if (ratio == null || ratio <= 0.0) continue; // sem dado → sem badge
+
       final hexCor = cores?[regiao.id] ?? '#78909C';
       final cor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
-      final pct = (ratio * 100).toStringAsFixed(1);
+      final pct = '${(ratio * 100).toStringAsFixed(1)}%';
 
-      // Centróide: média de lat/lng dos pontos do maior polígono da região
       if (regiao.polygons.isEmpty) continue;
       final geoPoly = regiao.polygons.reduce((a, b) => a.points.length >= b.points.length ? a : b);
       final pts = geoPoly.points;
       if (pts.isEmpty) continue;
       final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
       final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
+      candidatos.add((pos: ll.LatLng(lat, lng), cor: cor, pct: pct, ratio: ratio));
+    }
 
-      markers.add(Marker(
-        point: ll.LatLng(lat, lng),
-        width: 72,
-        height: 52,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: cor,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4)],
-              ),
-              child: Text(
-                '$pct%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            Container(
-              width: 2,
-              height: 6,
-              color: cor.withValues(alpha: 0.7),
-            ),
+    // 2ª passagem: anti-sobreposição — mantém o badge mais relevante por célula de grade
+    // Ordena pelo maior ratio primeiro (mais importante = fica visível)
+    candidatos.sort((a, b) => b.ratio.compareTo(a.ratio));
+    const minDist = 1.4; // graus (≈ 155 km em MT) — ajustar conforme zoom desejado
+    final aceitos = <({ll.LatLng pos, Color cor, String pct})>[];
+    for (final c in candidatos) {
+      final proximo = aceitos.any((a) =>
+        (a.pos.latitude - c.pos.latitude).abs() < minDist &&
+        (a.pos.longitude - c.pos.longitude).abs() < minDist);
+      if (!proximo) aceitos.add((pos: c.pos, cor: c.cor, pct: c.pct));
+    }
+
+    return aceitos.map((c) => Marker(
+      point: c.pos,
+      width: 64,
+      height: 32,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: c.cor,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 2)),
           ],
         ),
-      ));
-    }
-    return markers;
+        child: Text(
+          c.pct,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            shadows: [Shadow(color: Colors.black38, blurRadius: 2)],
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    )).toList();
   }
 
   /// Votos TSE: círculos com degradê (centro → transparente) e cor por faixa (vermelho … verde).

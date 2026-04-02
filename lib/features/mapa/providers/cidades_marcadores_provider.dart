@@ -3,9 +3,22 @@ import '../../../models/apoiador.dart';
 import '../../../models/bandeira_visual.dart';
 import '../../../models/votante.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../votantes/providers/votantes_provider.dart';
 import '../data/mt_municipios_coords.dart';
 import '../models/mapa_marcador_cidade.dart';
+
+/// Lista de apoiadores para o mapa: candidato/assessor veem todos;
+/// apoiador logado vê só o próprio registro (para exibir a bandeira no marcador).
+final apoiadoresParaMapaProvider = FutureProvider<List<Apoiador>>((ref) async {
+  final lista = ref.watch(apoiadoresListProvider).valueOrNull ?? [];
+  if (lista.isNotEmpty) return lista;
+  // Apoiador: inclui o próprio registro para que a bandeira apareça no mapa
+  final profile = await ref.read(profileProvider.future);
+  if (profile?.role != 'apoiador') return [];
+  final eu = ref.watch(meuApoiadorProvider).valueOrNull;
+  return eu != null ? [eu] : [];
+});
 
 class _MarcadorAgg {
   int count = 0;
@@ -72,7 +85,8 @@ String? _trimOrNull(String? s) {
 
 /// Mapa completo da campanha (sem filtros da tela Mapa). Usado em Estratégia e como base.
 final cidadesMarcadoresMapaCampanhaProvider = Provider<Map<String, MapaMarcadorCidade>>((ref) {
-  final apoiadores = ref.watch(apoiadoresListProvider).valueOrNull ?? [];
+  // Usa apoiadoresParaMapaProvider para incluir o próprio apoiador quando necessário
+  final apoiadores = ref.watch(apoiadoresParaMapaProvider).valueOrNull ?? [];
   final votantes = ref.watch(votantesListProvider).valueOrNull ?? [];
   return buildMarcadoresCidadesMap(apoiadores, votantes);
 });

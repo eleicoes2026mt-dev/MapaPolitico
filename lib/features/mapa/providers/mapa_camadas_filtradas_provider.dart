@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
 import '../../../models/votante.dart';
-import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../../votantes/providers/votantes_provider.dart';
 import '../data/mt_municipios_coords.dart';
@@ -59,7 +58,7 @@ Map<String, T> _intersecionarChaves<T>(Map<String, T> map, Set<String> permitida
 /// Estimativa por cidade respeitando filtros da tela Mapa.
 final mapaEstimativaFiltradaProvider = Provider<Map<String, int>>((ref) {
   final filtros = ref.watch(mapaFiltrosProvider);
-  final apoiadores = ref.watch(apoiadoresListProvider).valueOrNull ?? [];
+  final apoiadores = ref.watch(apoiadoresParaMapaProvider).valueOrNull ?? [];
   final votantes = ref.watch(votantesListProvider).valueOrNull ?? [];
   var map = buildEstimativaPorCidadeFromLists(
     apoiadores,
@@ -93,7 +92,7 @@ final mapaEstimativaFiltradaProvider = Provider<Map<String, int>>((ref) {
 /// Marcadores (apoiadores/votantes) com os mesmos filtros.
 final mapaMarcadoresFiltradosProvider = Provider<Map<String, MapaMarcadorCidade>>((ref) {
   final filtros = ref.watch(mapaFiltrosProvider);
-  final apoiadores = ref.watch(apoiadoresListProvider).valueOrNull ?? [];
+  final apoiadores = ref.watch(apoiadoresParaMapaProvider).valueOrNull ?? [];
   final votantes = ref.watch(votantesListProvider).valueOrNull ?? [];
   var map = buildMarcadoresCidadesMap(
     apoiadores,

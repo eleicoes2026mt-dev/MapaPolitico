@@ -142,8 +142,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     return _regioesMT?.where((r) => r.id == id).firstOrNull;
   }
 
-  /// Votos TSE a mostrar nas bolhas (filtrados se drill-down ativo).
+  /// Votos TSE a mostrar nas bolhas — respeitando o toggle mostrarTSE.
   Map<String, int>? get _votosParaBolhas {
+    // Se TSE está desligado, não desenha nenhuma bolha
+    if (!widget.mostrarTSE) return null;
     final v = widget.votosPorMunicipio;
     if (v == null) return null;
     final reg = _regiaoDrillDown;
@@ -156,6 +158,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   }
 
   Map<String, MapaMarcadorCidade>? get _marcadoresParaMapa {
+    if (!widget.mostrarMarcadores) return null;
     final m = widget.cidadesMarcadoresMapa;
     if (m == null) return null;
     final reg = _regiaoDrillDown;

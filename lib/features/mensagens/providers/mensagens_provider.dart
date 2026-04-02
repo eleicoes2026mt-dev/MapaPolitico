@@ -54,22 +54,21 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
     final res = await supabase.from('mensagens').insert(row).select().single();
     final mensagem = Mensagem.fromJson(res);
 
-    // Envia push notification se solicitado
-    if (p.enviarPush) {
-      try {
-        await supabase.functions.invoke('send-push', body: {
-          'title': mensagem.titulo,
-          'body': mensagem.corpo ?? 'Nova mensagem da campanha.',
-          'url': '/#/mensagens',
-          'tag': 'mensagem-${mensagem.id}',
-        });
-        // Marca como enviada
+    // Sempre tenta enviar push (notificação para todos)
+    try {
+      final r = await supabase.functions.invoke('send-push', body: {
+        'title': mensagem.titulo,
+        'body': mensagem.corpo ?? 'Nova mensagem da campanha.',
+        'url': '/#/mensagens',
+        'tag': 'mensagem-${mensagem.id}',
+      });
+      if (r.status < 400) {
         await supabase
             .from('mensagens')
             .update({'enviada_em': DateTime.now().toIso8601String()})
             .eq('id', mensagem.id);
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
 
     ref.invalidate(mensagensListProvider);
     return mensagem;

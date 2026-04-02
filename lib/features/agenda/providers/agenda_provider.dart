@@ -75,7 +75,7 @@ class NovaVisitaParams {
 final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((ref) {
   return (NovaVisitaParams p) async {
     final user = ref.read(currentUserProvider);
-    await supabase.from('reunioes').insert({
+    final res = await supabase.from('reunioes').insert({
       'titulo': p.titulo.trim(),
       if (p.hora != null && p.hora!.isNotEmpty) 'hora': p.hora,
       'data_reuniao': p.dataReuniao.toIso8601String().split('T').first,
@@ -84,7 +84,23 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
       if (p.municipioId != null) 'municipio_id': p.municipioId,
       'visivel_apoiadores': p.visivelApoiadores,
       'criado_por': user?.id,
-    });
+    }).select('id, titulo, local_texto').maybeSingle();
+
+    // Push automático quando a visita é visível para apoiadores
+    if (p.visivelApoiadores && res != null) {
+      try {
+        final titulo = res['titulo'] as String? ?? p.titulo;
+        final local = res['local_texto'] as String? ?? p.localTexto ?? '';
+        final dataStr = p.dataReuniao.toIso8601String().split('T').first;
+        await supabase.functions.invoke('send-push', body: {
+          'title': '📅 Nova visita agendada',
+          'body': '$titulo — $dataStr${local.isNotEmpty ? " • $local" : ""}',
+          'url': '/#/agenda',
+          'tag': 'visita-${res['id']}',
+        });
+      } catch (_) {}
+    }
+
     ref.invalidate(visitasProvider);
     ref.invalidate(todasVisitasProvider);
     ref.invalidate(proximaVisitaMinhaCidadeProvider);

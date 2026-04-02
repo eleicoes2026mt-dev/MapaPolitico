@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../core/constants/app_constants.dart';
+import '../core/services/realtime_notifications_service.dart';
 import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../models/profile.dart';
@@ -28,6 +29,42 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
     if (kIsWeb) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _triggerOnboarding());
     }
+    // Ativa notificações realtime após o login
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Inicia realtime sem ref (não precisa invalidar providers aqui)
+      RealtimeNotificationsService.instance.initSimple();
+      RealtimeNotificationsService.instance.setNotificacaoCallback(
+        (title, body, url) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.notifications_active, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                        if (body.isNotEmpty)
+                          Text(body, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 5),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+        },
+      );
+    });
   }
 
   Future<void> _triggerOnboarding() async {
@@ -186,15 +223,20 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
-  /// Apoiador: início (home), votantes, agenda, mensagens (notificações), mapa e perfil.
+  /// Apoiador: início (home), votantes, agenda, mensagens e perfil.
+  /// Estratégia, Mapa, Benfeitorias, Dashboard e itens de gestão ficam ocultos.
   static const _pathsOcultosApoiador = {
-    '/',
+    '/',          // Dashboard do candidato
     '/assessores',
     '/apoiadores',
     '/benfeitorias',
-    '/estrategia',
+    '/estrategia', // Estratégia oculta para apoiadores
+    '/mapa',       // Mapa oculto para apoiadores
     '/configuracoes',
   };
+
+  /// Candidato/assessor: /apoiador-home é exclusivo dos apoiadores.
+  static const _pathsOcultosCandidatoAssessor = {'/apoiador-home'};
 
   /// Assessor: entra em «Apoiadores»; não vê dashboard do candidato nem menu Assessores.
   static const _pathsOcultosAssessor = {'/', '/assessores', '/configuracoes'};
@@ -291,16 +333,11 @@ class _Sidebar extends StatelessWidget {
                   children: [
                     ..._items.where((e) {
                       if (prof == null) return true;
-                      if (e.path == '/configuracoes' && prof.role != 'candidato') {
-                        return false;
-                      }
-                      if (prof.role == 'apoiador') {
-                        return !_pathsOcultosApoiador.contains(e.path);
-                      }
-                      if (prof.role == 'assessor') {
-                        return !_pathsOcultosAssessor.contains(e.path);
-                      }
-                      return true;
+                      if (e.path == '/configuracoes' && prof.role != 'candidato') return false;
+                      if (prof.role == 'apoiador') return !_pathsOcultosApoiador.contains(e.path);
+                      if (prof.role == 'assessor') return !_pathsOcultosAssessor.contains(e.path) && !_pathsOcultosCandidatoAssessor.contains(e.path);
+                      // Candidato: ocultar /apoiador-home (exclusivo dos apoiadores)
+                      return !_pathsOcultosCandidatoAssessor.contains(e.path);
                     }).map((e) {
                       final selected = loc == e.path;
                       final sub = _subtitleUltimoAcesso(e.path, prof);

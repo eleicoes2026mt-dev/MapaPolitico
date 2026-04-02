@@ -342,12 +342,20 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           final holes = geo.holes
               .map((hole) => hole.map((p) => ll.LatLng(p.latitude, p.longitude)).toList())
               .toList();
+          // Modo comparativo: preenche a região com a cor de atingimento
+          final fillColor = isEditing
+              ? color.withValues(alpha: 0.3)
+              : (_comparativoColors != null && _comparativoColors!.containsKey(regiao.id))
+                  ? color.withValues(alpha: 0.72)
+                  : Colors.transparent;
           polygons.add(Polygon<String>(
             points: points,
             holePointsList: holes.isEmpty ? null : holes,
-            color: isEditing ? color.withValues(alpha: 0.2) : Colors.transparent,
-            borderColor: isEditing ? Colors.white : neutralBorder,
-            borderStrokeWidth: isEditing ? 5 : 1,
+            color: fillColor,
+            borderColor: isEditing
+                ? Colors.white
+                : (_comparativoColors != null) ? color.withValues(alpha: 0.9) : neutralBorder,
+            borderStrokeWidth: isEditing ? 5 : (_comparativoColors != null ? 2 : 1),
             hitValue: '${regiao.id}#$polygonIndex',
           ));
           polygonIndex++;
@@ -369,7 +377,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       if (ratio == null) continue;
       final hexCor = cores?[regiao.id] ?? '#78909C';
       final cor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
-      final pct = (ratio * 100).toStringAsFixed(0);
+      final pct = (ratio * 100).toStringAsFixed(1);
 
       // Centróide: média de lat/lng dos pontos do maior polígono da região
       if (regiao.polygons.isEmpty) continue;

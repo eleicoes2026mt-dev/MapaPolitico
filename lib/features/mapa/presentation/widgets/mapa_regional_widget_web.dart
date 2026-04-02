@@ -132,7 +132,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   String? _regiaoDrillDownId;
   bool _loading = true;
   String? _error;
-  bool _rankingVisivel = true;
+  bool _rankingVisivel = false; // começa fechado — usuário abre quando quiser
   /// Cores de atingimento por região (modo Comparativo). null = desativado.
   Map<String, String>? _comparativoColors;
 
@@ -949,7 +949,11 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               color: Theme.of(context).colorScheme.surface,
               child: InkWell(
                 borderRadius: BorderRadius.circular(24),
-                onTap: () => setState(() => _rankingVisivel = !_rankingVisivel),
+                onTap: () {
+                  setState(() => _rankingVisivel = !_rankingVisivel);
+                  // Ao abrir, ativa a camada correta conforme o tab padrão (TSE)
+                  // O _RankingPanel cuida de acionar onMostrarTSE quando o usuário clica nos tabs
+                },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
@@ -1081,6 +1085,17 @@ class _RankingPanelState extends State<_RankingPanel> {
     if (widget.mostrarMarcadores && !widget.mostrarTSE) {
       _modo = _ModoRanking.rede;
     }
+    // Ao montar pela primeira vez, ativa a camada correspondente ao tab padrão
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_modo == _ModoRanking.tse) {
+        widget.onMostrarTSE?.call(true);
+        widget.onMostrarMarcadores?.call(false);
+      } else if (_modo == _ModoRanking.rede) {
+        widget.onMostrarTSE?.call(false);
+        widget.onMostrarMarcadores?.call(true);
+      }
+    });
   }
 
   static const _medals = ['🥇', '🥈', '🥉'];
@@ -1228,20 +1243,22 @@ class _RankingPanelState extends State<_RankingPanel> {
                       const SizedBox(height: 8),
                     ],
 
-                    // KPIs resumo
+                    // KPIs: mostra apenas o que é relevante para o tab ativo
                     Row(
                       children: [
-                        Expanded(child: _KpiChip(
-                          icon: Icons.how_to_vote_outlined,
-                          label: 'TSE 2022',
-                          value: fmt.format(totalVotosTseGeral),
-                          color: cs.primary,
-                          theme: theme,
-                        )),
-                        const SizedBox(width: 8),
-                        if (totalEstimativaGeral > 0)
+                        if (_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo)
                           Expanded(child: _KpiChip(
-                            icon: Icons.analytics_outlined,
+                            icon: Icons.how_to_vote_outlined,
+                            label: 'TSE 2022',
+                            value: fmt.format(totalVotosTseGeral),
+                            color: const Color(0xFF1565C0),
+                            theme: theme,
+                          )),
+                        if ((_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
+                          const SizedBox(width: 8),
+                        if ((_modo == _ModoRanking.rede || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
+                          Expanded(child: _KpiChip(
+                            icon: Icons.groups_outlined,
                             label: 'Campanha',
                             value: fmt.format(totalEstimativaGeral),
                             color: cs.secondary,

@@ -97,7 +97,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
   Offset? _hoverPosition;
   Map<String, String> _customRegionNames = {};
   String? _editingRegionId;
-  /// Drill-down: só polígonos e bolhas desta região imediata (toque sem admin).
+  /// Drill-down: destaca a região no mapa; bolhas TSE só nos municípios da região (toque sem admin).
   String? _regiaoDrillDownId;
   bool _geoLoaded = false;
   GraphicsOverlay? _overlayRegioesMT;
@@ -386,23 +386,34 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     final overlayRegioesMT = GraphicsOverlay();
     const neutralBorder = Color(0xFF757575);
     for (final regiao in regioesMT) {
-      if (_regiaoDrillDownId != null && regiao.id != _regiaoDrillDownId) continue;
       final color = _colorForRegiao(regiao.cdRgint ?? regiao.id);
       final regionId = regiao.id;
       final nomeOriginal = regiao.nome;
       final cdRgint = regiao.cdRgint;
+      final isFocused = _regiaoDrillDownId != null && regionId == _regiaoDrillDownId;
 
       for (final geo in regiao.polygons) {
         final g = _geoPolygonToArcGIS(geo);
         if (g != null) {
           final isEditing = regionId == _editingRegionId;
-          final sym = SimpleFillSymbol(
-            color: isEditing ? color.withValues(alpha: 0.2) : Colors.transparent,
-          );
-          sym.outline = SimpleLineSymbol(
-            color: isEditing ? Colors.white : neutralBorder,
-            width: isEditing ? 5 : 1,
-          );
+          final Color fillColor;
+          final Color outlineColor;
+          final double outlineWidth;
+          if (isEditing) {
+            fillColor = color.withValues(alpha: 0.2);
+            outlineColor = Colors.white;
+            outlineWidth = 5;
+          } else if (isFocused) {
+            fillColor = primary.withValues(alpha: 0.16);
+            outlineColor = primary.withValues(alpha: 0.82);
+            outlineWidth = 2.5;
+          } else {
+            fillColor = Colors.transparent;
+            outlineColor = neutralBorder;
+            outlineWidth = 1;
+          }
+          final sym = SimpleFillSymbol(color: fillColor);
+          sym.outline = SimpleLineSymbol(color: outlineColor, width: outlineWidth);
           overlayRegioesMT.graphics.add(
             Graphic(
               geometry: g,

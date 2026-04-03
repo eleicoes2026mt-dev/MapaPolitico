@@ -114,6 +114,15 @@ Color _colorForRegiao(
 const String _kEstadoHitPrefix = 'e:';
 
 /// Separa id da região do índice do polígono no hitValue (ex.: "510009#2" -> regiao 510009, polígono 2).
+/// Rótulo do ranking: deixa claro que é região intermediária (IBGE), não só o município homônimo.
+String _tituloRegiaoRanking(String nome) {
+  final t = nome.trim();
+  if (t.isEmpty) return 'Região';
+  final lower = t.toLowerCase();
+  if (lower.startsWith('região de ') || lower.startsWith('regiao de ')) return t;
+  return 'Região de $t';
+}
+
 String _regiaoIdFromHitValue(String hitValue) {
   final i = hitValue.indexOf('#');
   return i >= 0 ? hitValue.substring(0, i) : hitValue;
@@ -326,13 +335,12 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       }
     }
 
-    // 2) Delimitações das regiões de MT: só borda; preenchimento transparente. Cor só na região clicada.
-    // Drill-down: só desenha a região selecionada (as outras somem).
+    // 2) Regiões de MT: comparativo preenche todas; fora disso, borda neutra e destaque leve na região selecionada.
     final mtList = _regioesMT;
     if (mtList != null) {
       const neutralBorder = Color(0xFF757575);
+      final inComparativo = _comparativoColors != null && _comparativoColors!.isNotEmpty;
       for (final regiao in mtList) {
-        if (_regiaoDrillDownId != null && regiao.id != _regiaoDrillDownId) continue;
         var polygonIndex = 0;
         for (final geo in regiao.polygons) {
           final isEditing = regiao.id == _editingRegionId && polygonIndex == _editingPolygonIndex;
@@ -342,20 +350,37 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           final holes = geo.holes
               .map((hole) => hole.map((p) => ll.LatLng(p.latitude, p.longitude)).toList())
               .toList();
-          // Modo comparativo: preenche a região com a cor de atingimento
-          final fillColor = isEditing
-              ? color.withValues(alpha: 0.3)
-              : (_comparativoColors != null && _comparativoColors!.containsKey(regiao.id))
-                  ? color.withValues(alpha: 0.72)
-                  : Colors.transparent;
+          final isFocused = _regiaoDrillDownId != null && regiao.id == _regiaoDrillDownId;
+          final hasComparativoFill = inComparativo && _comparativoColors!.containsKey(regiao.id);
+
+          late final Color fillColor;
+          late final Color borderColor;
+          late final double borderStrokeWidth;
+
+          if (isEditing) {
+            fillColor = color.withValues(alpha: 0.3);
+            borderColor = Colors.white;
+            borderStrokeWidth = 5;
+          } else if (hasComparativoFill) {
+            fillColor = color.withValues(alpha: 0.72);
+            borderColor = isFocused ? Colors.white.withValues(alpha: 0.92) : color.withValues(alpha: 0.9);
+            borderStrokeWidth = isFocused ? 3.2 : 2;
+          } else if (isFocused) {
+            fillColor = theme.colorScheme.primary.withValues(alpha: 0.16);
+            borderColor = theme.colorScheme.primary.withValues(alpha: 0.82);
+            borderStrokeWidth = 2.5;
+          } else {
+            fillColor = Colors.transparent;
+            borderColor = neutralBorder.withValues(alpha: inComparativo ? 0.45 : 1);
+            borderStrokeWidth = 1;
+          }
+
           polygons.add(Polygon<String>(
             points: points,
             holePointsList: holes.isEmpty ? null : holes,
             color: fillColor,
-            borderColor: isEditing
-                ? Colors.white
-                : (_comparativoColors != null) ? color.withValues(alpha: 0.9) : neutralBorder,
-            borderStrokeWidth: isEditing ? 5 : (_comparativoColors != null ? 2 : 1),
+            borderColor: borderColor,
+            borderStrokeWidth: borderStrokeWidth,
             hitValue: '${regiao.id}#$polygonIndex',
           ));
           polygonIndex++;
@@ -715,7 +740,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Só esta região: $drillNome',
+                        'Em destaque: ${_tituloRegiaoRanking(drillNome)}',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1420,10 +1445,19 @@ class _RankingPanelState extends State<_RankingPanel> {
                                 ? Border.all(color: cs.secondary, width: 1)
                                 : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
                         color: isFocused
-                            ? cs.primaryContainer.withValues(alpha: 0.25)
+                            ? cs.primaryContainer.withValues(alpha: 0.32)
                             : containsSelected
                                 ? cs.secondaryContainer.withValues(alpha: 0.15)
                                 : null,
+                        boxShadow: isFocused
+                            ? [
+                                BoxShadow(
+                                  color: cs.primary.withValues(alpha: 0.28),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
                       ),
                       child: ExpansionTile(
                         initiallyExpanded: containsSelected || isFocused,
@@ -1452,7 +1486,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
-                                        r.nome,
+                                        _tituloRegiaoRanking(r.nome),
                                         style: theme.textTheme.bodyMedium?.copyWith(
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -1755,9 +1789,18 @@ class _RankingPanelState extends State<_RankingPanel> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: isFocused
-                      ? Border.all(color: cs.primary, width: 2)
+                      ? Border.all(color: cs.primary, width: 2.5)
                       : Border.all(color: corAtingimento.withValues(alpha: 0.5)),
-                  color: corAtingimento.withValues(alpha: 0.06),
+                  color: corAtingimento.withValues(alpha: isFocused ? 0.1 : 0.06),
+                  boxShadow: isFocused
+                      ? [
+                          BoxShadow(
+                            color: cs.primary.withValues(alpha: 0.3),
+                            blurRadius: 12,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
                 child: ExpansionTile(
                   shape: const RoundedRectangleBorder(),
@@ -1774,7 +1817,13 @@ class _RankingPanelState extends State<_RankingPanel> {
                             children: [
                               Text(medalLabel, style: TextStyle(fontSize: i < 3 ? 18 : 13, fontWeight: FontWeight.bold, color: i >= 3 ? cs.onSurfaceVariant : null)),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(r.nome, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                              Expanded(
+                                child: Text(
+                                  _tituloRegiaoRanking(r.nome),
+                                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                                 decoration: BoxDecoration(color: corAtingimento.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
@@ -1914,7 +1963,16 @@ class _RankingPanelState extends State<_RankingPanel> {
             border: isFocused
                 ? Border.all(color: cs.secondary, width: 2)
                 : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-            color: isFocused ? cs.secondaryContainer.withValues(alpha: 0.2) : null,
+            color: isFocused ? cs.secondaryContainer.withValues(alpha: 0.28) : null,
+            boxShadow: isFocused
+                ? [
+                    BoxShadow(
+                      color: cs.secondary.withValues(alpha: 0.28),
+                      blurRadius: 12,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: ExpansionTile(
             shape: const RoundedRectangleBorder(),
@@ -1941,7 +1999,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            r.nome,
+                            _tituloRegiaoRanking(r.nome),
                             style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                             overflow: TextOverflow.ellipsis,
                           ),

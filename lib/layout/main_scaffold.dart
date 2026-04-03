@@ -223,15 +223,19 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/perfil', 'Meu perfil', Icons.person_outline),
   ];
 
+  /// Itens ocultos no menu para todos os perfis (rotas podem existir; não aparecem na lateral).
+  static const _pathsOcultosMenuGlobal = {
+    '/estrategia',
+    '/mapa',
+  };
+
   /// Apoiador: início (home), votantes, agenda, mensagens e perfil.
-  /// Estratégia, Mapa, Benfeitorias, Dashboard e itens de gestão ficam ocultos.
+  /// Benfeitorias, Dashboard e itens de gestão ficam ocultos.
   static const _pathsOcultosApoiador = {
     '/',          // Dashboard do candidato
     '/assessores',
     '/apoiadores',
     '/benfeitorias',
-    '/estrategia', // Estratégia oculta para apoiadores
-    '/mapa',       // Mapa oculto para apoiadores
     '/configuracoes',
   };
 
@@ -333,6 +337,7 @@ class _Sidebar extends StatelessWidget {
                   children: [
                     ..._items.where((e) {
                       if (prof == null) return true;
+                      if (_pathsOcultosMenuGlobal.contains(e.path)) return false;
                       if (e.path == '/configuracoes' && prof.role != 'candidato') return false;
                       if (prof.role == 'apoiador') return !_pathsOcultosApoiador.contains(e.path);
                       if (prof.role == 'assessor') return !_pathsOcultosAssessor.contains(e.path) && !_pathsOcultosCandidatoAssessor.contains(e.path);

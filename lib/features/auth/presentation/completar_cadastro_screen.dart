@@ -9,7 +9,8 @@ import '../../../core/router/profile_role_cache.dart' show clearProfileRoleCache
 import '../../../core/router/role_home.dart';
 import '../providers/auth_provider.dart';
 
-/// Tela para o convidado (assessor/apoiador) definir senha após o convite, ou [isPasswordRecovery] após «Esqueci minha senha».
+/// Tela para o convidado (assessor/apoiador) definir **só a senha** após o convite (conta já criada no Supabase),
+/// ou [isPasswordRecovery] após «Esqueci minha senha».
 /// Layout alinhado ao [LoginScreen] (mapa, cartão, campos).
 class CompletarCadastroScreen extends ConsumerStatefulWidget {
   const CompletarCadastroScreen({super.key, this.isPasswordRecovery = false});
@@ -205,7 +206,7 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
                             Text(
                               widget.isPasswordRecovery
                                   ? 'Definir nova senha'
-                                  : 'Complete seu cadastro',
+                                  : 'Defina sua senha de acesso',
                               style: theme.textTheme.titleLarge?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -215,7 +216,9 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
                             Text(
                               widget.isPasswordRecovery
                                   ? 'Escolha uma nova senha para voltar a acessar o ${AppConstants.ufLabel}.'
-                                  : 'Você foi convidado(a) para acessar o ${AppConstants.ufLabel}. Defina uma senha para concluir. Você entrará no painel do seu perfil (assessor ou apoiador), não no do candidato.',
+                                  : 'O convite já criou seu usuário e seu perfil no ${AppConstants.ufLabel}. '
+                                      'Basta escolher uma senha para o primeiro acesso. '
+                                      'Você entrará no painel do seu papel (assessor ou apoiador), não no do candidato.',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
@@ -223,6 +226,14 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
                             ),
                             if (user?.email != null) ...[
                               const SizedBox(height: 12),
+                              Text(
+                                'E-mail da conta',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 4),
                               Text(
                                 user!.email!,
                                 style: theme.textTheme.bodyMedium?.copyWith(
@@ -341,7 +352,7 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
                                   : Text(
                                       widget.isPasswordRecovery
                                           ? 'Salvar nova senha e entrar'
-                                          : 'Criar senha e acessar',
+                                          : 'Confirmar senha e entrar',
                                     ),
                             ),
                             if (widget.isPasswordRecovery) ...[

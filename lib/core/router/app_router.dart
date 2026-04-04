@@ -14,7 +14,6 @@ import '../../features/votantes/presentation/votantes_screen.dart';
 import '../../features/agenda/presentation/agenda_screen.dart';
 import '../../features/apoiador_home/presentation/apoiador_home_screen.dart';
 import '../../features/mensagens/presentation/mensagens_screen.dart';
-import '../../features/benfeitorias/presentation/benfeitorias_screen.dart';
 import '../../features/estrategia/presentation/estrategia_screen.dart';
 import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
@@ -88,6 +87,11 @@ GoRouter createAppRouter({String? initialLocation}) {
         if (home != '/') return home;
       }
 
+      if (session != null && path == '/benfeitorias') {
+        final role = await cachedProfileRole(session.user.id);
+        return homePathForProfileRole(role);
+      }
+
       if (session != null) {
         final role = await cachedProfileRole(session.user.id);
         if (role != 'candidato' && path == '/configuracoes') {
@@ -156,10 +160,6 @@ GoRouter createAppRouter({String? initialLocation}) {
             pageBuilder: (_, state) => const NoTransitionPage(child: MensagensScreen()),
           ),
           GoRoute(
-            path: '/benfeitorias',
-            pageBuilder: (_, state) => const NoTransitionPage(child: BenfeitoriasScreen()),
-          ),
-          GoRoute(
             path: '/estrategia',
             pageBuilder: (_, state) => const NoTransitionPage(child: EstrategiaScreen()),
           ),
@@ -196,7 +196,6 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
   static const _forbiddenApoiador = {
     '/assessores',
     '/apoiadores',
-    '/benfeitorias',
     '/mensagens',
     '/estrategia',
     '/',

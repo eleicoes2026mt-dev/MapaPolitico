@@ -102,15 +102,15 @@ class Profile {
         'numero_candidato': numeroCandidato,
       };
 
-  /// Imagem no topo do menu: bandeira do partido, senão foto de perfil.
+  /// Imagem no topo do menu: foto de perfil primeiro; senão bandeira do partido.
   String? get sidebarBrandImageUrl {
-    final b = partidoBandeiraUrl?.trim();
-    if (b != null && b.isNotEmpty) {
-      return b;
-    }
     final a = avatarUrl?.trim();
     if (a != null && a.isNotEmpty) {
       return a;
+    }
+    final b = partidoBandeiraUrl?.trim();
+    if (b != null && b.isNotEmpty) {
+      return b;
     }
     return null;
   }

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../core/constants/app_constants.dart';
 import '../core/services/realtime_notifications_service.dart';
 import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/auth/providers/auth_provider.dart';
@@ -137,7 +136,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
   }
 }
 
-/// Topo do menu: bandeira do partido, senão foto de perfil, senão bandeira em branco (sem partido), senão ícone.
+/// Topo do menu: foto de perfil, senão bandeira do partido, senão bandeira em branco (sem partido/sem foto), senão ícone.
 class _SidebarBrandMark extends StatelessWidget {
   const _SidebarBrandMark({required this.profile, required this.theme});
 
@@ -203,7 +202,6 @@ String _titleForRoute(String path) {
     '/votantes': 'Votantes',
     '/agenda': 'Agenda',
     '/mensagens': 'Mensagens',
-    '/benfeitorias': 'Benfeitorias',
     '/estrategia': 'Estratégia',
     '/mapa': 'Mapa',
     '/configuracoes': 'Configurações',
@@ -273,7 +271,6 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/votantes', 'Votantes', Icons.checklist_outlined),
     _NavItem('/agenda', 'Agenda', Icons.event_outlined),
     _NavItem('/mensagens', 'Mensagens', Icons.chat_bubble_outline),
-    _NavItem('/benfeitorias', 'Benfeitorias', Icons.favorite_border),
     _NavItem('/estrategia', 'Estratégia', Icons.location_on_outlined),
     _NavItem('/mapa', 'Mapa', Icons.map_outlined),
     _NavItem('/configuracoes', 'Configurações', Icons.settings_outlined),
@@ -287,12 +284,11 @@ class _Sidebar extends StatelessWidget {
   };
 
   /// Apoiador: início (home), votantes, agenda, mensagens e perfil.
-  /// Benfeitorias, Dashboard e itens de gestão ficam ocultos.
+  /// Dashboard e itens de gestão ficam ocultos.
   static const _pathsOcultosApoiador = {
     '/',          // Dashboard do candidato
     '/assessores',
     '/apoiadores',
-    '/benfeitorias',
     '/configuracoes',
   };
 
@@ -319,74 +315,71 @@ class _Sidebar extends StatelessWidget {
         child: Column(
           children: [
             const SizedBox(height: 24),
-            Row(
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.topCenter,
               children: [
-                Expanded(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      _SidebarBrandMark(profile: prof, theme: theme),
-                      const SizedBox(height: 8),
-                      Text(
-                        AppConstants.appName,
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: Text(
-                          AppConstants.appSubtitle,
+                      Center(child: _SidebarBrandMark(profile: prof, theme: theme)),
+                      if (prof != null) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            prof.fullName ?? prof.email ?? 'Usuário',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          prof.role.toUpperCase(),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                      ),
+                        if (prof.cargo != null && prof.cargo!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          SizedBox(
+                            width: double.infinity,
+                            child: Text(
+                              prof.cargo!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                            ),
+                          ),
+                        ],
+                      ],
                     ],
                   ),
                 ),
                 if (onCollapse != null)
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: onCollapse,
-                    tooltip: 'Recolher menu',
+                  Positioned(
+                    top: 0,
+                    right: 0,
+                    child: IconButton(
+                      icon: const Icon(Icons.chevron_left),
+                      onPressed: onCollapse,
+                      tooltip: 'Recolher menu',
+                    ),
                   ),
               ],
             ),
-            if (prof != null) ...[
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Column(
-                  children: [
-                    Text(
-                      prof.fullName ?? prof.email ?? 'Usuário',
-                      style: theme.textTheme.bodyMedium,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                    ),
-                    Text(
-                      prof.role.toUpperCase(),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (prof.cargo != null && prof.cargo!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        prof.cargo!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
             const SizedBox(height: 24),
             Expanded(
               child: SingleChildScrollView(

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../core/constants/amigos_gilberto.dart';
+import '../core/bootstrap/reload_page_stub.dart'
+    if (dart.library.html) '../core/bootstrap/reload_page_web.dart' as reload_page;
 import '../core/services/realtime_notifications_service.dart';
 import '../core/widgets/amigos_gilberto_qr_dialog.dart';
 import '../core/widgets/pwa_onboarding_dialog.dart';
@@ -142,6 +144,12 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
               icon: const Icon(Icons.add_to_home_screen_outlined),
               tooltip: 'Instalar app e ativar notificações',
               onPressed: _abrirOrientacaoAppENotificacoes,
+            ),
+          if (kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Atualizar página',
+              onPressed: () => reload_page.reloadPageIfWeb(),
             ),
         ],
       ),
@@ -291,6 +299,14 @@ class _SidebarCollapsed extends StatelessWidget {
                 tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
               ),
             ],
+            if (kIsWeb) ...[
+              const SizedBox(height: 8),
+              IconButton(
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: () => reload_page.reloadPageIfWeb(),
+                tooltip: 'Atualizar página',
+              ),
+            ],
           ],
         ),
       ),
@@ -431,7 +447,7 @@ class _Sidebar extends StatelessWidget {
                   ),
               ],
             ),
-            if (onOpenPwaOrientacao != null || prof?.role == 'candidato') ...[
+            if (onOpenPwaOrientacao != null || prof?.role == 'candidato' || kIsWeb) ...[
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -452,6 +468,15 @@ class _Sidebar extends StatelessWidget {
                       ),
                       icon: const Icon(Icons.qr_code_2_rounded),
                       tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
+                    ),
+                  ],
+                  if (kIsWeb) ...[
+                    if (onOpenPwaOrientacao != null || prof?.role == 'candidato')
+                      const SizedBox(width: 4),
+                    IconButton.filledTonal(
+                      onPressed: () => reload_page.reloadPageIfWeb(),
+                      icon: const Icon(Icons.refresh_rounded),
+                      tooltip: 'Atualizar página',
                     ),
                   ],
                 ],

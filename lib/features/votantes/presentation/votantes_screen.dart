@@ -457,7 +457,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
       final cidadeTexto = displayNomeCidadeMT(_cidadeNomeNormalizado!);
 
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
-      final legadoVal = parseLegado(_legado.text);
+      final profile = ref.read(profileProvider).valueOrNull;
+      final cadastroAvulsoQr = profile?.cadastroViaQr == true;
+      final legadoVal = cadastroAvulsoQr ? null : parseLegado(_legado.text);
       if (widget.existente != null) {
         await ref.read(atualizarVotanteProvider)(
           widget.existente!.id,
@@ -474,7 +476,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
             votosPrometidosUltimaEleicao: legadoVal,
-            atualizarLegado: true,
+            atualizarLegado: !cadastroAvulsoQr,
           ),
         );
       } else {
@@ -494,6 +496,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
             votosPrometidosUltimaEleicao: legadoVal,
+            cadastroViaQr: cadastroAvulsoQr,
           ),
         );
       }
@@ -525,6 +528,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
+    final ocultarLegado = profile?.cadastroViaQr == true;
     final munAsync = ref.watch(municipiosMTListProvider);
     return AlertDialog(
       title: Text(
@@ -692,15 +696,17 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                       const SizedBox(height: 12),
                       _VinculoCadastroNovoVotante(theme: theme, profile: profile),
                     ],
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _legado,
-                      decoration: const InputDecoration(
-                        labelText: 'Votos prometidos na última eleição',
-                        hintText: 'Opcional — referência histórica',
+                    if (!ocultarLegado) ...[
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _legado,
+                        decoration: const InputDecoration(
+                          labelText: 'Votos prometidos na última eleição',
+                          hintText: 'Opcional — referência histórica',
+                        ),
+                        keyboardType: TextInputType.number,
                       ),
-                      keyboardType: TextInputType.number,
-                    ),
+                    ],
                     const SizedBox(height: 8),
                     Text(
                       'Endereço (opcional)',

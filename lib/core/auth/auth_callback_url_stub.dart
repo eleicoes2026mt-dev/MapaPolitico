@@ -3,6 +3,14 @@ Uri currentUriWithFragment() => Uri.base;
 
 void replaceBrowserPath(String path) {}
 
-void storePendingAuthErrorMessage(String message) {}
+String? _pendingAuthErrorMobile;
 
-String? takePendingAuthErrorMessage() => null;
+void storePendingAuthErrorMessage(String message) {
+  _pendingAuthErrorMobile = message;
+}
+
+String? takePendingAuthErrorMessage() {
+  final v = _pendingAuthErrorMobile;
+  _pendingAuthErrorMobile = null;
+  return v;
+}

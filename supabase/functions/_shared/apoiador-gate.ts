@@ -1,5 +1,5 @@
 // Lógica partilhada: quem pode convidar / reenviar convite a um apoiador.
-// Usa a mesma regra que public.app_assessor_ids_do_candidato() (RLS) via RPC.
+// Usa public.edge_can_manage_apoiador_invite (SECURITY DEFINER): não depende de RLS nem de RPC extra no PostgREST.
 import { type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export type ApoiadorRow = {
@@ -10,28 +10,7 @@ export type ApoiadorRow = {
   email: string | null;
 };
 
-/** IDs em assessores.id da campanha do candidato (alinhado a app_assessor_ids_do_candidato / RLS). */
-async function assessorIdsForCandidatoCampaign(
-  supabaseAdmin: SupabaseClient,
-  candidatoProfileId: string
-): Promise<{ ids: string[]; error: string | null }> {
-  const { data, error } = await supabaseAdmin.rpc('app_assessor_ids_for_candidato_profile', {
-    p_candidato: candidatoProfileId,
-  });
-  if (error) {
-    console.error('app_assessor_ids_for_candidato_profile', error);
-    return { ids: [], error: error.message ?? String(error) };
-  }
-  const ids = (data ?? []) as string[];
-  return { ids, error: null };
-}
-
-function isAssessorRowInCampaign(assessorRowId: string, campaignAssessorIds: string[]): boolean {
-  const a = String(assessorRowId);
-  return campaignAssessorIds.some((id) => String(id) === a);
-}
-
-/** Sobe invited_by até encontrar perfil com role candidato. */
+/** Sobe invited_by até encontrar perfil com role candidato (outros módulos). */
 export async function resolveCandidatoIdFromUserProfile(
   supabaseAdmin: SupabaseClient,
   userProfileId: string
@@ -58,6 +37,8 @@ export type ApoiadorGateOptions = {
   forbiddenRoleMessage?: string;
 };
 
+type GatePayload = { ok?: boolean; code?: string };
+
 export async function assertCanManageApoiador(
   supabaseAdmin: SupabaseClient,
   callerId: string,
@@ -68,48 +49,43 @@ export async function assertCanManageApoiador(
     options.strictAssessorMessage ?? 'Apenas o assessor responsável pode convidar este apoiador';
   const forbiddenRoleMsg =
     options.forbiddenRoleMessage ?? 'Apenas candidato ou assessor podem enviar convite ao apoiador';
-  const { data: caller, error: ce } = await supabaseAdmin.from('profiles').select('role').eq('id', callerId).single();
-  if (ce || !caller) return { ok: false, status: 403, error: 'Perfil não encontrado' };
 
-  const role = (caller as { role: string }).role;
-  const assessorIdOfApoiador = apoiador.assessor_id;
+  const { data: raw, error: rpcErr } = await supabaseAdmin.rpc('edge_can_manage_apoiador_invite', {
+    p_caller: callerId,
+    p_apoiador: apoiador.id,
+  });
 
-  if (role === 'candidato') {
-    const { ids, error: rpcErr } = await assessorIdsForCandidatoCampaign(supabaseAdmin, callerId);
-    if (rpcErr) {
+  if (rpcErr) {
+    console.error('edge_can_manage_apoiador_invite', rpcErr);
+    return {
+      ok: false,
+      status: 500,
+      error:
+        'Falha ao validar permissão. Rode a migração edge_can_manage_apoiador_invite no SQL do Supabase e faça redeploy das Edge Functions.',
+    };
+  }
+
+  const g = raw as GatePayload | null;
+  if (g?.ok === true) return { ok: true };
+
+  const code = (g?.code ?? '').trim();
+  switch (code) {
+    case 'no_profile':
+      return { ok: false, status: 403, error: 'Perfil não encontrado' };
+    case 'no_apoiador':
+      return { ok: false, status: 404, error: 'Apoiador não encontrado ou foi excluído da campanha' };
+    case 'not_campaign':
+      return { ok: false, status: 403, error: 'Este apoiador não pertence à sua campanha' };
+    case 'strict_assessor':
+      return { ok: false, status: 403, error: strictMsg };
+    case 'forbidden_role':
+      return { ok: false, status: 403, error: forbiddenRoleMsg };
+    default:
       return {
         ok: false,
         status: 500,
         error:
-          'Falha ao validar permissão da campanha. Confirme se a migração app_assessor_ids_for_candidato_profile foi aplicada no projeto.',
+          'Resposta inválida do gate de convite. Confirme a migração edge_can_manage_apoiador_invite e o redeploy.',
       };
-    }
-    if (isAssessorRowInCampaign(assessorIdOfApoiador, ids)) return { ok: true };
-    return { ok: false, status: 403, error: 'Este apoiador não pertence à sua campanha' };
   }
-
-  if (role === 'assessor') {
-    const candidatoId = await resolveCandidatoIdFromUserProfile(supabaseAdmin, callerId);
-    if (candidatoId) {
-      const { ids, error: rpcErr } = await assessorIdsForCandidatoCampaign(supabaseAdmin, candidatoId);
-      if (rpcErr) {
-        return {
-          ok: false,
-          status: 500,
-          error:
-            'Falha ao validar permissão da campanha. Confirme se a migração app_assessor_ids_for_candidato_profile foi aplicada no projeto.',
-        };
-      }
-      if (isAssessorRowInCampaign(assessorIdOfApoiador, ids)) return { ok: true };
-      return { ok: false, status: 403, error: 'Este apoiador não pertence à sua campanha' };
-    }
-    // Perfil assessor sem cadeia até candidato: mantém regra antiga (só o responsável direto).
-    const { data: a } = await supabaseAdmin.from('assessores').select('id').eq('profile_id', callerId).maybeSingle();
-    if (!a || (a as { id: string }).id !== assessorIdOfApoiador) {
-      return { ok: false, status: 403, error: strictMsg };
-    }
-    return { ok: true };
-  }
-
-  return { ok: false, status: 403, error: forbiddenRoleMsg };
 }

@@ -58,13 +58,20 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { data: profileCaller } = await supabaseAdmin
-      .from('profiles')
-      .select('id, role')
-      .eq('id', callerId)
-      .single();
-
-    if (!profileCaller || (profileCaller as { role: string }).role !== 'candidato') {
+    const { data: isCandidato, error: candidatoRpcErr } = await supabaseAdmin.rpc('edge_is_candidato_profile', {
+      p_id: callerId,
+    });
+    if (candidatoRpcErr) {
+      console.error('edge_is_candidato_profile', candidatoRpcErr);
+      return new Response(
+        JSON.stringify({
+          error:
+            'Falha ao validar candidato. Rode a migração edge_is_candidato_profile no SQL do Supabase e faça redeploy desta função.',
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    if (!isCandidato) {
       return new Response(JSON.stringify({ error: 'Apenas o candidato pode reenviar convites' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

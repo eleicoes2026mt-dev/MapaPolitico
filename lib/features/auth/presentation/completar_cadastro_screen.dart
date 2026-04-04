@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/auth/auth_callback_url.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/router/profile_role_cache.dart' show clearProfileRoleCache;
 import '../../../core/router/role_home.dart';
@@ -30,6 +31,59 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
   bool _obscureSenha = true;
   bool _obscureConfirmar = true;
   String? _error;
+  bool _sessionCheckDone = false;
+
+  static const _kUserNotFoundHint =
+      'Este link não é mais válido: o convite pode ter sido reenviado, a conta recriada ou removida. '
+      'Peça um novo convite ao candidato ou, se já tiver cadastro, use «Esqueci minha senha» no login.';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureUserExistsOnServer());
+  }
+
+  /// GET /user com o JWT atual — evita mostrar o formulário se o `sub` já não existe (403 user_not_found).
+  Future<void> _ensureUserExistsOnServer() async {
+    final auth = Supabase.instance.client.auth;
+    if (auth.currentSession == null) {
+      if (mounted) context.go('/login');
+      return;
+    }
+    try {
+      await auth.getUser();
+    } catch (e) {
+      if (!mounted) return;
+      await auth.signOut();
+      if (_isUserNotFoundOrGone(e)) {
+        storePendingAuthErrorMessage(_kUserNotFoundHint);
+      } else {
+        storePendingAuthErrorMessage(
+          'Não foi possível validar o acesso por este link. Tente de novo ou entre com e-mail e senha.',
+        );
+      }
+      if (mounted) context.go('/login');
+      return;
+    }
+    if (mounted) setState(() => _sessionCheckDone = true);
+  }
+
+  bool _isUserNotFoundOrGone(Object e) {
+    if (e is AuthException) {
+      final c = e.code?.toLowerCase();
+      if (c == 'user_not_found') return true;
+      final m = e.message.toLowerCase();
+      if (m.contains('does not exist') && m.contains('sub')) return true;
+    }
+    final s = e.toString().toLowerCase();
+    return s.contains('user_not_found') ||
+        (s.contains('does not exist') && s.contains('sub claim'));
+  }
+
+  String _messageForAuthFailure(Object e) {
+    if (_isUserNotFoundOrGone(e)) return _kUserNotFoundHint;
+    return e.toString().replaceFirst('AuthException: ', '').replaceFirst('Exception: ', '');
+  }
 
   @override
   void dispose() {
@@ -83,7 +137,7 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e.toString().replaceFirst('AuthException: ', '').replaceFirst('Exception: ', '');
+        _error = _messageForAuthFailure(e);
       });
     }
   }
@@ -110,6 +164,17 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
     final isDark = theme.brightness == Brightness.dark;
     final primary = theme.colorScheme.primary;
     final user = Supabase.instance.client.auth.currentUser;
+
+    if (!_sessionCheckDone && Supabase.instance.client.auth.currentSession != null) {
+      return Scaffold(
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(color: Color(0xFF0D1117)),
+          child: const Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
 
     InputDecoration fieldDecoration({
       required String label,

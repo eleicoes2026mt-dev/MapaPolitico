@@ -57,11 +57,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
     _phoneController = TextEditingController();
     _partidoController = TextEditingController();
     _numeroController = TextEditingController();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      clearProfileRoleCache();
-      ref.invalidate(profileProvider);
-    });
+    clearProfileRoleCache();
+    ref.invalidate(profileProvider);
   }
 
   @override

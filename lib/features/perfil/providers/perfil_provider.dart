@@ -19,7 +19,6 @@ final updateProfileProvider =
   return (UpdateProfileParams params) async {
     final user = ref.read(currentUserProvider);
     if (user == null) throw Exception('Usuário não logado');
-    final profile = await ref.read(profileProvider.future);
     final userId = user.id;
     final map = <String, dynamic>{
       'id': userId,
@@ -34,9 +33,8 @@ final updateProfileProvider =
       if (params.avatarUrl != null) 'avatar_url': params.avatarUrl,
       'sq_candidato_tse_2022': params.sqCandidatoTse2022,
     };
-    if (profile != null && profile.role.isNotEmpty) {
-      map['role'] = profile.role;
-    }
+    // Nunca enviar `role` aqui: vinha do cache do Riverpod e podia ser "votante"
+    // depois de promover a candidato na RPC, revertendo a base ao guardar o perfil.
     await client.from('profiles').upsert(map, onConflict: 'id');
     ref.invalidate(profileProvider);
   };

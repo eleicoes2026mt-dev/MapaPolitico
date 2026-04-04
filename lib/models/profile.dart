@@ -10,6 +10,10 @@ class Profile {
   final bool ativo;
   final String? cargo;
   final String? partido;
+  /// FK opcional para [partidos]; a bandeira vem do join `partidos`.
+  final String? partidoId;
+  final String? partidoBandeiraUrl;
+  final String? partidoSiglaJoin;
   final String? numeroCandidato;
   final DateTime? dataNascimento;
   final int? sqCandidatoTse2022;
@@ -28,6 +32,9 @@ class Profile {
     this.ativo = true,
     this.cargo,
     this.partido,
+    this.partidoId,
+    this.partidoBandeiraUrl,
+    this.partidoSiglaJoin,
     this.numeroCandidato,
     this.dataNascimento,
     this.sqCandidatoTse2022,
@@ -46,6 +53,17 @@ class Profile {
   }
 
   factory Profile.fromJson(Map<String, dynamic> json) {
+    String? bandeira;
+    String? siglaJoin;
+    dynamic pj = json['partidos'];
+    if (pj is List && pj.isNotEmpty) {
+      pj = pj.first;
+    }
+    if (pj is Map) {
+      bandeira = pj['bandeira_url'] as String?;
+      siglaJoin = pj['sigla'] as String?;
+    }
+
     return Profile(
       id: json['id'] as String,
       fullName: json['full_name'] as String?,
@@ -58,6 +76,9 @@ class Profile {
       ativo: json['ativo'] as bool? ?? true,
       cargo: json['cargo'] as String?,
       partido: json['partido'] as String?,
+      partidoId: json['partido_id'] as String?,
+      partidoBandeiraUrl: bandeira,
+      partidoSiglaJoin: siglaJoin,
       numeroCandidato: json['numero_candidato'] as String?,
       dataNascimento: json['data_nascimento'] != null
           ? DateTime.tryParse(json['data_nascimento'].toString())
@@ -77,8 +98,22 @@ class Profile {
         'phone': phone,
         'cargo': cargo,
         'partido': partido,
+        if (partidoId != null) 'partido_id': partidoId,
         'numero_candidato': numeroCandidato,
       };
+
+  /// Imagem no topo do menu: bandeira do partido, senão foto de perfil.
+  String? get sidebarBrandImageUrl {
+    final b = partidoBandeiraUrl?.trim();
+    if (b != null && b.isNotEmpty) {
+      return b;
+    }
+    final a = avatarUrl?.trim();
+    if (a != null && a.isNotEmpty) {
+      return a;
+    }
+    return null;
+  }
 
   bool get isCandidato => role == 'candidato';
   bool get isAssessor => role == 'assessor';

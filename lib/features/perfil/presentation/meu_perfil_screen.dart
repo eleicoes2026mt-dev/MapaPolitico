@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,6 +20,8 @@ import '../../auth/providers/auth_provider.dart';
 import '../../../core/router/profile_role_cache.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../providers/perfil_provider.dart';
+import '../providers/partidos_provider.dart';
+import '../../../models/partido.dart';
 
 /// Cargos (dropdown) conforme solicitado.
 const List<String> cargosOpcoes = [
@@ -38,9 +42,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nomeController;
   late TextEditingController _phoneController;
-  late TextEditingController _partidoController;
-  late TextEditingController _numeroController;
   String? _cargo;
+  String? _partidoId;
   DateTime? _dataNascimento;
   String? _avatarUrl;
   int? _sqCandidatoTse2022;
@@ -55,8 +58,6 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
     super.initState();
     _nomeController = TextEditingController();
     _phoneController = TextEditingController();
-    _partidoController = TextEditingController();
-    _numeroController = TextEditingController();
     // ref.* não pode rodar durante initState (UncontrolledProviderScope).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -69,8 +70,6 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
   void dispose() {
     _nomeController.dispose();
     _phoneController.dispose();
-    _partidoController.dispose();
-    _numeroController.dispose();
     super.dispose();
   }
 
@@ -83,6 +82,20 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
     try {
       final p = ref.read(profileProvider).valueOrNull;
       final isCand = p?.role == 'candidato';
+      String? partidoSigla;
+      if (isCand) {
+        if (_partidoId != null) {
+          final list = await ref.read(partidosListProvider.future);
+          for (final x in list) {
+            if (x.id == _partidoId) {
+              partidoSigla = x.sigla;
+              break;
+            }
+          }
+        } else {
+          partidoSigla = null;
+        }
+      }
       await ref.read(updateProfileProvider)(
         (
           fullName: _nomeController.text.trim(),
@@ -90,16 +103,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
               ? null
               : _phoneController.text.trim(),
           cargo: isCand ? _cargo : p?.cargo,
-          partido: isCand
-              ? (_partidoController.text.trim().isEmpty
-                  ? null
-                  : _partidoController.text.trim())
-              : p?.partido,
-          numeroCandidato: isCand
-              ? (_numeroController.text.trim().isEmpty
-                  ? null
-                  : _numeroController.text.trim())
-              : p?.numeroCandidato,
+          partido: isCand ? partidoSigla : p?.partido,
+          partidoId: isCand ? _partidoId : null,
           dataNascimento: _dataNascimento,
           avatarUrl: _avatarUrl,
           sqCandidatoTse2022:
@@ -140,17 +145,168 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
             fileOptions: const FileOptions(upsert: true),
           );
       final url = supabase.storage.from('avatars').getPublicUrl(path);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _avatarUrl = url;
           _uploadingImage = false;
         });
+        ref.invalidate(profileProvider);
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _uploadingImage = false);
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Erro ao enviar imagem: $e')));
       }
+    }
+  }
+
+  bool _partidoIdValido(List<Partido> lista, String? id) {
+    if (id == null) {
+      return true;
+    }
+    return lista.any((p) => p.id == id);
+  }
+
+  Future<void> _abrirCadastroPartido(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeData theme,
+  ) async {
+    final siglaCtrl = TextEditingController();
+    final nomeCtrl = TextEditingController();
+    Uint8List? bandeiraBytes;
+    var ext = 'jpg';
+
+    final criado = await showDialog<Partido>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: const Text('Cadastrar partido'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: siglaCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Sigla',
+                        hintText: 'Ex.: PT, PL',
+                      ),
+                      textCapitalization: TextCapitalization.characters,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nomeCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nome do partido',
+                      ),
+                      textCapitalization: TextCapitalization.words,
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.tonalIcon(
+                      onPressed: () async {
+                        final picker = ImagePicker();
+                        final x = await picker.pickImage(
+                          source: ImageSource.gallery,
+                          maxWidth: 800,
+                          imageQuality: 88,
+                        );
+                        if (x == null || !ctx.mounted) {
+                          return;
+                        }
+                        final name = x.name;
+                        ext = name.contains('.')
+                            ? name.split('.').last.toLowerCase()
+                            : 'jpg';
+                        bandeiraBytes = await x.readAsBytes();
+                        setLocal(() {});
+                      },
+                      icon: const Icon(Icons.flag_circle_outlined),
+                      label: Text(
+                        bandeiraBytes == null
+                            ? 'Anexar imagem da bandeira'
+                            : 'Trocar imagem da bandeira',
+                      ),
+                    ),
+                    if (bandeiraBytes != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          'Imagem selecionada (${(bandeiraBytes!.length / 1024).toStringAsFixed(0)} KB)',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final s = siglaCtrl.text.trim();
+                    final n = nomeCtrl.text.trim();
+                    if (s.isEmpty || n.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Preencha sigla e nome.'),
+                        ),
+                      );
+                      return;
+                    }
+                    if (bandeiraBytes == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Anexe a imagem da bandeira.'),
+                        ),
+                      );
+                      return;
+                    }
+                    try {
+                      final p = await criarPartidoComBandeira(
+                        sigla: s,
+                        nome: n,
+                        bytes: bandeiraBytes!,
+                        fileExt: ext,
+                      );
+                      ref.invalidate(partidosListProvider);
+                      if (ctx.mounted) Navigator.of(ctx).pop(p);
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('$e')),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Salvar partido'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    siglaCtrl.dispose();
+    nomeCtrl.dispose();
+
+    if (!mounted) {
+      return;
+    }
+    if (criado != null) {
+      setState(() => _partidoId = criado.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Partido ${criado.sigla} cadastrado.')),
+      );
     }
   }
 
@@ -183,8 +339,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                 '';
             if (nome.isNotEmpty) _nomeController.text = nome;
             _phoneController.text = profile?.phone ?? '';
-            _partidoController.text = profile?.partido ?? '';
-            _numeroController.text = profile?.numeroCandidato ?? '';
+            setState(() => _partidoId = profile?.partidoId);
             if (_cargo == null && profile?.cargo != null) {
               setState(() => _cargo = profile?.cargo);
             }
@@ -283,13 +438,64 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                     ),
                     if (isCandidato) ...[
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _partidoController,
-                        decoration: const InputDecoration(
-                          labelText: 'Partido Político (sigla)',
-                          prefixIcon: Icon(Icons.flag_outlined),
-                        ),
-                        textCapitalization: TextCapitalization.characters,
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final asyncPartidos = ref.watch(partidosListProvider);
+                          return asyncPartidos.when(
+                            data: (lista) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  DropdownButtonFormField<String?>(
+                                    value: _partidoIdValido(lista, _partidoId)
+                                        ? _partidoId
+                                        : null,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Partido',
+                                      prefixIcon: Icon(Icons.flag_outlined),
+                                      helperText:
+                                          'Sem partido: bandeira em branco no menu até escolher partido ou foto de perfil.',
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem<String?>(
+                                        value: null,
+                                        child: Text('Sem partido'),
+                                      ),
+                                      ...lista.map(
+                                        (p) => DropdownMenuItem<String?>(
+                                          value: p.id,
+                                          child: Text(
+                                            '${p.sigla} — ${p.nome}',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (v) =>
+                                        setState(() => _partidoId = v),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _abrirCadastroPartido(
+                                        context, ref, theme),
+                                    icon: const Icon(Icons.add, size: 18),
+                                    label: const Text('Cadastrar partido e bandeira'),
+                                  ),
+                                ],
+                              );
+                            },
+                            loading: () => const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Center(
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            ),
+                            error: (e, _) => Text(
+                              'Partidos: $e',
+                              style: TextStyle(color: theme.colorScheme.error),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: 16),
                       const EstadoMTBadge(),
@@ -314,16 +520,6 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       ),
                     ],
                     if (isCandidato) ...[
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _numeroController,
-                        decoration: const InputDecoration(
-                          labelText: 'Número na urna',
-                          prefixIcon: Icon(Icons.numbers),
-                        ),
-                        keyboardType: TextInputType.number,
-                        maxLength: 5,
-                      ),
                       const SizedBox(height: 16),
                       _CandidatoTse2022Field(
                         value: _sqCandidatoTse2022,

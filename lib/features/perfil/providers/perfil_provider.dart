@@ -7,7 +7,7 @@ typedef UpdateProfileParams = ({
   String? phone,
   String? cargo,
   String? partido,
-  String? numeroCandidato,
+  String? partidoId,
   DateTime? dataNascimento,
   String? avatarUrl,
   int? sqCandidatoTse2022,
@@ -27,12 +27,18 @@ final updateProfileProvider =
       'phone': params.phone,
       'cargo': params.cargo,
       'partido': params.partido,
-      'numero_candidato': params.numeroCandidato,
       if (params.dataNascimento != null)
         'data_nascimento': params.dataNascimento!.toIso8601String().split('T').first,
       if (params.avatarUrl != null) 'avatar_url': params.avatarUrl,
       'sq_candidato_tse_2022': params.sqCandidatoTse2022,
     };
+
+    final existing = await ref.read(profileProvider.future);
+    final isCand = existing?.role == 'candidato';
+    if (isCand) {
+      map['partido_id'] = params.partidoId;
+      map['numero_candidato'] = null;
+    }
     // Nunca enviar `role` aqui: vinha do cache do Riverpod e podia ser "votante"
     // depois de promover a candidato na RPC, revertendo a base ao guardar o perfil.
     await client.from('profiles').upsert(map, onConflict: 'id');

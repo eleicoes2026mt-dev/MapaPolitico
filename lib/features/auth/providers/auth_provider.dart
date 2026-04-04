@@ -12,12 +12,19 @@ final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(authStateProvider).valueOrNull;
 });
 
+String _profileSelectEmbed() =>
+    '*, partidos (sigla, nome, bandeira_url)';
+
 /// Busca [profiles] do utilizador. Se não existir linha (trigger de signup falhou),
 /// cria uma mínima por upsert (RLS: `id` = [User.id]) e volta a ler.
 Future<Profile?> fetchProfileForUser(User user) async {
   Map<String, dynamic>? row;
   try {
-    final data = await supabase.from('profiles').select().eq('id', user.id).maybeSingle();
+    final data = await supabase
+        .from('profiles')
+        .select(_profileSelectEmbed())
+        .eq('id', user.id)
+        .maybeSingle();
     if (data != null) {
       row = Map<String, dynamic>.from(data);
     }
@@ -40,7 +47,11 @@ Future<Profile?> fetchProfileForUser(User user) async {
       },
       onConflict: 'id',
     );
-    final again = await supabase.from('profiles').select().eq('id', user.id).maybeSingle();
+    final again = await supabase
+        .from('profiles')
+        .select(_profileSelectEmbed())
+        .eq('id', user.id)
+        .maybeSingle();
     if (again == null) return null;
     row = Map<String, dynamic>.from(again);
   }

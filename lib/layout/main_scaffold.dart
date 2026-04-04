@@ -137,6 +137,63 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
   }
 }
 
+/// Topo do menu: bandeira do partido, senão foto de perfil, senão bandeira em branco (sem partido), senão ícone.
+class _SidebarBrandMark extends StatelessWidget {
+  const _SidebarBrandMark({required this.profile, required this.theme});
+
+  final Profile? profile;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final prof = profile;
+    final url = prof?.sidebarBrandImageUrl;
+    if (url != null && url.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          url,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(
+            Icons.how_to_vote,
+            size: 48,
+            color: theme.colorScheme.primary,
+          ),
+        ),
+      );
+    }
+    if (prof != null &&
+        prof.partidoId == null &&
+        prof.role == 'candidato' &&
+        (prof.avatarUrl == null || prof.avatarUrl!.trim().isEmpty)) {
+      return Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.45),
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.flag_outlined,
+          size: 26,
+          color: theme.colorScheme.outline,
+        ),
+      );
+    }
+    return Icon(
+      Icons.how_to_vote,
+      size: 48,
+      color: theme.colorScheme.primary,
+    );
+  }
+}
+
 String _titleForRoute(String path) {
   const map = {
     '/apoiador-home': 'Início',
@@ -268,7 +325,7 @@ class _Sidebar extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.how_to_vote, size: 48, color: theme.colorScheme.primary),
+                      _SidebarBrandMark(profile: prof, theme: theme),
                       const SizedBox(height: 8),
                       Text(
                         AppConstants.appName,

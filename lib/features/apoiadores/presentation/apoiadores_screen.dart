@@ -1,3 +1,5 @@
+import 'dart:math' show min;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,13 +7,19 @@ import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/apoiador.dart';
 import '../../../models/municipio.dart';
 import '../../auth/providers/auth_provider.dart' show profileProvider;
-import '../../benfeitorias/providers/benfeitorias_provider.dart' show invalidateBenfeitoriasCaches;
-import '../../configuracoes/providers/campanha_audit_provider.dart' show campanhaAuditLogProvider;
+import '../../benfeitorias/providers/benfeitorias_provider.dart'
+    show invalidateBenfeitoriasCaches;
+import '../../configuracoes/providers/campanha_audit_provider.dart'
+    show campanhaAuditLogProvider;
 import '../../configuracoes/providers/menu_access_provider.dart';
-import '../../dashboard/providers/dashboard_provider.dart' show dashboardStatsProvider;
-import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT, normalizarNomeMunicipioMT;
-import '../../mensagens/providers/mensagens_provider.dart' show polosRegioesListProvider;
-import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider;
+import '../../dashboard/providers/dashboard_provider.dart'
+    show dashboardStatsProvider;
+import '../../mapa/data/mt_municipios_coords.dart'
+    show displayNomeCidadeMT, normalizarNomeMunicipioMT;
+import '../../mensagens/providers/mensagens_provider.dart'
+    show polosRegioesListProvider;
+import '../../votantes/providers/votantes_provider.dart'
+    show municipiosMTListProvider;
 import '../providers/apoiadores_provider.dart' show apoiadoresListProvider;
 import '../providers/campanha_kpis_provider.dart';
 import 'dialogs/novo_apoiador_dialog.dart';
@@ -60,7 +68,9 @@ String _cidadeLabel(Apoiador a, List<Municipio> munList) {
   return '—';
 }
 
-enum _ApoiadoresViewMode { grid, ranking }
+enum _ApoiadoresViewMode { lista, ranking }
+
+const int _kApoiadoresPageSize = 20;
 
 /// Lista de apoiadores com busca, filtro por perfil, KPIs (candidato/assessor) e cadastro/edição.
 class ApoiadoresScreen extends ConsumerStatefulWidget {
@@ -73,9 +83,10 @@ class ApoiadoresScreen extends ConsumerStatefulWidget {
 class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
   String _query = '';
   String _perfilFilter = 'Todos os Perfis';
-  _ApoiadoresViewMode _viewMode = _ApoiadoresViewMode.grid;
+  _ApoiadoresViewMode _viewMode = _ApoiadoresViewMode.lista;
   String? _cidadeChaveFiltro;
   String? _poloIdFiltro;
+  int _pageIndex = 0;
 
   @override
   void initState() {
@@ -101,12 +112,65 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     );
   }
 
+  void _syncPageIfNeeded(int totalFiltered) {
+    if (totalFiltered <= 0) return;
+    final tp =
+        (totalFiltered + _kApoiadoresPageSize - 1) ~/ _kApoiadoresPageSize;
+    final maxP = tp - 1;
+    final clamped = _pageIndex.clamp(0, maxP);
+    if (clamped != _pageIndex) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _pageIndex = clamped);
+      });
+    }
+  }
+
+  Widget _buildPaginationBar(
+    ThemeData theme,
+    int total,
+    int page,
+    int totalPages,
+  ) {
+    final from = page * _kApoiadoresPageSize + 1;
+    final to = min((page + 1) * _kApoiadoresPageSize, total);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          Text(
+            'Mostrando $from–$to de $total',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Página anterior',
+            icon: const Icon(Icons.chevron_left),
+            onPressed: page > 0
+                ? () => setState(() => _pageIndex = page - 1)
+                : null,
+          ),
+          Text('Página ${page + 1} de $totalPages'),
+          IconButton(
+            tooltip: 'Próxima página',
+            icon: const Icon(Icons.chevron_right),
+            onPressed: page < totalPages - 1
+                ? () => setState(() => _pageIndex = page + 1)
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final ehApoiador = profile?.role == 'apoiador';
-    final mostrarKpis = profile?.role == 'candidato' || profile?.role == 'assessor';
+    final mostrarKpis =
+        profile?.role == 'candidato' || profile?.role == 'assessor';
 
     final listAsync = ref.watch(apoiadoresListProvider);
     final munList = ref.watch(municipiosMTListProvider).valueOrNull ?? [];
@@ -115,7 +179,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     var filtered = List<Apoiador>.from(listAsync.valueOrNull ?? []);
     if (_query.isNotEmpty) {
       final q = _query.toLowerCase();
-      filtered = filtered.where((a) => a.nome.toLowerCase().contains(q)).toList();
+      filtered =
+          filtered.where((a) => a.nome.toLowerCase().contains(q)).toList();
     }
     if (_perfilFilter != 'Todos os Perfis') {
       filtered = filtered.where((a) => a.perfil == _perfilFilter).toList();
@@ -136,14 +201,20 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
         ? _cidadeChaveFiltro
         : null;
     final poloDropdownValue =
-        _poloIdFiltro != null && polos.any((p) => p.id == _poloIdFiltro) ? _poloIdFiltro : null;
+        _poloIdFiltro != null && polos.any((p) => p.id == _poloIdFiltro)
+            ? _poloIdFiltro
+            : null;
 
     filtered = aposBuscaPerfil;
     if (cidadeDropdownValue != null) {
-      filtered = filtered.where((a) => _cidadeChave(a, munList) == cidadeDropdownValue).toList();
+      filtered = filtered
+          .where((a) => _cidadeChave(a, munList) == cidadeDropdownValue)
+          .toList();
     }
     if (poloDropdownValue != null) {
-      filtered = filtered.where((a) => _poloIdParaApoiador(a, munList) == poloDropdownValue).toList();
+      filtered = filtered
+          .where((a) => _poloIdParaApoiador(a, munList) == poloDropdownValue)
+          .toList();
     }
 
     if (_viewMode == _ApoiadoresViewMode.ranking) {
@@ -153,7 +224,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
         return a.nome.toLowerCase().compareTo(b.nome.toLowerCase());
       });
     } else {
-      filtered.sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+      filtered
+          .sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
     }
 
     return RefreshIndicator(
@@ -161,7 +233,10 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
         _refreshApoiadoresCampanha();
         ref.invalidate(municipiosMTListProvider);
         ref.invalidate(polosRegioesListProvider);
-        await ref.read(apoiadoresListProvider.future).then((_) {}).onError((_, __) {});
+        await ref
+            .read(apoiadoresListProvider.future)
+            .then((_) {})
+            .onError((_, __) {});
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -174,7 +249,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
               children: [
                 Text(
                   'Apoiadores',
-                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const EstadoMTBadge(compact: true),
               ],
@@ -182,7 +258,9 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
             const SizedBox(height: 16),
             if (mostrarKpis) ...[
               ref.watch(campanhaKpisProvider).when(
-                    data: (k) => k == null ? const SizedBox.shrink() : ApoiadoresCampanhaKpisPanel(resumo: k),
+                    data: (k) => k == null
+                        ? const SizedBox.shrink()
+                        : ApoiadoresCampanhaKpisPanel(resumo: k),
                     loading: () => const Padding(
                       padding: EdgeInsets.only(bottom: 16),
                       child: Center(
@@ -197,7 +275,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                       padding: const EdgeInsets.only(bottom: 16),
                       child: Text(
                         'KPIs: $e',
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.colorScheme.error),
                       ),
                     ),
                   ),
@@ -211,7 +290,11 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                       hintText: 'Buscar apoiador...',
                       prefixIcon: Icon(Icons.search),
                     ),
-                    onChanged: (v) => setState(() => _query = v),
+                    onChanged: (v) =>
+                        setState(() {
+                          _query = v;
+                          _pageIndex = 0;
+                        }),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -220,7 +303,10 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                   items: ['Todos os Perfis', ...perfisOpcoesApoiador]
                       .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                       .toList(),
-                  onChanged: (v) => setState(() => _perfilFilter = v ?? 'Todos os Perfis'),
+                  onChanged: (v) => setState(() {
+                    _perfilFilter = v ?? 'Todos os Perfis';
+                    _pageIndex = 0;
+                  }),
                 ),
                 const SizedBox(width: 12),
                 if (!ehApoiador)
@@ -240,9 +326,9 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                 SegmentedButton<_ApoiadoresViewMode>(
                   segments: const [
                     ButtonSegment(
-                      value: _ApoiadoresViewMode.grid,
-                      label: Text('Grade'),
-                      icon: Icon(Icons.grid_view_outlined),
+                      value: _ApoiadoresViewMode.lista,
+                      label: Text('Lista'),
+                      icon: Icon(Icons.view_list_outlined),
                     ),
                     ButtonSegment(
                       value: _ApoiadoresViewMode.ranking,
@@ -253,7 +339,10 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                   selected: {_viewMode},
                   onSelectionChanged: (Set<_ApoiadoresViewMode> next) {
                     if (next.isEmpty) return;
-                    setState(() => _viewMode = next.first);
+                    setState(() {
+                      _viewMode = next.first;
+                      _pageIndex = 0;
+                    });
                   },
                 ),
                 SizedBox(
@@ -276,11 +365,15 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                           ...cidadesSorted.map(
                             (e) => DropdownMenuItem<String?>(
                               value: e.key,
-                              child: Text(e.value, overflow: TextOverflow.ellipsis),
+                              child: Text(e.value,
+                                  overflow: TextOverflow.ellipsis),
                             ),
                           ),
                         ],
-                        onChanged: (v) => setState(() => _cidadeChaveFiltro = v),
+                        onChanged: (v) => setState(() {
+                          _cidadeChaveFiltro = v;
+                          _pageIndex = 0;
+                        }),
                       ),
                     ),
                   ),
@@ -305,11 +398,15 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                           ...polos.map(
                             (p) => DropdownMenuItem<String?>(
                               value: p.id,
-                              child: Text(p.nome, overflow: TextOverflow.ellipsis),
+                              child:
+                                  Text(p.nome, overflow: TextOverflow.ellipsis),
                             ),
                           ),
                         ],
-                        onChanged: (v) => setState(() => _poloIdFiltro = v),
+                        onChanged: (v) => setState(() {
+                          _poloIdFiltro = v;
+                          _pageIndex = 0;
+                        }),
                       ),
                     ),
                   ),
@@ -319,7 +416,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
             const SizedBox(height: 24),
             listAsync.when(
               data: (_) {
-                final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
+                final podeEditar =
+                    profile?.role == 'candidato' || profile?.role == 'assessor';
                 final podeRevogarAcesso = profile?.role == 'candidato';
                 final podeExcluirApoiador = profile?.role == 'candidato';
                 if (filtered.isEmpty) {
@@ -330,76 +428,93 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                         listAsync.valueOrNull?.isEmpty == true
                             ? 'Nenhum apoiador cadastrado ainda.'
                             : 'Nenhum resultado para o filtro atual.',
-                        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ),
                   );
                 }
+                final total = filtered.length;
+                _syncPageIfNeeded(total);
+                final totalPages =
+                    (total + _kApoiadoresPageSize - 1) ~/ _kApoiadoresPageSize;
+                final page = _pageIndex.clamp(0, totalPages - 1);
+                final start = page * _kApoiadoresPageSize;
+                final pageItems = filtered
+                    .skip(start)
+                    .take(_kApoiadoresPageSize)
+                    .toList();
+
                 if (_viewMode == _ApoiadoresViewMode.ranking) {
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final rank = index + 1;
-                      final a = filtered[index];
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8, right: 10),
-                            child: CircleAvatar(
-                              radius: 20,
-                              backgroundColor: theme.colorScheme.primaryContainer,
-                              child: Text(
-                                '$rank',
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: theme.colorScheme.onPrimaryContainer,
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ...List.generate(pageItems.length, (index) {
+                        final rank = start + index + 1;
+                        final a = pageItems[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4, right: 8),
+                                child: CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor:
+                                      theme.colorScheme.primaryContainer,
+                                  child: Text(
+                                    '$rank',
+                                    style:
+                                        theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: theme
+                                          .colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                              Expanded(
+                                child: ApoiadorCard(
+                                  apoiador: a,
+                                  compact: true,
+                                  podeEditar: podeEditar,
+                                  podeRevogarAcesso: podeRevogarAcesso,
+                                  podeExcluir: podeExcluirApoiador,
+                                  onRefresh: _refreshApoiadoresCampanha,
+                                ),
+                              ),
+                            ],
                           ),
-                          Expanded(
-                            child: ApoiadorCard(
-                              apoiador: a,
-                              podeEditar: podeEditar,
-                              podeRevogarAcesso: podeRevogarAcesso,
-                              podeExcluir: podeExcluirApoiador,
-                              onRefresh: _refreshApoiadoresCampanha,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                        );
+                      }),
+                      _buildPaginationBar(theme, total, page, totalPages),
+                    ],
                   );
                 }
-                return LayoutBuilder(
-                  builder: (_, __) {
-                    return Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: filtered
-                          .map(
-                            (a) => ApoiadorCard(
-                              apoiador: a,
-                              podeEditar: podeEditar,
-                              podeRevogarAcesso: podeRevogarAcesso,
-                              podeExcluir: podeExcluirApoiador,
-                              onRefresh: _refreshApoiadoresCampanha,
-                            ),
-                          )
-                          .toList(),
-                    );
-                  },
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ...pageItems.map(
+                      (a) => ApoiadorCard(
+                        apoiador: a,
+                        compact: true,
+                        podeEditar: podeEditar,
+                        podeRevogarAcesso: podeRevogarAcesso,
+                        podeExcluir: podeExcluirApoiador,
+                        onRefresh: _refreshApoiadoresCampanha,
+                      ),
+                    ),
+                    _buildPaginationBar(theme, total, page, totalPages),
+                  ],
                 );
               },
               loading: () => const Padding(
                 padding: EdgeInsets.symmetric(vertical: 48),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (e, _) => SelectableText('Erro ao carregar apoiadores: $e'),
+              error: (e, _) =>
+                  SelectableText('Erro ao carregar apoiadores: $e'),
             ),
           ],
         ),

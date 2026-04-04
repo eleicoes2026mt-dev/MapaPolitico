@@ -265,7 +265,14 @@ final atualizarVotanteProvider = Provider<Future<void> Function(String id, Atual
     if (p.complemento != null) row['complemento'] = p.complemento!.trim().isEmpty ? null : p.complemento!.trim();
     if (p.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = p.votosPrometidosUltimaEleicao;
     if (row.isEmpty) return;
-    await client.from('votantes').update(row).eq('id', id);
+    final updated = await client.from('votantes').update(row).eq('id', id).select('id').maybeSingle();
+    if (updated == null) {
+      throw Exception(
+        'Não foi possível salvar os dados (nenhuma linha atualizada). '
+        'Se o cadastro foi por convite de apoiador, atualize o app e tente de novo; '
+        'em último caso, peça ao candidato para ajustar no painel.',
+      );
+    }
     ref.invalidate(votantesListProvider);
   };
 });

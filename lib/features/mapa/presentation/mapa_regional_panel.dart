@@ -83,7 +83,7 @@ class LocaisVotacaoPanel extends StatelessWidget {
                 ),
               ),
             const Divider(height: 1),
-            Flexible(
+            Expanded(
               child: async.when(
                 data: (list) {
                   if (list.isEmpty) {
@@ -100,6 +100,7 @@ class LocaisVotacaoPanel extends StatelessWidget {
                   }
                   final totalCidade = list.fold<int>(0, (s, e) => s + e.votos);
                   return ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                     itemCount: list.length,
                     itemBuilder: (context, i) {
@@ -190,16 +191,23 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
   /// Modo do painel de ranking no mapa web: `nenhum` | `tse` | `rede` | `comparativo` | `benfeitorias`.
   String _painelRankingModo = 'nenhum';
 
-  /// Altura do cartão do mapa no Dashboard: prioriza área útil do mapa + espaço para ranking em coluna (mobile).
+  /// Altura do cartão do mapa no Dashboard (embutido no scroll).
+  /// Em desktop, aproxima um **quadrado** e usa um teto alto no viewport para aproveitar bem o ecrã.
   static double _embeddedMapHeight(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
     final h = MediaQuery.sizeOf(context).height;
     if (w < 600) {
-      // Mobile: 88% do viewport — mapa + ranking com espaço generoso para o painel.
-      return (h * 0.88).clamp(640.0, 980.0);
+      return (h * 0.64).clamp(480.0, 760.0);
     }
-    if (w < 1100) return (h * 0.60).clamp(500.0, 760.0);
-    return (h * 0.58).clamp(560.0, 780.0);
+    if (w < 1100) {
+      return (h * 0.64).clamp(580.0, 860.0);
+    }
+    // Largura útil aproximada (menu lateral + margens do dashboard)
+    final contentW = math.max(420.0, w - 260.0);
+    final quadrado = contentW * 0.96;
+    final tetoViewport = h * 0.84;
+    final raw = math.min(quadrado, tetoViewport);
+    return raw.clamp(400.0, 1020.0);
   }
 
   @override
@@ -219,7 +227,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final benfeitoriasRanking = ref.watch(benfeitoriasRankingRegioesProvider).valueOrNull;
 
     final width = MediaQuery.sizeOf(context).width;
-    final padding = width < 600 ? 16.0 : 20.0;
+    final padding = width < 600 ? 12.0 : 16.0;
     final embedded = widget.mode == MapaPanelMode.embedded;
     final viewportH = MediaQuery.sizeOf(context).height;
     /// Em ecrãs baixos ou mobile, Column + Expanded no mapa estoura; usa scroll + altura fixa do mapa.
@@ -304,7 +312,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
             const EstadoMTBadge(compact: true),
           ],
         ),
-        SizedBox(height: padding * 0.75),
+        SizedBox(height: padding * 0.5),
       ],
       // Legenda TSE (oculta no modo benfeitorias) ou legenda em R$ para benfeitorias por região
       if (votosTseRaw.isNotEmpty && _painelRankingModo != 'benfeitorias') ...[
@@ -323,7 +331,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         SizedBox(height: mapH, child: mapCard)
       else
         Expanded(child: mapCard),
-      const SizedBox(height: 12),
+      const SizedBox(height: 8),
       Text(
         _painelRankingModo == 'benfeitorias'
             ? (votosAjustados.isEmpty && marcadores.isEmpty

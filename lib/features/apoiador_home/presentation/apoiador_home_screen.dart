@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
@@ -10,7 +10,6 @@ import '../../agenda/providers/agenda_provider.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mensagens/providers/mensagens_provider.dart';
-import '../../votantes/providers/votantes_provider.dart';
 
 class ApoiadorHomeScreen extends ConsumerWidget {
   const ApoiadorHomeScreen({super.key});
@@ -20,20 +19,16 @@ class ApoiadorHomeScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final apoiadorAsync = ref.watch(meuApoiadorProvider);
-    final votantesAsync = ref.watch(votantesListProvider);
-    final visitaAsync = ref.watch(proximaVisitaMinhaCidadeProvider);
+    final visitasAsync = ref.watch(visitasProvider);
     final mensagensAsync = ref.watch(mensagensListProvider);
 
     final apoiador = apoiadorAsync.valueOrNull;
-    final votantes = votantesAsync.valueOrNull ?? [];
-    final totalVotos = votantes.fold<int>(0, (a, v) => a + v.qtdVotosFamilia);
     final mensagens = mensagensAsync.valueOrNull ?? [];
 
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(meuApoiadorProvider);
-        ref.invalidate(votantesListProvider);
-        ref.invalidate(proximaVisitaMinhaCidadeProvider);
+        ref.invalidate(visitasProvider);
         ref.invalidate(mensagensListProvider);
       },
       child: SingleChildScrollView(
@@ -42,7 +37,6 @@ class ApoiadorHomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Cabeçalho ───────────────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -69,94 +63,71 @@ class ApoiadorHomeScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 20),
 
-            // ── Banner: próxima visita ────────────────────────────────────
-            visitaAsync.when(
-              data: (v) => v != null ? _VisitaBanner(visita: v) : const SizedBox.shrink(),
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-            ),
-
-            // ── KPIs ─────────────────────────────────────────────────────
-            const SizedBox(height: 16),
-            Text('Minha Rede', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 10),
+            // ── Agenda ─────────────────────────────────────────────────────
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: _KpiCard(
-                    icon: Icons.how_to_reg_outlined,
-                    label: kAmigosGilbertoLabel,
-                    valor: '${votantes.length}',
-                    sub: 'cadastrados',
-                    color: theme.colorScheme.primary,
-                    loading: votantesAsync.isLoading,
-                  ),
+                Text(
+                  'Agenda',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _KpiCard(
-                    icon: Icons.groups_outlined,
-                    label: 'Votos na rede',
-                    valor: '$totalVotos',
-                    sub: 'estimados',
-                    color: theme.colorScheme.secondary,
-                    loading: votantesAsync.isLoading,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: profile?.role == 'votante'
-                      ? _KpiCard(
-                          icon: Icons.person_pin_circle_outlined,
-                          label: 'Seu cadastro',
-                          valor: votantes.isEmpty ? '0' : '1',
-                          sub: kAmigosGilbertoLabel,
-                          color: theme.colorScheme.tertiary,
-                          loading: votantesAsync.isLoading,
-                        )
-                      : _KpiCard(
-                          icon: Icons.trending_up_outlined,
-                          label: 'Estimativa',
-                          valor: '${apoiador?.estimativaVotos ?? 0}',
-                          sub: 'meta apoiador',
-                          color: theme.colorScheme.tertiary,
-                          loading: apoiadorAsync.isLoading,
-                        ),
+                TextButton(
+                  onPressed: () => context.go('/agenda'),
+                  child: const Text('Ver completa'),
                 ),
               ],
             ),
-
-            // ── Últimos votantes ──────────────────────────────────────────
-            if (votantes.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Meus $kAmigosGilbertoLabel', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  Text(
-                    '${votantes.length} no total',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ...votantes.take(5).map((v) => _VotanteItem(
-                    nome: v.nome,
-                    cidade: v.cidadeDisplay,
-                    votos: v.qtdVotosFamilia,
-                    abrangencia: v.abrangencia,
-                  )),
-              if (votantes.length > 5)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '+ ${votantes.length - 5} — veja a lista em $kAmigosGilbertoLabel',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
+            const SizedBox(height: 8),
+            visitasAsync.when(
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: CircularProgressIndicator(),
                 ),
-            ],
+              ),
+              error: (e, _) => Text(
+                'Não foi possível carregar a agenda: $e',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+              ),
+              data: (visitas) {
+                if (visitas.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      'Nenhum evento futuro na agenda por enquanto.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                }
+                final slice = visitas.length > 8 ? visitas.sublist(0, 8) : visitas;
+                return Column(
+                  children: [
+                    ...slice.map((v) => _VisitaHomeTile(visita: v)),
+                    if (visitas.length > 8)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '+ ${visitas.length - 8} na agenda completa',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
 
-            // ── Mensagens da campanha (único local para o apoiador) ───────
+            // ── Mensagens da campanha ─────────────────────────────────────
             const SizedBox(height: 24),
             Container(
               width: double.infinity,
@@ -252,152 +223,32 @@ class ApoiadorHomeScreen extends ConsumerWidget {
   }
 }
 
-// ── Widgets auxiliares ────────────────────────────────────────────────────────
+class _VisitaHomeTile extends StatelessWidget {
+  const _VisitaHomeTile({required this.visita});
 
-class _VisitaBanner extends StatelessWidget {
-  const _VisitaBanner({required this.visita});
   final Visita visita;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          const Text('📅', style: TextStyle(fontSize: 28)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  visita.isHoje ? '🎉 O deputado está na sua cidade HOJE!' : 'Próxima visita do deputado',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  visita.dataHoraFormatada,
-                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.9)),
-                ),
-                if (visita.localTexto != null && visita.localTexto!.isNotEmpty)
-                  Text(
-                    'Local: ${visita.localTexto}',
-                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.8)),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KpiCard extends StatelessWidget {
-  const _KpiCard({
-    required this.icon,
-    required this.label,
-    required this.valor,
-    required this.sub,
-    required this.color,
-    this.loading = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final String valor;
-  final String sub;
-  final Color color;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final v = visita;
     return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 8),
-            loading
-                ? const SizedBox(height: 28, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
-                : Text(
-                    valor,
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: color),
-                  ),
-            Text(label, style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
-            Text(sub, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ],
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        leading: CircleAvatar(
+          backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
+          child: Icon(Icons.event_outlined, color: theme.colorScheme.primary, size: 22),
         ),
-      ),
-    );
-  }
-}
-
-class _VotanteItem extends StatelessWidget {
-  const _VotanteItem({
-    required this.nome,
-    required this.cidade,
-    required this.votos,
-    required this.abrangencia,
-  });
-
-  final String nome;
-  final String cidade;
-  final int votos;
-  final String abrangencia;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: theme.colorScheme.primaryContainer,
-            child: Text(
-              nome.isNotEmpty ? nome[0].toUpperCase() : '?',
-              style: TextStyle(fontSize: 13, color: theme.colorScheme.primary, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(nome, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                if (cidade.isNotEmpty)
-                  Text(cidade, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              ],
-            ),
-          ),
-          Chip(
-            label: Text('$votos voto${votos != 1 ? "s" : ""}', style: theme.textTheme.labelSmall),
-            padding: EdgeInsets.zero,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            backgroundColor: abrangencia == 'Familiar'
-                ? theme.colorScheme.secondaryContainer
-                : theme.colorScheme.surfaceContainerHighest,
-          ),
-        ],
+        title: Text(v.titulo, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+          [
+            v.dataHoraFormatada,
+            if (v.municipioNome != null && v.municipioNome!.trim().isNotEmpty) v.municipioNome!,
+          ].join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     );
   }

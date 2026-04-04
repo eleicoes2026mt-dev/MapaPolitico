@@ -1123,13 +1123,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Mapa: 45% — ranking: 55% no modo embutido mobile
+            // Mapa um pouco menor — mais espaço para ranking + locais de votação (lista scrollável).
             Expanded(
-              flex: 9,
+              flex: 8,
               child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
             ),
             Expanded(
-              flex: 13,
+              flex: 16,
               child: _RankingPanel(
                 ranking: ranking,
                 totalVotosTseGeral: totalVotosTseGeral,
@@ -1164,10 +1164,14 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final narrow = constraints.maxWidth < 560;
-          // Sobre o mapa (tela cheia estreita): painel mais baixo para não cobrir o território.
+          // Painel inferior: com «Locais de votação» abertos precisa de mais altura para a lista scrollável.
+          final temLocais = widget.locaisVotacaoContent != null;
           final bottomPanelH = math.max(
-            168.0,
-            math.min(300.0, constraints.maxHeight * 0.36),
+            temLocais ? 280.0 : 168.0,
+            math.min(
+              temLocais ? 520.0 : 300.0,
+              constraints.maxHeight * (temLocais ? 0.58 : 0.36),
+            ),
           );
           Widget buildRankingPanel({required bool compact}) => _RankingPanel(
             ranking: ranking,
@@ -1683,6 +1687,7 @@ class _RankingPanelState extends State<_RankingPanel> {
 
               // ── Lista: nenhum / TSE / Rede / Comparativo / Benfeitorias ───────────────
               Expanded(
+                flex: showLocais ? 2 : 1,
                 child: modoNenhum
                     ? _buildListaNenhum(cs, theme)
                     : modoBenfeitorias
@@ -1948,7 +1953,8 @@ class _RankingPanelState extends State<_RankingPanel> {
 
               if (showLocais) ...[
                 const Divider(height: 1),
-                Expanded(flex: 1, child: widget.locaisVotacaoContent!),
+                // Mais altura para a lista de locais (scroll) sem esmagar o ranking (proporção 2 : 3).
+                Expanded(flex: 3, child: widget.locaisVotacaoContent!),
               ],
             ],
           ),

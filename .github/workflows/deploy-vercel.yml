@@ -35,6 +35,11 @@ jobs:
             --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
             --dart-define=APP_URL="$BASE_URL"
 
+      - name: Versão do deploy (app oferece recarregar quando há build nova)
+        run: |
+          VERSION="${GITHUB_SHA:-$GITHUB_RUN_ID}"
+          printf '%s\n' "{\"version\":\"$VERSION\"}" > build/web/version.json
+
       - name: Incluir vercel.json no build
         run: cp vercel.json build/web/
 

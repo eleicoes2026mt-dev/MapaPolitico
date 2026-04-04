@@ -2,6 +2,7 @@ import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -15,37 +16,72 @@ import '../../votantes/providers/votantes_provider.dart' show municipiosMTListPr
 import '../../../models/municipio.dart';
 import '../providers/mensagens_provider.dart';
 
-class MensagensScreen extends ConsumerWidget {
+class MensagensScreen extends ConsumerStatefulWidget {
   const MensagensScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          _Header(),
-          const TabBar(
-            tabs: [
-              Tab(icon: Icon(Icons.chat_bubble_outline), text: 'Mensagens'),
-              Tab(icon: Icon(Icons.cake_outlined), text: 'Aniversariantes'),
+  ConsumerState<MensagensScreen> createState() => _MensagensScreenState();
+}
+
+class _MensagensScreenState extends ConsumerState<MensagensScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _syncTabFromRoute() {
+    final tab = GoRouterState.of(context).uri.queryParameters['tab'];
+    final idx = tab == 'aniversariantes' ? 1 : 0;
+    if (_tabController.index != idx) {
+      _tabController.index = idx;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncTabFromRoute();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const _Header(),
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.chat_bubble_outline), text: 'Mensagens'),
+            Tab(icon: Icon(Icons.cake_outlined), text: 'Aniversariantes'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: const [
+              _MensagensTab(),
+              _AniversariantesTab(),
             ],
           ),
-          const Expanded(
-            child: TabBarView(
-              children: [
-                _MensagensTab(),
-                _AniversariantesTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 class _Header extends ConsumerWidget {
+  const _Header();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -656,96 +692,258 @@ class _AniversariantesTab extends ConsumerWidget {
     return allAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Erro: $e')),
-      data: (_) => RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(aniversariantesProvider);
-          await ref.read(aniversariantesProvider.future).then((_) {}).onError((_, __) {});
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Hoje ──────────────────────────────────────────────────────
-            hojeAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (hoje) {
-                if (hoje.isEmpty) return const SizedBox.shrink();
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Text('🎂', style: TextStyle(fontSize: 28)),
-                          const SizedBox(width: 12),
-                          Text(
-                            hoje.length == 1
-                                ? '${hoje.first.nome} faz aniversário HOJE!'
-                                : '${hoje.length} pessoas fazem aniversário HOJE!',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ...hoje.map((a) => _AniversarianteCard(aniversariante: a, destaque: true)),
-                    const SizedBox(height: 24),
-                  ],
-                );
-              },
+      data: (todas) {
+        if (todas.isEmpty) {
+          return _AniversariantesEmptyState(
+            icon: Icons.cake_outlined,
+            titulo: 'Nenhuma data de nascimento cadastrada',
+            subtitulo:
+                'Inclua a data nos cadastros de apoiadores e assessores para acompanhar aniversários e fortalecer o relacionamento.',
+          );
+        }
+        return RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(aniversariantesProvider);
+            await ref.read(aniversariantesProvider.future).then((_) {}).onError((_, __) {});
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Calendário de aniversários',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.15,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Apoiadores e assessores com data informada. Toque no WhatsApp para enviar uma mensagem.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                hojeAsync.when(
+                  loading: () => const LinearProgressIndicator(minHeight: 2),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (hoje) => _SecaoHoje(theme: theme, lista: hoje),
+                ),
+                const SizedBox(height: 8),
+                proximosAsync.when(
+                  loading: () => const LinearProgressIndicator(minHeight: 2),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (proximos) => _SecaoProximos30(theme: theme, lista: proximos),
+                ),
+              ],
             ),
+          ),
+        );
+      },
+    );
+  }
+}
 
-            // ── Próximos 30 dias ───────────────────────────────────────────
-            proximosAsync.when(
-              loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (proximos) {
-                if (proximos.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        children: [
-                          Icon(Icons.cake_outlined, size: 48, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
-                          const SizedBox(height: 12),
-                          Text('Nenhum aniversário nos próximos 30 dias.',
-                              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                              textAlign: TextAlign.center),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Cadastre datas de nascimento nos apoiadores e assessores para aparecerem aqui.',
-                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Próximos 30 dias', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 12),
-                    ...proximos.map((a) => _AniversarianteCard(aniversariante: a)),
-                  ],
-                );
-              },
+class _SecaoHoje extends StatelessWidget {
+  const _SecaoHoje({required this.theme, required this.lista});
+
+  final ThemeData theme;
+  final List<Aniversariante> lista;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.wb_sunny_outlined, size: 20, color: theme.colorScheme.tertiary),
+            const SizedBox(width: 8),
+            Text(
+              'Hoje',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        if (lista.isEmpty)
+          _PainelInfo(
+            theme: theme,
+            tonal: true,
+            child: Text(
+              'Ninguém faz aniversário hoje.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        else ...[
+          _PainelInfo(
+            theme: theme,
+            tonal: true,
+            destaque: true,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.2),
+                  child: Icon(Icons.cake_rounded, color: theme.colorScheme.primary, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    lista.length == 1
+                        ? '${lista.first.nome} celebra aniversário hoje.'
+                        : '${lista.length} pessoas celebram aniversário hoje.',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...lista.map((a) => _AniversarianteCard(aniversariante: a, destaque: true)),
+        ],
+      ],
+    );
+  }
+}
+
+class _SecaoProximos30 extends StatelessWidget {
+  const _SecaoProximos30({required this.theme, required this.lista});
+
+  final ThemeData theme;
+  final List<Aniversariante> lista;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Icon(Icons.calendar_month_outlined, size: 20, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Text(
+              'Próximos 30 dias',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (lista.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${lista.length}',
+                  style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (lista.isEmpty)
+          _PainelInfo(
+            theme: theme,
+            tonal: false,
+            child: Text(
+              'Nenhum aniversário agendado para as próximas quatro semanas (além de hoje).',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+          )
+        else
+          ...lista.map((a) => _AniversarianteCard(aniversariante: a)),
+      ],
+    );
+  }
+}
+
+class _PainelInfo extends StatelessWidget {
+  const _PainelInfo({
+    required this.theme,
+    required this.child,
+    this.tonal = false,
+    this.destaque = false,
+  });
+
+  final ThemeData theme;
+  final Widget child;
+  final bool tonal;
+  final bool destaque;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tonal ? theme.colorScheme.primaryContainer.withValues(alpha: destaque ? 0.55 : 0.35) : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: destaque ? theme.colorScheme.primary.withValues(alpha: 0.35) : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _AniversariantesEmptyState extends StatelessWidget {
+  const _AniversariantesEmptyState({
+    required this.icon,
+    required this.titulo,
+    required this.subtitulo,
+  });
+
+  final IconData icon;
+  final String titulo;
+  final String subtitulo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 56, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45)),
+            const SizedBox(height: 16),
+            Text(
+              titulo,
+              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitulo,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
@@ -754,6 +952,7 @@ class _AniversariantesTab extends ConsumerWidget {
 
 class _AniversarianteCard extends StatelessWidget {
   const _AniversarianteCard({required this.aniversariante, this.destaque = false});
+
   final Aniversariante aniversariante;
   final bool destaque;
 
@@ -778,71 +977,90 @@ class _AniversarianteCard extends StatelessWidget {
         tipoColor = theme.colorScheme.tertiary;
     }
 
+    final dataFmt = DateFormat('dd/MM').format(a.dataNascimento);
+    final linhaDetalhe = destaque
+        ? '${a.idadeAnos} anos — $dataFmt'
+        : '${a.diasParaAniversario} ${a.diasParaAniversario == 1 ? 'dia' : 'dias'} até o aniversário · $dataFmt · fará ${a.idadeAnos + 1} anos';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      shape: destaque
-          ? RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: theme.colorScheme.primary, width: 1.5),
-            )
-          : null,
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: destaque
+              ? theme.colorScheme.primary.withValues(alpha: 0.45)
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Text(destaque ? '🎂' : '🎁', style: const TextStyle(fontSize: 24)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(a.nome, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: tipoColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(tipoLabel, style: theme.textTheme.labelSmall?.copyWith(color: tipoColor)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    destaque
-                        ? '${a.idadeAnos} anos hoje! — ${DateFormat('dd/MM').format(a.dataNascimento)}'
-                        : '${a.diasParaAniversario} dias — ${DateFormat('dd/MM').format(a.dataNascimento)} (${a.idadeAnos + 1} anos)',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          leading: CircleAvatar(
+            backgroundColor: destaque
+                ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                : theme.colorScheme.secondaryContainer.withValues(alpha: 0.35),
+            child: Icon(
+              destaque ? Icons.cake_outlined : Icons.card_giftcard_outlined,
+              color: destaque ? theme.colorScheme.primary : theme.colorScheme.onSecondaryContainer,
+              size: 22,
+            ),
+          ),
+          title: Text(
+            a.nome,
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              linhaDetalhe,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.25,
               ),
             ),
-            const SizedBox(width: 8),
-            // Botão WhatsApp
-            if (a.whatsappUrl.isNotEmpty)
-              Tooltip(
-                message: 'Enviar felicitação pelo WhatsApp',
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(24),
-                  onTap: () async {
-                    final uri = Uri.parse(a.whatsappUrl);
-                    if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF25D366).withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.chat, color: Color(0xFF25D366), size: 20),
-                  ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Chip(
+                label: Text(tipoLabel),
+                padding: EdgeInsets.zero,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                backgroundColor: tipoColor.withValues(alpha: 0.12),
+                side: BorderSide.none,
+                labelStyle: theme.textTheme.labelSmall?.copyWith(
+                  color: tipoColor,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-          ],
+              if (a.whatsappUrl.isNotEmpty) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: 'WhatsApp',
+                  child: IconButton.filledTonal(
+                    icon: const Icon(Icons.chat, size: 20),
+                    style: IconButton.styleFrom(
+                      foregroundColor: const Color(0xFF25D366),
+                      backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.12),
+                    ),
+                    onPressed: () async {
+                      final uri = Uri.parse(a.whatsappUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

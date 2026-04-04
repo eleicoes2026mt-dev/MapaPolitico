@@ -20,6 +20,7 @@ class ApoiadorCard extends ConsumerStatefulWidget {
     this.podeRevogarAcesso = false,
     this.podeExcluir = false,
     required this.onRefresh,
+    this.compact = false,
   });
 
   final Apoiador apoiador;
@@ -27,6 +28,8 @@ class ApoiadorCard extends ConsumerStatefulWidget {
   final bool podeRevogarAcesso;
   final bool podeExcluir;
   final VoidCallback onRefresh;
+  /// Linha densa (lista paginada); mantém as mesmas ações do cartão.
+  final bool compact;
 
   @override
   ConsumerState<ApoiadorCard> createState() => _ApoiadorCardState();
@@ -133,6 +136,144 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
     }
   }
 
+  static const _compactIconConstraints = BoxConstraints(minWidth: 36, minHeight: 36);
+
+  Future<void> _convidarPorEmail() async {
+    final theme = Theme.of(context);
+    final apoiador = widget.apoiador;
+    try {
+      final link = await convidarApoiadorPorEmail(apoiadorId: apoiador.id);
+      widget.onRefresh();
+      if (!mounted) return;
+      if (link != null && link.isNotEmpty) {
+        await showConviteLinkDialog(
+          context,
+          link: link,
+          title: 'Link de acesso do apoiador',
+          description:
+              'O convite também foi enviado por e-mail. Copie o link e envie pelo WhatsApp se a mensagem não chegar. Com o acesso, o apoiador cadastra votantes que aparecem no mapa.',
+          snackbarMessage: 'Link copiado.',
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Convite enviado por e-mail. Se não chegar, confira spam ou reenvie e use o link copiável quando aparecer.',
+            ),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: theme.colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _reenviarConvite() async {
+    final theme = Theme.of(context);
+    final apoiador = widget.apoiador;
+    try {
+      final link = await reenviarConviteApoiador(apoiadorId: apoiador.id);
+      if (!mounted) return;
+      if (link != null && link.isNotEmpty) {
+        await showConviteLinkDialog(
+          context,
+          link: link,
+          title: 'Link de convite (reenvio)',
+          description: 'Copie e envie pelo WhatsApp se o e-mail não chegar.',
+          snackbarMessage: 'Link copiado.',
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Convite reenviado por e-mail.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: theme.colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Widget _compactTrailing(ThemeData theme, Apoiador apoiador, bool mostrarConvite) {
+    return SizedBox(
+      height: 42,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (mostrarConvite) ...[
+              IconButton(
+                icon: const Icon(Icons.mark_email_read_outlined, size: 20),
+                tooltip: 'Convidar por e-mail (acesso ao app)',
+                constraints: _compactIconConstraints,
+                padding: EdgeInsets.zero,
+                onPressed: _convidarPorEmail,
+              ),
+              IconButton(
+                icon: const Icon(Icons.forward_to_inbox_outlined, size: 20),
+                tooltip: 'Reenviar convite',
+                constraints: _compactIconConstraints,
+                padding: EdgeInsets.zero,
+                onPressed: _reenviarConvite,
+              ),
+            ],
+            if (widget.podeRevogarAcesso && apoiador.profileId != null)
+              IconButton(
+                icon: const Icon(Icons.link_off_outlined, size: 20),
+                tooltip: 'Revogar acesso ao app (dados permanecem)',
+                constraints: _compactIconConstraints,
+                padding: EdgeInsets.zero,
+                onPressed: _confirmarRevogar,
+              ),
+            if (widget.podeExcluir)
+              IconButton(
+                icon: Icon(Icons.delete_outline, size: 20, color: theme.colorScheme.error),
+                tooltip: 'Excluir apoiador da campanha (restaurar em Configurações)',
+                constraints: _compactIconConstraints,
+                padding: EdgeInsets.zero,
+                onPressed: _confirmarExcluir,
+              ),
+            if (widget.podeEditar)
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                onPressed: _abrirEditar,
+                tooltip: 'Editar apoiador',
+                constraints: _compactIconConstraints,
+                padding: EdgeInsets.zero,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _compactSubtitle(ThemeData theme, String? cidadeDisplay) {
+    final a = widget.apoiador;
+    final parts = <String>[
+      if (cidadeDisplay != null) cidadeDisplay,
+      '~${a.estimativaVotos} votos',
+      if (a.telefone != null && a.telefone!.trim().isNotEmpty) a.telefone!.trim(),
+    ];
+    return Text(
+      parts.join(' · '),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -143,6 +284,48 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
     final podeConvidarEquipe = profile?.role == 'candidato' || profile?.role == 'assessor';
     final emailConvite = emailParaConviteApoiador(apoiador);
     final mostrarConvite = podeConvidarEquipe && apoiador.profileId == null && emailConvite != null;
+
+    if (widget.compact) {
+      return Card(
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        child: ListTile(
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          leading: CircleAvatar(
+            radius: 18,
+            backgroundColor: apoiador.isPJ ? Colors.purple.shade100 : Colors.green.shade100,
+            child: apoiador.isPJ
+                ? Icon(Icons.business, size: 18, color: Colors.purple.shade700)
+                : Text(apoiador.initial, style: TextStyle(fontSize: 13, color: Colors.green.shade800, fontWeight: FontWeight.w600)),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  apoiador.nome,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (apoiador.perfil != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Text(
+                    apoiador.perfil!,
+                    style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary),
+                  ),
+                ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: _compactSubtitle(theme, cidadeDisplay),
+          ),
+          trailing: _compactTrailing(theme, apoiador, mostrarConvite),
+        ),
+      );
+    }
 
     return SizedBox(
       width: width,
@@ -192,75 +375,14 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
                       tooltip: 'Convidar por e-mail (acesso ao app)',
                       constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                       padding: EdgeInsets.zero,
-                      onPressed: () async {
-                        try {
-                          final link = await convidarApoiadorPorEmail(apoiadorId: apoiador.id);
-                          widget.onRefresh();
-                          if (!context.mounted) return;
-                          if (link != null && link.isNotEmpty) {
-                            await showConviteLinkDialog(
-                              context,
-                              link: link,
-                              title: 'Link de acesso do apoiador',
-                              description:
-                                  'O convite também foi enviado por e-mail. Copie o link e envie pelo WhatsApp se a mensagem não chegar. Com o acesso, o apoiador cadastra votantes que aparecem no mapa.',
-                              snackbarMessage: 'Link copiado.',
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Convite enviado por e-mail. Se não chegar, confira spam ou reenvie e use o link copiável quando aparecer.',
-                                ),
-                                duration: Duration(seconds: 5),
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(e.toString().replaceFirst('Exception: ', '')),
-                                backgroundColor: theme.colorScheme.error,
-                              ),
-                            );
-                          }
-                        }
-                      },
+                      onPressed: _convidarPorEmail,
                     ),
                     IconButton(
                       icon: const Icon(Icons.forward_to_inbox_outlined),
                       tooltip: 'Reenviar convite',
                       constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                       padding: EdgeInsets.zero,
-                      onPressed: () async {
-                        try {
-                          final link = await reenviarConviteApoiador(apoiadorId: apoiador.id);
-                          if (!context.mounted) return;
-                          if (link != null && link.isNotEmpty) {
-                            await showConviteLinkDialog(
-                              context,
-                              link: link,
-                              title: 'Link de convite (reenvio)',
-                              description: 'Copie e envie pelo WhatsApp se o e-mail não chegar.',
-                              snackbarMessage: 'Link copiado.',
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Convite reenviado por e-mail.')),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(e.toString().replaceFirst('Exception: ', '')),
-                                backgroundColor: theme.colorScheme.error,
-                              ),
-                            );
-                          }
-                        }
-                      },
+                      onPressed: _reenviarConvite,
                     ),
                   ],
                   if (widget.podeRevogarAcesso && apoiador.profileId != null)

@@ -1,27 +1,71 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/amigos_gilberto.dart';
+import '../core/bootstrap/app_deploy_update.dart';
 import '../core/bootstrap/reload_page_stub.dart'
     if (dart.library.html) '../core/bootstrap/reload_page_web.dart' as reload_page;
+import '../core/data/candidato_campanha_public.dart';
 import '../core/services/realtime_notifications_service.dart';
+import '../core/supabase/supabase_provider.dart';
 import '../core/widgets/amigos_gilberto_qr_dialog.dart';
 import '../core/widgets/pwa_onboarding_dialog.dart';
+import '../features/agenda/providers/agenda_provider.dart';
+import '../features/agenda/widgets/sidebar_aniversariantes_banner.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../models/profile.dart';
+import '../models/visita.dart';
 
 bool _mostrarQrConviteAmigos(Profile? p) =>
     p != null && const {'candidato', 'assessor', 'apoiador', 'votante'}.contains(p.role);
 
-void _abrirDialogQrAmigos(BuildContext context, Profile p) {
+/// Evita repetir o SnackBar de aniversário no mesmo dia (candidato/assessor).
+const _kBirthdaySnackPrefKey = 'campanha_mt_aniversario_snack_dia';
+
+String _formatarNomesAniversarioSnack(List<String> nomes) {
+  if (nomes.isEmpty) return '';
+  if (nomes.length <= 5) {
+    if (nomes.length == 1) return nomes.first;
+    if (nomes.length == 2) return '${nomes[0]} e ${nomes[1]}';
+    return '${nomes.sublist(0, nomes.length - 1).join(', ')} e ${nomes.last}';
+  }
+  final head = nomes.take(4).join(', ');
+  final rest = nomes.length - 4;
+  return '$head e mais $rest';
+}
+
+Future<void> _abrirDialogQrAmigos(BuildContext context, Profile p) async {
+  CandidatoCampanhaPublic? campanha;
+  try {
+    final raw = await supabase.rpc('candidato_campanha_public');
+    campanha = CandidatoCampanhaPublic.tryParse(raw);
+  } catch (_) {}
+
+  if (!context.mounted) return;
+
+  final fotoCampanha = campanha?.sidebarBrandImageUrl ??
+      (p.role == 'candidato' ? p.sidebarBrandImageUrl : null);
+
+  String? nomeCampanha;
+  final rpcNome = campanha?.fullName?.trim();
+  if (rpcNome != null && rpcNome.isNotEmpty) {
+    nomeCampanha = rpcNome;
+  } else if (p.role == 'candidato') {
+    final n = p.fullName?.trim();
+    if (n != null && n.isNotEmpty) nomeCampanha = n;
+  }
+
   showAmigosGilbertoQrDialog(
     context,
     inviterProfileId: p.id,
     inviterDisplayName: p.fullName,
-    candidatePhotoUrl: p.role == 'candidato' ? p.sidebarBrandImageUrl : p.avatarUrl,
-    candidateName: p.fullName,
+    candidatePhotoUrl: fotoCampanha,
+    candidateName: nomeCampanha,
   );
 }
 
@@ -34,18 +78,17 @@ class MainScaffold extends ConsumerStatefulWidget {
   ConsumerState<MainScaffold> createState() => _MainScaffoldState();
 }
 
-class _MainScaffoldState extends ConsumerState<MainScaffold> {
+class _MainScaffoldState extends ConsumerState<MainScaffold> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _sidebarExpanded = true;
+  Timer? _deployPollTimer;
 
   @override
   void initState() {
     super.initState();
-    // Ativa notificações realtime após o login
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // Inicia realtime sem ref (não precisa invalidar providers aqui)
-      RealtimeNotificationsService.instance.initSimple();
       RealtimeNotificationsService.instance.setNotificacaoCallback(
         (title, body, url) {
           if (!mounted) return;
@@ -76,7 +119,30 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
           );
         },
       );
+      RealtimeNotificationsService.instance.init(ref as Ref);
+      if (kIsWeb) {
+        checkAndMaybePromptDeployUpdate(context);
+        _deployPollTimer = Timer.periodic(const Duration(minutes: 8), (_) {
+          if (!mounted) return;
+          checkAndMaybePromptDeployUpdate(context);
+        });
+      }
     });
+  }
+
+  @override
+  void dispose() {
+    _deployPollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    RealtimeNotificationsService.instance.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && kIsWeb && mounted) {
+      checkAndMaybePromptDeployUpdate(context);
+    }
   }
 
   void _abrirOrientacaoAppENotificacoes() {
@@ -90,6 +156,53 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider).valueOrNull;
+    final theme = Theme.of(context);
+
+    ref.listen<AsyncValue<List<Aniversariante>>>(aniversariantesHojeProvider, (prev, next) {
+      Future<void> maybeSnack() async {
+        final p = ref.read(profileProvider).valueOrNull;
+        final role = p?.role;
+        if (role != 'candidato' && role != 'assessor') return;
+        final list = next.valueOrNull;
+        if (list == null || list.isEmpty) return;
+        final prefs = await SharedPreferences.getInstance();
+        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        if (prefs.getString(_kBirthdaySnackPrefKey) == today) return;
+        await prefs.setString(_kBirthdaySnackPrefKey, today);
+        if (!mounted) return;
+        final nomes = list.map((e) => e.nome).toList();
+        final texto = _formatarNomesAniversarioSnack(nomes);
+        final msg = list.length == 1
+            ? 'Hoje é aniversário de $texto.'
+            : 'Hoje é aniversário de: $texto.';
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.cake_rounded, color: theme.colorScheme.onInverseSurface, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      msg,
+                      style: TextStyle(color: theme.colorScheme.onInverseSurface),
+                    ),
+                  ),
+                ],
+              ),
+              duration: const Duration(seconds: 8),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: theme.colorScheme.inverseSurface,
+            ),
+          );
+        });
+      }
+
+      maybeSnack();
+    });
+
     final isWide = MediaQuery.sizeOf(context).width >= 800;
     final abrirPwa = kIsWeb ? _abrirOrientacaoAppENotificacoes : null;
 
@@ -185,17 +298,18 @@ class _SidebarBrandMark extends StatelessWidget {
   Widget build(BuildContext context) {
     final prof = profile;
     final url = prof?.sidebarBrandImageUrl;
+    const double markSize = 64;
     if (url != null && url.isNotEmpty) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: Image.network(
           url,
-          width: 48,
-          height: 48,
+          width: markSize,
+          height: markSize,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => Icon(
             Icons.how_to_vote,
-            size: 48,
+            size: markSize,
             color: theme.colorScheme.primary,
           ),
         ),
@@ -206,11 +320,11 @@ class _SidebarBrandMark extends StatelessWidget {
         prof.role == 'candidato' &&
         (prof.avatarUrl == null || prof.avatarUrl!.trim().isEmpty)) {
       return Container(
-        width: 48,
-        height: 48,
+        width: markSize,
+        height: markSize,
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: theme.colorScheme.outline.withValues(alpha: 0.45),
           ),
@@ -218,14 +332,14 @@ class _SidebarBrandMark extends StatelessWidget {
         alignment: Alignment.center,
         child: Icon(
           Icons.flag_outlined,
-          size: 26,
+          size: 30,
           color: theme.colorScheme.outline,
         ),
       );
     }
     return Icon(
       Icons.how_to_vote,
-      size: 48,
+      size: markSize,
       color: theme.colorScheme.primary,
     );
   }
@@ -412,16 +526,8 @@ class _Sidebar extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          prof.role.toUpperCase(),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
                         if (prof.cargo != null && prof.cargo!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 10),
                           SizedBox(
                             width: double.infinity,
                             child: Text(
@@ -484,6 +590,10 @@ class _Sidebar extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 24),
+            if (prof != null && mostrarAniversariantesNoMenu(role: prof.role)) ...[
+              SidebarAniversariantesBanner(isDrawer: isDrawer),
+              const SizedBox(height: 12),
+            ],
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -493,6 +603,9 @@ class _Sidebar extends StatelessWidget {
                       if (_pathsOcultosMenuGlobal.contains(e.path)) return false;
                       if (e.path == '/configuracoes' && prof.role != 'candidato') return false;
                       if (prof.role == 'apoiador' || prof.role == 'votante') {
+                        if (prof.role == 'votante' && e.path == '/votantes') {
+                          return false;
+                        }
                         return !_pathsOcultosApoiador.contains(e.path);
                       }
                       if (prof.role == 'assessor') return !_pathsOcultosAssessor.contains(e.path) && !_pathsOcultosCandidatoAssessor.contains(e.path);

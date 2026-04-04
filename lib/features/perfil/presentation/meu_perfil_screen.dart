@@ -96,6 +96,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
           partidoSigla = null;
         }
       }
+      final podeFoto = p?.role == 'candidato' || p?.role == 'assessor';
       await ref.read(updateProfileProvider)(
         (
           fullName: _nomeController.text.trim(),
@@ -106,7 +107,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
           partido: isCand ? partidoSigla : p?.partido,
           partidoId: isCand ? _partidoId : null,
           dataNascimento: _dataNascimento,
-          avatarUrl: _avatarUrl,
+          avatarUrl: podeFoto ? _avatarUrl : p?.avatarUrl,
           sqCandidatoTse2022:
               isCand ? _sqCandidatoTse2022 : p?.sqCandidatoTse2022,
         ),
@@ -325,6 +326,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
         final email = profile?.email ?? currentUser.email ?? '';
         final role = profile?.role ?? 'votante';
         final isCandidato = role == 'candidato';
+        final podeAlterarFotoPerfil = role == 'candidato' || role == 'assessor';
         final sig = '${profile?.id ?? ''}|$role';
         if (_prefillSignature != sig) {
           _prefillSignature = sig;
@@ -430,12 +432,23 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       value: _dataNascimento,
                       onChanged: (d) => setState(() => _dataNascimento = d),
                     ),
-                    const SizedBox(height: 16),
-                    _ImagemPerfilField(
-                      avatarUrl: _avatarUrl,
-                      uploading: _uploadingImage,
-                      onPick: () => _pickAndUploadImage(theme),
-                    ),
+                    if (!podeAlterarFotoPerfil) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'A imagem de perfil não pode ser alterada neste tipo de conta.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (podeAlterarFotoPerfil) ...[
+                      const SizedBox(height: 16),
+                      _ImagemPerfilField(
+                        avatarUrl: _avatarUrl,
+                        uploading: _uploadingImage,
+                        onPick: () => _pickAndUploadImage(theme),
+                      ),
+                    ],
                     if (isCandidato) ...[
                       const SizedBox(height: 16),
                       Consumer(

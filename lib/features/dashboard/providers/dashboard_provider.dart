@@ -40,7 +40,9 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   if (profile == null) return const DashboardStats();
 
   if (profile.role == 'apoiador') {
-    final votantesRes = await client.from('votantes').select('id, qtd_votos_familia, municipio_id, municipios(nome)');
+    final votantesRes = await client
+        .from('votantes')
+        .select('id, qtd_votos_familia, municipio_id, municipios(nome)');
     final votantesCount = votantesRes.length;
     var votosVotantes = 0;
     final cidadeCount = <String, int>{};
@@ -51,13 +53,15 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       final nome = _nomeMunicipioFromRow(row);
       if (nome.isNotEmpty) cidadeCount[nome] = (cidadeCount[nome] ?? 0) + q;
     }
-    final votosPorCidade = cidadeCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final votosPorCidade = cidadeCount.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     return DashboardStats(
       assessores: 0,
       apoiadores: 1,
       votantes: votantesCount,
       estimativaVotos: votosVotantes,
-      votosPorCidade: votosPorCidade.map((e) => MapEntry(e.key, e.value)).toList(),
+      votosPorCidade:
+          votosPorCidade.map((e) => MapEntry(e.key, e.value)).toList(),
       apoiadoresPorPerfil: const [],
       totalBenfeitorias: 0,
       benfeitoriasCount: 0,
@@ -72,7 +76,8 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   if (profile.role == 'candidato' && assessoresCount > 0) {
     assessoresCount -= 1;
   }
-  final apoiadoresRes = await client.from('apoiadores').select('id, estimativa_votos, perfil');
+  final apoiadoresRes =
+      await client.from('apoiadores').select('id, estimativa_votos, perfil');
   final apoiadoresCount = apoiadoresRes.length;
   int estimativaVotos = 0;
   final perfilCount = <String, int>{};
@@ -82,7 +87,9 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     perfilCount[p] = (perfilCount[p] ?? 0) + 1;
   }
 
-  final votantesRes = await client.from('votantes').select('id, qtd_votos_familia, municipio_id, municipios(nome)');
+  final votantesRes = await client
+      .from('votantes')
+      .select('id, qtd_votos_familia, municipio_id, municipios(nome)');
   final votantesCount = votantesRes.length;
   int votosVotantes = 0;
   final cidadeCount = <String, int>{};
@@ -108,14 +115,16 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     final raw = await client.from('aniversariantes').select('data_nascimento');
     for (final r in raw) {
       final d = DateTime.tryParse(r['data_nascimento'].toString());
-      if (d != null && d.month == now.month && d.day == now.day) aniversariantesHoje++;
+      if (d != null && d.month == now.month && d.day == now.day)
+        aniversariantesHoje++;
     }
   } catch (_) {}
 
   final mensagensRes = await client.from('mensagens').select('id');
   final mensagensCount = mensagensRes.length;
 
-  final votosPorCidade = cidadeCount.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+  final votosPorCidade = cidadeCount.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
   final apoiadoresPorPerfil = perfilCount.entries.toList();
 
   return DashboardStats(
@@ -123,8 +132,10 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     apoiadores: apoiadoresCount,
     votantes: votantesCount,
     estimativaVotos: estimativaVotos,
-    votosPorCidade: votosPorCidade.map((e) => MapEntry(e.key, e.value)).toList(),
-    apoiadoresPorPerfil: apoiadoresPorPerfil.map((e) => MapEntry(e.key, e.value)).toList(),
+    votosPorCidade:
+        votosPorCidade.map((e) => MapEntry(e.key, e.value)).toList(),
+    apoiadoresPorPerfil:
+        apoiadoresPorPerfil.map((e) => MapEntry(e.key, e.value)).toList(),
     totalBenfeitorias: totalBenfeitorias,
     benfeitoriasCount: benfeitoriasRes.length,
     aniversariantesHoje: aniversariantesHoje,

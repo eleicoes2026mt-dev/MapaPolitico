@@ -16,8 +16,8 @@ final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
   // Não use select(role) com valueOrNull: em AsyncLoading o role vira null, o provider
   // reinicia em loop e a lista fica eternamente em loading na web.
   final profile = await ref.watch(profileProvider.future);
-  // Apoiador não deve listar outros apoiadores (tela só para candidato/assessor).
-  if (profile?.role == 'apoiador') return [];
+  // Apoiador / votante (link): não listam a rede de apoiadores.
+  if (profile?.role == 'apoiador' || profile?.role == 'votante') return [];
 
   // Ocultar soft-deletes: RLS idealmente já não devolve linhas; filtro no cliente cobre DB/RLS antigos.
   final res = await supabase.from('apoiadores').select().order('nome');

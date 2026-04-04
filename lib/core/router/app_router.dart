@@ -107,6 +107,19 @@ GoRouter createAppRouter({String? initialLocation}) {
         if (role == 'apoiador' && path == '/apoiadores') {
           return '/apoiador-home';
         }
+        if (role == 'votante') {
+          const gestaoCandidato = {
+            '/',
+            '/assessores',
+            '/apoiadores',
+            '/configuracoes',
+            '/estrategia',
+            '/mapa',
+          };
+          if (gestaoCandidato.contains(path)) {
+            return '/apoiador-home';
+          }
+        }
         if (role == 'assessor' && path == '/assessores') {
           return '/apoiadores';
         }
@@ -239,6 +252,13 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (role == 'votante' && _forbiddenApoiador.contains(widget.location)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) context.go(_redirectApoiador(widget.location));
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     if (role == 'assessor' && widget.location == '/assessores') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go('/apoiadores');
@@ -248,7 +268,14 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
 
     if (role != 'candidato' && widget.location == '/configuracoes') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) context.go('/');
+        if (!context.mounted) return;
+        if (role == 'apoiador' || role == 'votante') {
+          context.go('/apoiador-home');
+        } else if (role == 'assessor') {
+          context.go('/apoiadores');
+        } else {
+          context.go('/');
+        }
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

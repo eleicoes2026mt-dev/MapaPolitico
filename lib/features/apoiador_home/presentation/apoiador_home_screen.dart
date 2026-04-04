@@ -51,12 +51,14 @@ class ApoiadorHomeScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Olá, ${profile?.fullName?.split(' ').first ?? 'Apoiador'}! 👋',
+                        'Olá, ${profile?.fullName?.split(' ').first ?? (profile?.role == 'votante' ? 'Amigo' : 'Apoiador')}! 👋',
                         style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        apoiador?.cidadeNome ?? apoiador?.nome ?? '',
+                        profile?.role == 'votante'
+                            ? (profile?.email ?? '')
+                            : (apoiador?.cidadeNome ?? apoiador?.nome ?? ''),
                         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ],
@@ -103,14 +105,23 @@ class ApoiadorHomeScreen extends ConsumerWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _KpiCard(
-                    icon: Icons.trending_up_outlined,
-                    label: 'Estimativa',
-                    valor: '${apoiador?.estimativaVotos ?? 0}',
-                    sub: 'meta apoiador',
-                    color: theme.colorScheme.tertiary,
-                    loading: apoiadorAsync.isLoading,
-                  ),
+                  child: profile?.role == 'votante'
+                      ? _KpiCard(
+                          icon: Icons.person_pin_circle_outlined,
+                          label: 'Seu cadastro',
+                          valor: votantes.isEmpty ? '0' : '1',
+                          sub: kAmigosGilbertoLabel,
+                          color: theme.colorScheme.tertiary,
+                          loading: votantesAsync.isLoading,
+                        )
+                      : _KpiCard(
+                          icon: Icons.trending_up_outlined,
+                          label: 'Estimativa',
+                          valor: '${apoiador?.estimativaVotos ?? 0}',
+                          sub: 'meta apoiador',
+                          color: theme.colorScheme.tertiary,
+                          loading: apoiadorAsync.isLoading,
+                        ),
                 ),
               ],
             ),

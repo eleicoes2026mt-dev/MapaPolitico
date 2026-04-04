@@ -4,9 +4,10 @@ String homePathForProfileRole(String? role) {
     case 'assessor':
       return '/apoiadores';
     case 'apoiador':
+    case 'votante':
+      // Votante = cadastro pelo link Amigos do Gilberto: mesmo painel reduzido do apoiador.
       return '/apoiador-home';
     case 'candidato':
-    case 'votante':
     default:
       return '/';
   }

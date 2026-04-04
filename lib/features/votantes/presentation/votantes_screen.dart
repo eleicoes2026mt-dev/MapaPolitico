@@ -109,8 +109,10 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
-    final podeCadastrar =
-        profile?.role == 'candidato' || profile?.role == 'assessor' || profile?.role == 'apoiador';
+    final podeCadastrar = profile?.role == 'candidato' ||
+        profile?.role == 'assessor' ||
+        profile?.role == 'apoiador' ||
+        profile?.role == 'votante';
     final podePromoverApoiador = profile?.role == 'candidato' || profile?.role == 'assessor';
 
     final list = ref.watch(votantesListProvider);
@@ -825,6 +827,15 @@ class _VinculoCadastroNovoVotante extends ConsumerWidget {
                 subtitulo: 'Cadastro na rede do assessor logado.',
               ),
             );
+      case 'votante':
+        return _vinculoCadastroCard(
+          theme: theme,
+          icon: Icons.link_rounded,
+          label: 'Cadastro pelo link da campanha',
+          destaque: kAmigosGilbertoLabel,
+          subtitulo:
+              'Ao salvar, você entra na rede do candidato e passa a aparecer na lista de $kAmigosGilbertoLabel do deputado.',
+        );
       case 'apoiador':
         return ref.watch(meuApoiadorProvider).when(
               data: (ap) {

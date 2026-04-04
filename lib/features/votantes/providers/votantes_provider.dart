@@ -33,6 +33,16 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
   final profile = await ref.watch(profileProvider.future);
   if (profile == null) return [];
 
+  if (profile.role == 'votante') {
+    final uid = profile.id;
+    final res = await supabase
+        .from('votantes')
+        .select('*, municipios(nome)')
+        .eq('profile_id', uid)
+        .order('nome');
+    return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   if (profile.role == 'apoiador') {
     return ref.watch(meuApoiadorIdProvider).when(
           data: (apoiadorId) async {
@@ -141,6 +151,17 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       if (assessorId == null || assessorId.isEmpty) {
         throw Exception('Não foi possível identificar o assessor da campanha.');
       }
+    } else if (role == 'votante') {
+      final raw = await client.rpc('app_assessor_id_do_candidato');
+      if (raw == null) {
+        throw Exception(
+          'Não foi possível localizar a campanha. O candidato precisa ter cadastro em Assessores ativo.',
+        );
+      }
+      assessorId = raw is String ? raw : raw.toString();
+      if (assessorId.isEmpty) {
+        throw Exception('Campanha não configurada.');
+      }
     } else {
       assessorId = await ref.read(meuAssessorIdProvider.future);
       if (assessorId == null) {
@@ -177,13 +198,14 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       'abrangencia': params.abrangencia,
       'qtd_votos_familia': params.qtdVotosFamilia < 1 ? 1 : params.qtdVotosFamilia,
       if (apoiadorId != null && apoiadorId.isNotEmpty) 'apoiador_id': apoiadorId,
+      if (role == 'votante') 'profile_id': userId,
       'cep': params.cep?.trim().isEmpty == true ? null : params.cep?.trim(),
       'logradouro': params.logradouro?.trim().isEmpty == true ? null : params.logradouro?.trim(),
       'numero': params.numero?.trim().isEmpty == true ? null : params.numero?.trim(),
       'complemento': params.complemento?.trim().isEmpty == true ? null : params.complemento?.trim(),
       if (params.votosPrometidosUltimaEleicao != null)
         'votos_prometidos_ultima_eleicao': params.votosPrometidosUltimaEleicao,
-      if (params.cadastroViaQr) 'cadastro_via_qr': true,
+      if (params.cadastroViaQr || role == 'votante') 'cadastro_via_qr': true,
       if (role == 'candidato') 'cadastrado_pelo_candidato': true,
     };
 

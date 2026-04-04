@@ -491,7 +491,9 @@ class _Sidebar extends StatelessWidget {
                       if (prof == null) return true;
                       if (_pathsOcultosMenuGlobal.contains(e.path)) return false;
                       if (e.path == '/configuracoes' && prof.role != 'candidato') return false;
-                      if (prof.role == 'apoiador') return !_pathsOcultosApoiador.contains(e.path);
+                      if (prof.role == 'apoiador' || prof.role == 'votante') {
+                        return !_pathsOcultosApoiador.contains(e.path);
+                      }
                       if (prof.role == 'assessor') return !_pathsOcultosAssessor.contains(e.path) && !_pathsOcultosCandidatoAssessor.contains(e.path);
                       // Candidato: ocultar /apoiador-home (exclusivo dos apoiadores)
                       return !_pathsOcultosCandidatoAssessor.contains(e.path);

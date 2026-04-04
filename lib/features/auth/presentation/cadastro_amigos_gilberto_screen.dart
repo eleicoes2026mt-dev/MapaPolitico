@@ -3,10 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
+import '../../../core/supabase/supabase_provider.dart';
+import '../../../core/utils/municipio_resolver.dart' show municipioIdParaNomeCidade;
+import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
+import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
+    show cepSoDigitos, telefoneSoDigitos;
+import '../../votantes/presentation/widgets/amigos_gilberto_dados_form_fields.dart';
+import '../../votantes/providers/votantes_provider.dart';
 import '../providers/auth_provider.dart';
 
-/// Página pública **avulsa** (fora do painel): só formulário para criar conta como
-/// [kAmigosGilbertoLabel]. Após o cadastro, o utilizador é orientado a entrar com e-mail e senha.
+/// Página pública: mesmo conjunto de dados do painel «Novo — Amigos do Gilberto» + senha para login.
 class CadastroAmigosGilbertoScreen extends ConsumerStatefulWidget {
   const CadastroAmigosGilbertoScreen({super.key});
 
@@ -15,29 +21,64 @@ class CadastroAmigosGilbertoScreen extends ConsumerStatefulWidget {
       _CadastroAmigosGilbertoScreenState();
 }
 
-class _CadastroAmigosGilbertoScreenState
-    extends ConsumerState<CadastroAmigosGilbertoScreen> {
+class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGilbertoScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nomeController = TextEditingController();
-  final _emailController = TextEditingController();
+  late final TextEditingController _nomeController;
+  late final TextEditingController _telefone;
+  late final TextEditingController _emailController;
+  late final TextEditingController _qtd;
+  late final TextEditingController _cep;
+  late final TextEditingController _logradouro;
+  late final TextEditingController _numero;
+  late final TextEditingController _complemento;
   final _passwordController = TextEditingController();
   final _confirmarPasswordController = TextEditingController();
+
+  String? _cidadeNomeNormalizado;
+  String? _cidadeErro;
+  String _abrangencia = 'Individual';
+
   bool _loading = false;
   String? _error;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
 
   @override
+  void initState() {
+    super.initState();
+    _nomeController = TextEditingController();
+    _telefone = TextEditingController();
+    _emailController = TextEditingController();
+    _qtd = TextEditingController(text: '1');
+    _cep = TextEditingController();
+    _logradouro = TextEditingController();
+    _numero = TextEditingController();
+    _complemento = TextEditingController();
+  }
+
+  @override
   void dispose() {
     _nomeController.dispose();
+    _telefone.dispose();
     _emailController.dispose();
+    _qtd.dispose();
+    _cep.dispose();
+    _logradouro.dispose();
+    _numero.dispose();
+    _complemento.dispose();
     _passwordController.dispose();
     _confirmarPasswordController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    if (_cidadeNomeNormalizado == null || _cidadeNomeNormalizado!.trim().isEmpty) {
+      setState(() => _cidadeErro = 'Selecione o município.');
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (_cidadeNomeNormalizado == null || _cidadeNomeNormalizado!.trim().isEmpty) {
+      return;
+    }
 
     setState(() {
       _error = null;
@@ -50,13 +91,47 @@ class _CadastroAmigosGilbertoScreenState
       await ref.read(authNotifierProvider.notifier).signUp(
             email,
             _passwordController.text,
-            fullName:
-                _nomeController.text.trim().isEmpty ? null : _nomeController.text.trim(),
+            fullName: _nomeController.text.trim().isEmpty ? null : _nomeController.text.trim(),
             cadastroAmigosGilberto: true,
           );
 
-      // Encerra sessão imediata (signup pode autenticar na hora). O fluxo desejado é:
-      // cadastro nesta página → depois **login** explícito com a senha criada.
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        throw Exception('Sessão não iniciada após cadastro. Tente entrar com e-mail e senha.');
+      }
+
+      await supabase.rpc('ensure_votante_amigos_cadastro');
+      final row = await supabase.from('votantes').select('id').eq('profile_id', user.id).maybeSingle();
+      if (row == null) {
+        throw Exception(
+          'Não foi possível vincular seu cadastro à campanha. Confirme se o candidato está ativo ou tente mais tarde.',
+        );
+      }
+
+      final municipios = await refreshMunicipiosMTList(ref);
+      var municipioIdResolvido = municipioIdParaNomeCidade(_cidadeNomeNormalizado, municipios);
+      municipioIdResolvido ??=
+          municipioIdParaNomeCidade(displayNomeCidadeMT(_cidadeNomeNormalizado!), municipios);
+      final cidadeTexto = displayNomeCidadeMT(_cidadeNomeNormalizado!);
+      final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
+
+      await ref.read(atualizarVotanteProvider)(
+        row['id'] as String,
+        AtualizarVotanteParams(
+          nome: _nomeController.text.trim(),
+          telefone: telefoneSoDigitos(_telefone.text).isEmpty ? null : telefoneSoDigitos(_telefone.text),
+          email: email,
+          municipioId: municipioIdResolvido,
+          cidadeNome: cidadeTexto,
+          abrangencia: _abrangencia,
+          qtdVotosFamilia: qtd < 1 ? 1 : qtd,
+          cep: cepSoDigitos(_cep.text).isEmpty ? null : cepSoDigitos(_cep.text),
+          logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
+          numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
+          complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+        ),
+      );
+
       await ref.read(authNotifierProvider.notifier).signOut();
 
       if (!mounted) return;
@@ -73,7 +148,7 @@ class _CadastroAmigosGilbertoScreenState
           ),
           title: const Text('Cadastro concluído'),
           content: const Text(
-            'Sua conta foi criada. Na próxima tela, entre com o mesmo e-mail e senha para acessar o painel — mensagens, agenda e reuniões da campanha.',
+            'Sua conta e seus dados na campanha foram registrados. Na próxima tela, entre com o mesmo e-mail e senha para acessar o painel.',
           ),
           actions: [
             FilledButton(
@@ -87,6 +162,9 @@ class _CadastroAmigosGilbertoScreenState
       if (!mounted) return;
       context.go('/login?email=${Uri.encodeComponent(email)}');
     } catch (e) {
+      try {
+        await ref.read(authNotifierProvider.notifier).signOut();
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _error = e.toString().replaceFirst('Exception: ', '');
@@ -166,60 +244,76 @@ class _CadastroAmigosGilbertoScreenState
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Preencha os dados para criar sua conta. Depois, use e-mail e senha para entrar no painel — sem passar pelo restante do site até você fazer login.',
+                              'Preencha todos os dados para entrar na rede do candidato e acessar o painel com e-mail e senha.',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
                                 height: 1.4,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 28),
-                            TextFormField(
-                              controller: _nomeController,
-                              decoration: InputDecoration(
-                                labelText: 'Nome completo',
-                                hintText: 'Seu nome',
-                                prefixIcon: Icon(
-                                  Icons.person_outline_rounded,
-                                  color: theme.colorScheme.onSurfaceVariant,
+                            const SizedBox(height: 24),
+                            Theme(
+                              data: theme.copyWith(
+                                inputDecorationTheme: InputDecorationTheme(
+                                  filled: true,
+                                  fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
                                 ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                filled: true,
                               ),
-                              textCapitalization: TextCapitalization.words,
-                              textInputAction: TextInputAction.next,
-                              validator: (v) =>
-                                  (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _emailController,
-                              decoration: InputDecoration(
-                                labelText: 'E-mail',
-                                hintText: 'seu@email.com',
-                                prefixIcon: Icon(
-                                  Icons.email_outlined,
-                                  color: theme.colorScheme.onSurfaceVariant,
+                              child: AmigosGilbertoDadosFormFields(
+                                nome: _nomeController,
+                                telefone: _telefone,
+                                email: _emailController,
+                                qtd: _qtd,
+                                cep: _cep,
+                                logradouro: _logradouro,
+                                numero: _numero,
+                                complemento: _complemento,
+                                selectedCidadeKey: _cidadeNomeNormalizado,
+                                cidadeErro: _cidadeErro,
+                                onCidadeSelected: (k) => setState(() {
+                                  _cidadeNomeNormalizado = k;
+                                  _cidadeErro = null;
+                                }),
+                                abrangencia: _abrangencia,
+                                onAbrangenciaChanged: (novo) => setState(() {
+                                  _abrangencia = novo;
+                                  if (novo == 'Individual') _qtd.text = '1';
+                                }),
+                                emailValidator: null,
+                                footerWidget: Card(
+                                  elevation: 0,
+                                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.25),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(Icons.link_rounded, color: theme.colorScheme.primary),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            '$kAmigosGilbertoLabel — cidade e endereço alimentam o mapa e a estimativa da campanha.',
+                                            style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                filled: true,
                               ),
-                              keyboardType: TextInputType.emailAddress,
-                              autocorrect: false,
-                              textInputAction: TextInputAction.next,
-                              validator: (v) {
-                                if (v == null || v.isEmpty) return 'Informe o e-mail';
-                                if (!v.contains('@') || !v.contains('.')) {
-                                  return 'E-mail inválido';
-                                }
-                                return null;
-                              },
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 20),
+                            Text(
+                              'Acesso ao painel',
+                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 12),
                             TextFormField(
                               controller: _passwordController,
                               decoration: InputDecoration(

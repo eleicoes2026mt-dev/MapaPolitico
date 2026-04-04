@@ -1,17 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
-import '../../../core/services/cep_br_service.dart';
 import '../../../core/utils/municipio_resolver.dart'
-    show chaveMunicipioMtApartirCepLocalidade, municipioIdParaNomeCidade, municipioIdResolvidoParaApoiador;
-import '../../../core/widgets/municipio_mt_picker_sheet.dart';
+    show municipioIdParaNomeCidade, municipioIdResolvidoParaApoiador;
 import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
     show
-        CepInputFormatter,
-        TelefoneInputFormatter,
         cepSoDigitos,
         formatCepDisplayFromDigits,
         formatTelefoneBrFromDigits,
@@ -24,6 +18,7 @@ import '../../assessores/providers/assessores_provider.dart' show meuAssessorReg
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart';
 import '../providers/votantes_provider.dart';
+import 'widgets/amigos_gilberto_dados_form_fields.dart';
 
 class VotantesScreen extends ConsumerStatefulWidget {
   const VotantesScreen({super.key});
@@ -351,8 +346,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   bool _postFrameDefaultApoiadorAgendado = false;
   /// Edição: sincronizar dropdown a partir de `municipio_id` (uma vez).
   bool _postFrameSyncEdicaoAgendado = false;
-  Timer? _cepDebounce;
-  bool _cepLoading = false;
 
   @override
   void initState() {
@@ -379,48 +372,8 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     }
   }
 
-  void _onCepDigitado(String _) {
-    _cepDebounce?.cancel();
-    final d = cepSoDigitos(_cep.text);
-    if (d.length != 8) return;
-    _cepDebounce = Timer(const Duration(milliseconds: 450), _buscarCep);
-  }
-
-  Future<void> _buscarCep() async {
-    if (!mounted) return;
-    final d = cepSoDigitos(_cep.text);
-    if (d.length != 8) return;
-    setState(() => _cepLoading = true);
-    try {
-      final r = await fetchCepBr(d);
-      if (!mounted || r == null) return;
-      setState(() {
-        if (r.logradouro.trim().isNotEmpty) {
-          _logradouro.text = r.logradouro.trim();
-        }
-        final comp = r.complemento?.trim();
-        final bairro = r.bairro?.trim();
-        if (_complemento.text.trim().isEmpty) {
-          if (comp != null && comp.isNotEmpty) {
-            _complemento.text = comp;
-          } else if (bairro != null && bairro.isNotEmpty) {
-            _complemento.text = bairro;
-          }
-        }
-        final chave = chaveMunicipioMtApartirCepLocalidade(r.localidade, r.uf);
-        if (chave != null) {
-          _cidadeNomeNormalizado = chave;
-          _cidadeErro = null;
-        }
-      });
-    } finally {
-      if (mounted) setState(() => _cepLoading = false);
-    }
-  }
-
   @override
   void dispose() {
-    _cepDebounce?.cancel();
     _nome.dispose();
     _telefone.dispose();
     _email.dispose();
@@ -594,148 +547,33 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             return SingleChildScrollView(
               child: Form(
                 key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextFormField(
-                      controller: _nome,
-                      decoration: const InputDecoration(labelText: 'Nome *'),
-                      textCapitalization: TextCapitalization.words,
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _telefone,
-                      decoration: const InputDecoration(
-                        labelText: 'Telefone',
-                        hintText: '(00) 0 0000-0000',
-                      ),
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [TelefoneInputFormatter()],
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _email,
-                      decoration: const InputDecoration(labelText: 'E-mail'),
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) {
-                        if (widget.existente != null) return null;
-                        if (v == null || v.trim().isEmpty) {
-                          return 'E-mail obrigatório para acessar o painel $kAmigosGilbertoLabel';
-                        }
-                        final t = v.trim();
-                        if (!t.contains('@') || !t.contains('.')) return 'E-mail inválido';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    MunicipioMtFormRow(
-                      selectedNormalizedKey: _cidadeNomeNormalizado,
-                      errorText: _cidadeErro,
-                      label: 'Município (MT) *',
-                      onSelected: (k) => setState(() {
-                        _cidadeNomeNormalizado = k;
-                        _cidadeErro = null;
-                      }),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: _abrangencia,
-                      decoration: const InputDecoration(
-                        labelText: 'Abrangência',
-                        helperText: 'Individual = 1 voto (o próprio). Familiar = total da família.',
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'Individual', child: Text('Individual')),
-                        DropdownMenuItem(value: 'Familiar', child: Text('Familiar')),
-                      ],
-                      onChanged: (v) {
-                        final novo = v ?? 'Individual';
-                        setState(() {
-                          _abrangencia = novo;
-                          if (novo == 'Individual') _qtd.text = '1';
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    if (_abrangencia == 'Familiar')
-                      TextFormField(
-                        controller: _qtd,
-                        decoration: const InputDecoration(
-                          labelText: 'Total de votos na família (titular + familiares)',
-                          hintText: '2',
-                          helperText: 'Informe o número total esperado na família, incluindo o próprio.',
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (v) {
-                          final n = int.tryParse(v?.trim() ?? '');
-                          if (n == null || n < 1) return 'Informe ao menos 1 voto';
-                          return null;
-                        },
-                      )
-                    else
-                      InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Votos',
-                          helperText: 'Sempre 1 para cadastro individual.',
-                          enabled: false,
-                        ),
-                        child: const Text('1 (individual)', style: TextStyle(color: Colors.grey)),
-                      ),
-                    if (widget.existente == null && profile != null) ...[
-                      const SizedBox(height: 12),
-                      _VinculoCadastroNovoVotante(theme: theme, profile: profile),
-                    ],
-                    const SizedBox(height: 8),
-                    Text(
-                      'Endereço (opcional)',
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _cep,
-                      decoration: InputDecoration(
-                        labelText: 'CEP',
-                        hintText: '00000-000',
-                        suffixIcon: _cepLoading
-                            ? const Padding(
-                                padding: EdgeInsets.all(12),
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                              )
-                            : null,
-                        helperText: 'Preenche rua, complemento e cidade (MT) ao concluir o CEP.',
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [CepInputFormatter()],
-                      onChanged: _onCepDigitado,
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _logradouro,
-                      decoration: const InputDecoration(labelText: 'Rua / logradouro'),
-                      textCapitalization: TextCapitalization.words,
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _numero,
-                      decoration: const InputDecoration(labelText: 'Número'),
-                    ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _complemento,
-                      decoration: const InputDecoration(labelText: 'Complemento'),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'A cidade alimenta o mapa regional e a estimativa por município.',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                  ],
+                child: AmigosGilbertoDadosFormFields(
+                  nome: _nome,
+                  telefone: _telefone,
+                  email: _email,
+                  qtd: _qtd,
+                  cep: _cep,
+                  logradouro: _logradouro,
+                  numero: _numero,
+                  complemento: _complemento,
+                  selectedCidadeKey: _cidadeNomeNormalizado,
+                  cidadeErro: _cidadeErro,
+                  onCidadeSelected: (k) => setState(() {
+                    _cidadeNomeNormalizado = k;
+                    _cidadeErro = null;
+                  }),
+                  abrangencia: _abrangencia,
+                  onAbrangenciaChanged: (novo) => setState(() {
+                    _abrangencia = novo;
+                    if (novo == 'Individual') _qtd.text = '1';
+                  }),
+                  emailValidator: (v) {
+                    if (widget.existente != null) return null;
+                    return amigosGilbertoEmailValidatorPainel(v);
+                  },
+                  footerWidget: widget.existente == null && profile != null
+                      ? _VinculoCadastroNovoVotante(theme: theme, profile: profile)
+                      : null,
                 ),
               ),
             );

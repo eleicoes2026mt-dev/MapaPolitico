@@ -38,9 +38,13 @@ serve(async (req) => {
     );
 
     let callerId: string | null = null;
-    const { data: claimsData, error: claimsError } = await supabaseAnon.auth.getClaims(token);
-    if (!claimsError && claimsData?.claims?.sub) {
-      callerId = claimsData.claims.sub as string;
+    try {
+      const { data: claimsData, error: claimsError } = await supabaseAnon.auth.getClaims(token);
+      if (!claimsError && claimsData?.claims?.sub) {
+        callerId = claimsData.claims.sub as string;
+      }
+    } catch {
+      // Cliente sem getClaims ou token incompatível: segue para getUser
     }
     if (!callerId) {
       const { data: { user } } = await supabaseAnon.auth.getUser(token);

@@ -25,10 +25,15 @@ jobs:
       - name: Build web
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
+          # Obrigatório para links de convite (apoiador/assessor): tem de coincidir com Redirect URLs no Supabase Auth.
+          # Definir o secret APP_URL em GitHub (ex.: https://meusvotos.vercel.app) ou cai no fallback abaixo.
+          APP_URL: ${{ secrets.APP_URL }}
         run: |
+          BASE_URL="${APP_URL:-https://meusvotos.vercel.app}"
           flutter build web --release \
             --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=APP_URL="$BASE_URL"
 
       - name: Incluir vercel.json no build
         run: cp vercel.json build/web/

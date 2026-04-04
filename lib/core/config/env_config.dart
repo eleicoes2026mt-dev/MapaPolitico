@@ -42,11 +42,11 @@ class EnvConfig {
     defaultValue: 'BBDwFPKAU0cMMay9-WE1DadHmv_lFmGts80CaorhOl2zKW1HTSw4sQLpboixKQkerXexwYwJxSF4PcOK35Qa2DY',
   );
 
-  /// URL pública do app (usada no link do e-mail de convite para assessores).
-  /// Em produção use --dart-define=APP_URL=https://seu-dominio.vercel.app
+  /// URL pública do app (convites apoiador/assessor e redirect Supabase Auth).
+  /// Em CI/Vercel use variável `APP_URL` (ver `scripts/vercel-build.sh` e deploy GitHub Action).
   static const String appUrl = String.fromEnvironment(
     'APP_URL',
-    defaultValue: 'https://web-liart-iota-22.vercel.app',
+    defaultValue: 'https://meusvotos.vercel.app',
   );
 
   /// Base sem barra final (redirects Supabase Auth).

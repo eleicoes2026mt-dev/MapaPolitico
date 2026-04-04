@@ -7,14 +7,49 @@ import '../../auth/providers/auth_provider.dart';
 
 // ── Visitas ──────────────────────────────────────────────────────────────────
 
-/// Todas as visitas futuras (candidato + assessor).
+List<Map<String, dynamic>> _mergeReunioesPorId(List<dynamic> a, List<dynamic> b) {
+  final map = <String, Map<String, dynamic>>{};
+  for (final e in a) {
+    final m = Map<String, dynamic>.from(e as Map);
+    map[m['id'] as String] = m;
+  }
+  for (final e in b) {
+    final m = Map<String, dynamic>.from(e as Map);
+    map[m['id'] as String] = m;
+  }
+  return map.values.toList();
+}
+
+/// Todas as visitas futuras (candidato + assessor + apoiador com regras de visibilidade).
 final visitasProvider = FutureProvider<List<Visita>>((ref) async {
+  final profile = await ref.read(profileProvider.future);
+  final hoje = DateTime.now().subtract(const Duration(days: 1)).toIso8601String().split('T').first;
+
+  if (profile?.role == 'apoiador') {
+    final pid = profile!.id;
+    final res1 = await supabase
+        .from('reunioes')
+        .select('*, municipios(nome)')
+        .eq('visivel_apoiadores', true)
+        .gte('data_reuniao', hoje)
+        .order('data_reuniao');
+    final res2 = await supabase
+        .from('reunioes')
+        .select('*, municipios(nome)')
+        .contains('notificacao_profile_ids', [pid])
+        .gte('data_reuniao', hoje)
+        .order('data_reuniao');
+    final merged = _mergeReunioesPorId(res1 as List, res2 as List);
+    merged.sort((a, b) => a['data_reuniao'].toString().compareTo(b['data_reuniao'].toString()));
+    return merged.map((e) => Visita.fromJson(e)).toList();
+  }
+
   final res = await supabase
       .from('reunioes')
       .select('*, municipios(nome)')
-      .gte('data_reuniao', DateTime.now().subtract(const Duration(days: 1)).toIso8601String().split('T').first)
+      .gte('data_reuniao', hoje)
       .order('data_reuniao');
-  return (res as List).map((e) => Visita.fromJson(e)).toList();
+  return (res as List).map((e) => Visita.fromJson(e as Map<String, dynamic>)).toList();
 });
 
 /// Visitas TODAS (incluindo passadas) para o calendário.
@@ -36,7 +71,7 @@ final proximaVisitaMinhaCidadeProvider = FutureProvider<Visita?>((ref) async {
   if (municipioId == null || municipioId.isEmpty) return null;
 
   final hoje = DateTime.now().toIso8601String().split('T').first;
-  final res = await supabase
+  final res1 = await supabase
       .from('reunioes')
       .select('*, municipios(nome)')
       .eq('municipio_id', municipioId)
@@ -46,8 +81,24 @@ final proximaVisitaMinhaCidadeProvider = FutureProvider<Visita?>((ref) async {
       .limit(1)
       .maybeSingle();
 
-  if (res == null) return null;
-  return Visita.fromJson(res);
+  final res2 = await supabase
+      .from('reunioes')
+      .select('*, municipios(nome)')
+      .eq('municipio_id', municipioId)
+      .contains('notificacao_profile_ids', [profile.id])
+      .gte('data_reuniao', hoje)
+      .order('data_reuniao')
+      .limit(1)
+      .maybeSingle();
+
+  if (res1 == null && res2 == null) return null;
+  if (res1 == null) return Visita.fromJson(Map<String, dynamic>.from(res2 as Map));
+  if (res2 == null) return Visita.fromJson(Map<String, dynamic>.from(res1 as Map));
+  final v1 = Visita.fromJson(Map<String, dynamic>.from(res1 as Map));
+  final v2 = Visita.fromJson(Map<String, dynamic>.from(res2 as Map));
+  if (v1.dataReuniao.isBefore(v2.dataReuniao)) return v1;
+  if (v2.dataReuniao.isBefore(v1.dataReuniao)) return v2;
+  return v1;
 });
 
 /// Primeira visita futura visível ainda sem confirmação de presença (apoiador: só da cidade).
@@ -58,13 +109,13 @@ final visitaPendenteConfirmacaoProvider = FutureProvider<Visita?>((ref) async {
   if (role != 'apoiador' && role != 'assessor') return null;
 
   final hoje = DateTime.now().toIso8601String().split('T').first;
-  List<dynamic> rows;
+  late List<Map<String, dynamic>> rows;
 
   if (role == 'apoiador') {
     final apoiador = await ref.watch(meuApoiadorProvider.future);
     final mid = apoiador?.municipioId;
     if (mid == null || mid.isEmpty) return null;
-    rows = await supabase
+    final rows1 = await supabase
         .from('reunioes')
         .select('*, municipios(nome)')
         .eq('municipio_id', mid)
@@ -72,14 +123,33 @@ final visitaPendenteConfirmacaoProvider = FutureProvider<Visita?>((ref) async {
         .gte('data_reuniao', hoje)
         .order('data_reuniao')
         .limit(25);
+    final rows2 = await supabase
+        .from('reunioes')
+        .select('*, municipios(nome)')
+        .eq('municipio_id', mid)
+        .contains('notificacao_profile_ids', [profile.id])
+        .gte('data_reuniao', hoje)
+        .order('data_reuniao')
+        .limit(25);
+    rows = _mergeReunioesPorId(rows1 as List, rows2 as List);
+    rows.sort((a, b) => a['data_reuniao'].toString().compareTo(b['data_reuniao'].toString()));
   } else {
-    rows = await supabase
+    final rows1 = await supabase
         .from('reunioes')
         .select('*, municipios(nome)')
         .eq('visivel_apoiadores', true)
         .gte('data_reuniao', hoje)
         .order('data_reuniao')
         .limit(25);
+    final rows2 = await supabase
+        .from('reunioes')
+        .select('*, municipios(nome)')
+        .contains('notificacao_profile_ids', [profile.id])
+        .gte('data_reuniao', hoje)
+        .order('data_reuniao')
+        .limit(25);
+    rows = _mergeReunioesPorId(rows1 as List, rows2 as List);
+    rows.sort((a, b) => a['data_reuniao'].toString().compareTo(b['data_reuniao'].toString()));
   }
 
   if (rows.isEmpty) return null;
@@ -88,7 +158,7 @@ final visitaPendenteConfirmacaoProvider = FutureProvider<Visita?>((ref) async {
   final confirmed = (presRes as List).map((e) => e['reuniao_id'] as String).toSet();
 
   for (final r in rows) {
-    final m = Map<String, dynamic>.from(r as Map);
+    final m = Map<String, dynamic>.from(r);
     final id = m['id'] as String;
     if (!confirmed.contains(id)) return Visita.fromJson(m);
   }
@@ -108,6 +178,7 @@ class NovaVisitaParams {
     this.descricao,
     this.municipioId,
     this.visivelApoiadores = true,
+    this.notificacaoProfileIds = const [],
   });
 
   final String titulo;
@@ -119,6 +190,7 @@ class NovaVisitaParams {
   final String? descricao;
   final String? municipioId;
   final bool visivelApoiadores;
+  final List<String> notificacaoProfileIds;
 }
 
 final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((ref) {
@@ -134,22 +206,27 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
       if (p.descricao != null && p.descricao!.isNotEmpty) 'descricao': p.descricao!.trim(),
       if (p.municipioId != null) 'municipio_id': p.municipioId,
       'visivel_apoiadores': p.visivelApoiadores,
+      'notificacao_profile_ids': p.notificacaoProfileIds,
       'criado_por': user?.id,
     }).select('id, titulo, local_texto').maybeSingle();
 
-    // Push automático quando a visita é visível para apoiadores
-    if (p.visivelApoiadores && res != null) {
+    // Push: público = broadcast (sem profileIds); privado = só destinatários
+    if (res != null && (p.visivelApoiadores || p.notificacaoProfileIds.isNotEmpty)) {
       try {
         await supabase.auth.refreshSession();
         final titulo = res['titulo'] as String? ?? p.titulo;
         final local = res['local_texto'] as String? ?? p.localTexto ?? '';
         final dataStr = p.dataReuniao.toIso8601String().split('T').first;
-        await supabase.functions.invoke('send-push', body: {
+        final body = <String, dynamic>{
           'title': '📅 Nova visita agendada',
           'body': '$titulo — $dataStr${local.isNotEmpty ? " • $local" : ""}',
           'url': '/#/agenda',
           'tag': 'visita-${res['id']}',
-        });
+        };
+        if (!p.visivelApoiadores && p.notificacaoProfileIds.isNotEmpty) {
+          body['profileIds'] = p.notificacaoProfileIds;
+        }
+        await supabase.functions.invoke('send-push', body: body);
       } catch (_) {}
     }
 
@@ -173,6 +250,7 @@ final atualizarVisitaProvider =
       'descricao': p.descricao?.trim().isEmpty == true ? null : p.descricao?.trim(),
       'municipio_id': p.municipioId,
       'visivel_apoiadores': p.visivelApoiadores,
+      'notificacao_profile_ids': p.notificacaoProfileIds,
     }).eq('id', id);
     ref.invalidate(visitasProvider);
     ref.invalidate(todasVisitasProvider);

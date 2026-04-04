@@ -2,7 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
 import '../../../models/votante.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
-import '../../votantes/providers/votantes_provider.dart';
+import '../../assessores/providers/assessores_provider.dart' show assessoresListProvider;
+import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, votantesListProvider;
 import '../data/mt_municipios_coords.dart';
 import '../models/mapa_marcador_cidade.dart';
 import 'benfeitorias_agg_provider.dart';
@@ -106,6 +107,8 @@ final mapaMarcadoresFiltradosProvider = Provider<Map<String, MapaMarcadorCidade>
   var map = buildMarcadoresCidadesMap(
     apoiadores,
     votantes,
+    assessores: ref.watch(assessoresListProvider).valueOrNull ?? [],
+    munList: ref.watch(municipiosMTListProvider).valueOrNull ?? [],
     onlyApoiadorId: filtros.apoiadorId,
   );
 

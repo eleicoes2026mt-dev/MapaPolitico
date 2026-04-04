@@ -2,7 +2,8 @@ class Mensagem {
   final String id;
   final String titulo;
   final String? corpo;
-  final String escopo; // global, polo, cidade, performance, reuniao
+  /// global | polo | cidade | performance | reuniao | privada_assessores | privada_apoiadores
+  final String escopo;
   final String? poloId;
   final List<String> municipiosIds;
   final String? statusPerformanceFiltro;

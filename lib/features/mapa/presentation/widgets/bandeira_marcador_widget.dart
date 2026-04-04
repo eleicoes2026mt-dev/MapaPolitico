@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../models/bandeira_visual.dart';
 
-/// Marcador circular da bandeira do apoiador (mapa web / preview).
+/// Marcador da bandeira no mapa: com emoji mostra só o ícone; com iniciais, círculo colorido.
 class BandeiraMarcadorWidget extends StatelessWidget {
   const BandeiraMarcadorWidget({
     super.key,
@@ -16,9 +16,32 @@ class BandeiraMarcadorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final emoji = visual.emoji?.trim();
+    // Com emoji (ex. 🚩): só o ícone, sem círculo nem degradê.
+    if (emoji != null && emoji.isNotEmpty) {
+      return SizedBox(
+        width: tamanho,
+        height: tamanho,
+        child: Center(
+          child: Text(
+            emoji,
+            style: TextStyle(
+              fontSize: tamanho * 0.72,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 2,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
     final c1 = corDeHex(visual.corPrimariaHex);
     final c2 = corDeHex(visual.corSecundariaHex);
-    final emoji = visual.emoji?.trim();
     final rawIni = visual.iniciais?.trim() ?? '';
     final ini = rawIni.isNotEmpty
         ? rawIni.substring(0, rawIni.length > 3 ? 3 : rawIni.length)
@@ -129,12 +152,7 @@ class BandeiraMarcadorWidget extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             fundo(),
-            if (emoji != null && emoji.isNotEmpty)
-              Center(
-                child: Text(emoji, style: TextStyle(fontSize: tamanho * 0.48)),
-              )
-            else
-              Center(child: textoComBorda),
+            Center(child: textoComBorda),
           ],
         ),
       ),

@@ -14,6 +14,8 @@ import '../../../models/municipio.dart';
 import '../../../models/visita.dart';
 import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
     show CepInputFormatter, cepSoDigitos, formatCepDisplayFromDigits;
+import '../../apoiadores/providers/apoiadores_provider.dart' show apoiadoresListProvider;
+import '../../assessores/providers/assessores_provider.dart' show assessoresListProvider;
 import '../../auth/providers/auth_provider.dart';
 import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, refreshMunicipiosMTList;
 import '../../mapa/data/mt_municipios_coords.dart' show getCoordsMunicipioMT;
@@ -124,32 +126,52 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
           // ── Cabeçalho ────────────────────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Agenda de Visitas',
-                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      podeEditar
-                          ? 'Agende visitas às cidades — apoiadores serão notificados.'
-                          : 'Próximas visitas do deputado à sua cidade.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+                  theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.35),
+                ],
               ),
-              const EstadoMTBadge(compact: true),
-            ],
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.calendar_month_rounded, size: 36, color: theme.colorScheme.primary),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Agenda de Visitas',
+                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        podeEditar
+                            ? 'Organize visitas por cidade — notificações públicas ou apenas para quem você escolher.'
+                            : 'Próximas visitas do deputado à sua cidade.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const EstadoMTBadge(compact: true),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
           // ── Banner próxima visita (apoiador) ─────────────────────────────
           if (isApoiador && proximaAsync != null) ...[
@@ -163,6 +185,15 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
           // ── Calendário (candidato/assessor) ──────────────────────────────
           if (podeEditar) ...[
+            Text(
+              'Calendário',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
             visitasAsync.when(
               data: (visitas) => _MiniCalendario(
                 mes: _mesSelecionado,
@@ -179,19 +210,31 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
               loading: () => const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator())),
               error: (e, _) => Text('Erro: $e'),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 FilledButton.icon(
                   onPressed: () => _abrirFormulario(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nova Visita'),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Nova visita'),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
           ],
+
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Visitas',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
 
           // ── Lista de visitas ──────────────────────────────────────────────
           visitasAsync.when(
@@ -208,18 +251,42 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                       .toList();
 
               if (filtradas.isEmpty) {
-                return Center(
+                return Card(
+                  margin: EdgeInsets.zero,
+                  elevation: 0,
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45)),
+                  ),
                   child: Padding(
-                    padding: const EdgeInsets.all(32),
+                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
                     child: Column(
                       children: [
-                        Icon(Icons.event_available, size: 48, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
-                        const SizedBox(height: 12),
+                        Icon(
+                          Icons.event_note_rounded,
+                          size: 56,
+                          color: theme.colorScheme.primary.withValues(alpha: 0.55),
+                        ),
+                        const SizedBox(height: 16),
                         Text(
                           _diaSelecionado != null
-                              ? 'Nenhuma visita neste dia.'
-                              : 'Nenhuma visita agendada.',
-                          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                              ? 'Nenhuma visita neste dia'
+                              : 'Nenhuma visita agendada',
+                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _diaSelecionado != null
+                              ? 'Escolha outro dia no calendário ou limpe o filtro.'
+                              : (podeEditar
+                                  ? 'Crie uma visita para aparecer no calendário e notificar apoiadores ou uma lista fechada.'
+                                  : 'Quando houver visitas à sua cidade, elas aparecerão aqui.'),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            height: 1.4,
+                          ),
                         ),
                       ],
                     ),
@@ -284,13 +351,15 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   }
 
   Future<void> _notificar(Visita v) async {
-    // Confirmar antes de enviar
+    final privada = v.notificacaoProfileIds.isNotEmpty;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Enviar notificação'),
         content: Text(
-          'Notificar todos os usuários com push ativado sobre a visita a "${v.municipioNome ?? v.titulo}"?',
+          privada
+              ? 'Enviar push apenas aos ${v.notificacaoProfileIds.length} destinatário(s) desta agenda privada (${v.municipioNome ?? v.titulo})?'
+              : 'Notificar todos os usuários com push ativado sobre a visita a "${v.municipioNome ?? v.titulo}"?',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
@@ -305,14 +374,18 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
     try {
       await supabase.auth.refreshSession();
-      final r = await supabase.functions.invoke('send-push', body: {
+      final body = <String, dynamic>{
         'title': '📅 Visita: ${v.municipioNome ?? v.titulo}',
         'body':
             'O deputado visitará ${v.municipioNome ?? "sua cidade"} em ${v.dataHoraFormatada}.'
             '${v.localTexto != null ? " Local: ${v.localTexto}" : ""}',
         'url': '/#/agenda',
         'tag': 'visita-${v.id}',
-      });
+      };
+      if (privada) {
+        body['profileIds'] = v.notificacaoProfileIds;
+      }
+      final r = await supabase.functions.invoke('send-push', body: body);
 
       if (r.status >= 400) {
         final detail = r.data is Map ? (r.data as Map)['error'] ?? r.data.toString() : r.data?.toString() ?? '';
@@ -388,8 +461,13 @@ class _MiniCalendario extends StatelessWidget {
 
     return Card(
       margin: EdgeInsets.zero,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         child: Column(
           children: [
             Row(
@@ -571,6 +649,30 @@ class _VisitaCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 6),
                           ],
+                          if (visita.agendaPrivada) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.tertiaryContainer,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.lock_outline_rounded, size: 12, color: theme.colorScheme.onTertiaryContainer),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Privada',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: theme.colorScheme.onTertiaryContainer,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           Expanded(
                             child: Text(
                               visita.titulo,
@@ -647,7 +749,15 @@ class _VisitaCard extends StatelessWidget {
                       if (v == 'notify') onNotificar();
                     },
                     itemBuilder: (_) => [
-                      const PopupMenuItem(value: 'notify', child: ListTile(leading: Icon(Icons.notifications_active_outlined), title: Text('Notificar todos'))),
+                      PopupMenuItem(
+                        value: 'notify',
+                        child: ListTile(
+                          leading: const Icon(Icons.notifications_active_outlined),
+                          title: Text(
+                            visita.notificacaoProfileIds.isEmpty ? 'Notificar todos' : 'Notificar destinatários',
+                          ),
+                        ),
+                      ),
                       const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'))),
                       const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Excluir'))),
                     ],
@@ -836,7 +946,9 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
   String? _municipioIdSelecionado;
   double? _localLat;
   double? _localLng;
-  bool _visivelApoiadores = true;
+  /// Se true, a visita não aparece para todos os apoiadores; só [destinatarios] recebem push e veem na agenda.
+  bool _agendaPrivada = false;
+  final Set<String> _destProfileIds = {};
   bool _loading = false;
   Timer? _placesDebounce;
   List<PlacePrediction> _sugestoesPlaces = [];
@@ -860,7 +972,10 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     _horaTd = _parseHoraVisita(v?.hora);
     _data = v?.dataReuniao;
     _municipioIdSelecionado = v?.municipioId;
-    _visivelApoiadores = v?.visivelApoiadores ?? true;
+    _agendaPrivada = v != null ? !v.visivelApoiadores : false;
+    _destProfileIds
+      ..clear()
+      ..addAll(v?.notificacaoProfileIds ?? const []);
     _localLat = v?.localLat;
     _localLng = v?.localLng;
     _local.addListener(_onLocalTextChanged);
@@ -928,6 +1043,12 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione a data.')));
       return;
     }
+    if (_agendaPrivada && _destProfileIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Na agenda privada, selecione pelo menos um assessor ou apoiador.')),
+      );
+      return;
+    }
     setState(() => _loading = true);
     try {
       final params = NovaVisitaParams(
@@ -939,7 +1060,8 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
         localLng: _localLng,
         descricao: _descricao.text.trim().isEmpty ? null : _descricao.text.trim(),
         municipioId: _municipioIdSelecionado,
-        visivelApoiadores: _visivelApoiadores,
+        visivelApoiadores: !_agendaPrivada,
+        notificacaoProfileIds: _agendaPrivada ? _destProfileIds.toList() : const [],
       );
       if (widget.existente != null) {
         await ref.read(atualizarVisitaProvider)(widget.existente!.id, params);
@@ -1095,6 +1217,107 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
       _sugestoesPlaces = [];
     });
     _localFocus.unfocus();
+  }
+
+  Future<void> _abrirDestinatariosDialog() async {
+    final theme = Theme.of(context);
+    final assessores = await ref.read(assessoresListProvider.future);
+    final apoiadores = await ref.read(apoiadoresListProvider.future);
+    if (!mounted) return;
+    final local = Set<String>.from(_destProfileIds);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          return AlertDialog(
+            title: const Text('Destinatários da agenda privada'),
+            content: SizedBox(
+              width: 440,
+              height: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Assessores',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    ...assessores.where((a) => a.ativo).map(
+                          (a) => CheckboxListTile(
+                            dense: true,
+                            value: local.contains(a.profileId),
+                            onChanged: (sel) => setLocal(() {
+                              if (sel == true) {
+                                local.add(a.profileId);
+                              } else {
+                                local.remove(a.profileId);
+                              }
+                            }),
+                            title: Text(a.nome),
+                          ),
+                        ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Apoiadores (com conta no app)',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    Builder(
+                      builder: (context) {
+                        final comConta =
+                            apoiadores.where((a) => a.profileId != null && a.profileId!.isNotEmpty).toList();
+                        if (comConta.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Nenhum apoiador com login vinculado.',
+                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          );
+                        }
+                        return Column(
+                          children: [
+                            for (final a in comConta)
+                              CheckboxListTile(
+                                dense: true,
+                                value: local.contains(a.profileId!),
+                                onChanged: (sel) => setLocal(() {
+                                  if (sel == true) {
+                                    local.add(a.profileId!);
+                                  } else {
+                                    local.remove(a.profileId!);
+                                  }
+                                }),
+                                title: Text(a.nome),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+              FilledButton(
+                onPressed: () {
+                  setState(() {
+                    _destProfileIds
+                      ..clear()
+                      ..addAll(local);
+                  });
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Concluir'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _abrirMapaSelecionarLocal(List<Municipio> municipios) async {
@@ -1389,13 +1612,42 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                   textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: 12),
-                SwitchListTile(
+                ListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Visível para apoiadores'),
-                  subtitle: const Text('Apoiadores da cidade receberão o aviso de visita.'),
-                  value: _visivelApoiadores,
-                  onChanged: (v) => setState(() => _visivelApoiadores = v),
+                  leading: Icon(
+                    _agendaPrivada ? Icons.lock_outline_rounded : Icons.public_rounded,
+                    color: theme.colorScheme.primary,
+                  ),
+                  title: const Text('Agenda privada'),
+                  subtitle: Text(
+                    _agendaPrivada
+                        ? 'Apenas os destinatários escolhidos recebem notificação e veem esta visita na agenda.'
+                        : 'Visita visível para apoiadores da cidade (padrão).',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  trailing: Switch(
+                    value: _agendaPrivada,
+                    onChanged: (v) => setState(() {
+                      _agendaPrivada = v;
+                      if (!v) _destProfileIds.clear();
+                    }),
+                  ),
                 ),
+                if (_agendaPrivada) ...[
+                  const SizedBox(height: 4),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: _loading ? null : _abrirDestinatariosDialog,
+                      icon: const Icon(Icons.group_add_rounded, size: 20),
+                      label: Text(
+                        _destProfileIds.isEmpty
+                            ? 'Selecionar assessores e apoiadores'
+                            : '${_destProfileIds.length} destinatário(s) selecionado(s)',
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

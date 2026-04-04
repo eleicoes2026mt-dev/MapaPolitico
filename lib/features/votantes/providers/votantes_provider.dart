@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/amigos_gilberto.dart';
 import '../../../models/municipio.dart';
 import '../../../models/votante.dart';
 import '../../../core/supabase/municipios_seed.dart' show ensureMunicipiosMtSeeded, forceMunicipiosMtRecovery;
@@ -96,6 +97,7 @@ class NovoVotanteParams {
     this.numero,
     this.complemento,
     this.votosPrometidosUltimaEleicao,
+    this.cadastroViaQr = false,
   });
   final String nome;
   final String? telefone;
@@ -110,13 +112,15 @@ class NovoVotanteParams {
   final String? numero;
   final String? complemento;
   final int? votosPrometidosUltimaEleicao;
+  /// Marca linha como cadastro público (QR / link Amigos do Gilberto).
+  final bool cadastroViaQr;
 }
 
 final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>((ref) {
   final client = supabase;
   return (NovoVotanteParams params) async {
     final userId = ref.read(currentUserProvider)?.id;
-    if (userId == null) throw Exception('Faça login para cadastrar votantes.');
+    if (userId == null) throw Exception('Faça login para cadastrar $kAmigosGilbertoLabel.');
 
     final profile = await ref.read(profileProvider.future);
     final role = profile?.role;
@@ -155,7 +159,7 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
         }
         if (assessorId == null) {
           throw Exception(
-            'Ative o acesso de assessor/candidato em Assessores antes de cadastrar votantes.',
+            'Ative o acesso de assessor/candidato em Assessores antes de cadastrar $kAmigosGilbertoLabel.',
           );
         }
       }
@@ -179,6 +183,8 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       'complemento': params.complemento?.trim().isEmpty == true ? null : params.complemento?.trim(),
       if (params.votosPrometidosUltimaEleicao != null)
         'votos_prometidos_ultima_eleicao': params.votosPrometidosUltimaEleicao,
+      if (params.cadastroViaQr) 'cadastro_via_qr': true,
+      if (role == 'candidato') 'cadastrado_pelo_candidato': true,
     };
 
     await client.from('votantes').insert(insert);

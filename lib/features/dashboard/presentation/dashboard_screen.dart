@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../mapa/presentation/mapa_regional_panel.dart';
 import '../providers/dashboard_provider.dart';
@@ -123,7 +124,7 @@ class _StatsCards extends StatelessWidget {
     final cards = [
       _CardData('Assessores', stats.assessores, Icons.people, const Color(0xFF1565C0)),
       _CardData('Apoiadores', stats.apoiadores, Icons.person_add, const Color(0xFF7B1FA2)),
-      _CardData('Votantes', stats.votantes, Icons.checklist, const Color(0xFF2E7D32)),
+      _CardData(kAmigosGilbertoLabel, stats.votantes, Icons.checklist, const Color(0xFF2E7D32)),
       _CardData('Est. Votos', stats.estimativaVotos, Icons.show_chart, const Color(0xFFE65100)),
     ];
 

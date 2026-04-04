@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/services/cep_br_service.dart';
 import '../../../core/utils/municipio_resolver.dart'
     show chaveMunicipioMtApartirCepLocalidade, municipioIdParaNomeCidade, municipioIdResolvidoParaApoiador;
@@ -49,8 +50,8 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Promover a apoiador'),
         content: Text(
-          'Criar cadastro de apoiador para "${v.nome}" e remover o registro de votante? '
-          'É necessário ter município definido e o votante não pode estar vinculado a outro apoiador.',
+          'Criar cadastro de apoiador para "${v.nome}" e remover o registro de $kAmigosGilbertoLabel? '
+          'É necessário ter município definido e a pessoa não pode estar vinculada a outro apoiador.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
@@ -63,7 +64,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
       await ref.read(promoverVotanteParaApoiadorProvider)(v.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Votante promovido a apoiador.')),
+          SnackBar(content: Text('Cadastro de $kAmigosGilbertoLabel promovido a apoiador.')),
         );
       }
     } catch (e) {
@@ -79,7 +80,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Excluir votante'),
+        title: Text('Excluir cadastro ($kAmigosGilbertoLabel)'),
         content: Text('Remover "${v.nome}"?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
@@ -91,7 +92,9 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
     try {
       await ref.read(removerVotanteProvider)(v.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Votante removido.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cadastro de $kAmigosGilbertoLabel removido.')),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -145,7 +148,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Votantes', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Text(kAmigosGilbertoLabel, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
               const EstadoMTBadge(compact: true),
             ],
           ),
@@ -161,7 +164,10 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
             children: [
               Expanded(
                 child: TextField(
-                  decoration: const InputDecoration(hintText: 'Buscar votante...', prefixIcon: Icon(Icons.search)),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar em $kAmigosGilbertoLabel...',
+                    prefixIcon: const Icon(Icons.search),
+                  ),
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
@@ -180,14 +186,14 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
                 FilledButton.icon(
                   onPressed: () => _abrirNovoOuEditar(),
                   icon: const Icon(Icons.add),
-                  label: const Text('Novo Votante'),
+                  label: Text('Novo — $kAmigosGilbertoLabel'),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Chip(label: Text('${filtered.length} votantes')),
+              Chip(label: Text('${filtered.length} cadastrados')),
               const SizedBox(width: 8),
               Chip(label: Text('$votosTotal votos estimados')),
             ],
@@ -499,7 +505,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${widget.existente != null ? "Votante atualizado" : "Votante cadastrado"}$aviso.',
+              '${widget.existente != null ? "Cadastro atualizado" : "Cadastro concluído"} ($kAmigosGilbertoLabel)$aviso.',
             ),
           ),
         );
@@ -521,7 +527,11 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     final profile = ref.watch(profileProvider).valueOrNull;
     final munAsync = ref.watch(municipiosMTListProvider);
     return AlertDialog(
-      title: Text(widget.existente != null ? 'Editar votante' : 'Novo votante'),
+      title: Text(
+        widget.existente != null
+            ? 'Editar — $kAmigosGilbertoLabel'
+            : 'Novo cadastro — $kAmigosGilbertoLabel',
+      ),
       content: SizedBox(
         width: 440,
         child: munAsync.when(
@@ -614,6 +624,15 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                       controller: _email,
                       decoration: const InputDecoration(labelText: 'E-mail'),
                       keyboardType: TextInputType.emailAddress,
+                      validator: (v) {
+                        if (widget.existente != null) return null;
+                        if (v == null || v.trim().isEmpty) {
+                          return 'E-mail obrigatório para acessar o painel $kAmigosGilbertoLabel';
+                        }
+                        final t = v.trim();
+                        if (!t.contains('@') || !t.contains('.')) return 'E-mail inválido';
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 12),
                     MunicipioMtFormRow(
@@ -649,7 +668,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                       TextFormField(
                         controller: _qtd,
                         decoration: const InputDecoration(
-                          labelText: 'Total de votos na família (votante + familiares)',
+                          labelText: 'Total de votos na família (titular + familiares)',
                           hintText: '2',
                           helperText: 'Informe o número total esperado na família, incluindo o próprio.',
                         ),
@@ -664,7 +683,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                       InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Votos',
-                          helperText: 'Sempre 1 para votante individual.',
+                          helperText: 'Sempre 1 para cadastro individual.',
                           enabled: false,
                         ),
                         child: const Text('1 (individual)', style: TextStyle(color: Colors.grey)),
@@ -727,7 +746,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'A cidade do votante alimenta o mapa regional e a estimativa por município.',
+                      'A cidade alimenta o mapa regional e a estimativa por município.',
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ],
@@ -775,7 +794,7 @@ class _VinculoCadastroNovoVotante extends ConsumerWidget {
           label: 'Cadastro pelo candidato',
           destaque: nome,
           subtitulo:
-              'Este votante entra na campanha como cadastro direto do candidato (sem vínculo a apoiador).',
+              'Este cadastro ($kAmigosGilbertoLabel) entra na campanha direto pelo candidato (sem vínculo a apoiador).',
         );
       case 'assessor':
         return ref.watch(meuAssessorRegistroProvider).when(
@@ -788,7 +807,7 @@ class _VinculoCadastroNovoVotante extends ConsumerWidget {
                   label: 'Vinculado ao assessor',
                   destaque: nome,
                   subtitulo:
-                      'O votante fica na rede como cadastro do assessor logado. Não é possível alterar aqui.',
+                      'O cadastro fica na rede como registro do assessor logado. Não é possível alterar aqui.',
                 );
               },
               loading: () => const LinearProgressIndicator(),
@@ -811,7 +830,7 @@ class _VinculoCadastroNovoVotante extends ConsumerWidget {
                   label: 'Vinculado ao seu apoiador',
                   destaque: nome,
                   subtitulo:
-                      'O votante será ligado automaticamente ao seu cadastro de apoiador. Não é possível trocar.',
+                      'Será ligado automaticamente ao seu cadastro de apoiador. Não é possível trocar.',
                 );
               },
               loading: () => const LinearProgressIndicator(),

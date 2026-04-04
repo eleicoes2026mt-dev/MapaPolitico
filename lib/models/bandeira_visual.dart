@@ -192,6 +192,74 @@ class BandeiraVisual {
     );
   }
 
+  // ── Presets do mapa (cores fixas por tipo; não dependem do editor do apoiador) ──
+
+  /// Apoiador na cidade — verde.
+  factory BandeiraVisual.mapaApoiador() {
+    return const BandeiraVisual(
+      corPrimariaHex: '#2E7D32',
+      corSecundariaHex: '#1B5E20',
+      layout: BandeiraFundoLayout.solidPrimary,
+      emoji: '🚩',
+      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+    );
+  }
+
+  /// Assessor na cidade — roxo.
+  factory BandeiraVisual.mapaAssessor() {
+    return const BandeiraVisual(
+      corPrimariaHex: '#6A1B9A',
+      corSecundariaHex: '#4A148C',
+      layout: BandeiraFundoLayout.solidPrimary,
+      emoji: '🚩',
+      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+    );
+  }
+
+  /// Amigos do Gilberto cadastrados por apoiador — verde + azul.
+  factory BandeiraVisual.mapaAmigoPorApoiador() {
+    return const BandeiraVisual(
+      corPrimariaHex: '#2E7D32',
+      corSecundariaHex: '#1565C0',
+      layout: BandeiraFundoLayout.gradientHorizontal,
+      emoji: '🚩',
+      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+    );
+  }
+
+  /// Amigos do Gilberto cadastrados por assessor (sem apoiador) — roxo + azul.
+  factory BandeiraVisual.mapaAmigoPorAssessor() {
+    return const BandeiraVisual(
+      corPrimariaHex: '#6A1B9A',
+      corSecundariaHex: '#1565C0',
+      layout: BandeiraFundoLayout.gradientHorizontal,
+      emoji: '🚩',
+      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+    );
+  }
+
+  /// Amigos do Gilberto cadastrados pelo candidato — azul.
+  factory BandeiraVisual.mapaAmigoCandidato() {
+    return const BandeiraVisual(
+      corPrimariaHex: '#1565C0',
+      corSecundariaHex: '#0D47A1',
+      layout: BandeiraFundoLayout.solidPrimary,
+      emoji: '🚩',
+      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+    );
+  }
+
+  /// Cadastro via QR — laranja.
+  factory BandeiraVisual.mapaCadastroQr() {
+    return const BandeiraVisual(
+      corPrimariaHex: '#EF6C00',
+      corSecundariaHex: '#E65100',
+      layout: BandeiraFundoLayout.solidPrimary,
+      emoji: '🚩',
+      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+    );
+  }
+
   static String _normHex(String? h) {
     if (h == null || h.isEmpty) return '#1976D2';
     final t = h.trim();

@@ -19,6 +19,10 @@ class Votante {
   final String? complemento;
   /// Referência: votos prometidos na última eleição.
   final int? votosPrometidosUltimaEleicao;
+  /// Cadastro pelo QR / link «Amigos do Gilberto» (cor laranja no mapa).
+  final bool cadastroViaQr;
+  /// Cadastro feito pelo candidato (azul no mapa), distinto do cadastro por assessor.
+  final bool cadastradoPeloCandidato;
 
   const Votante({
     required this.id,
@@ -38,6 +42,8 @@ class Votante {
     this.numero,
     this.complemento,
     this.votosPrometidosUltimaEleicao,
+    this.cadastroViaQr = false,
+    this.cadastradoPeloCandidato = false,
   });
 
   /// Nome de exibição da cidade: join > texto livre > '—'.
@@ -67,6 +73,8 @@ class Votante {
       numero: json['numero'] as String?,
       complemento: json['complemento'] as String?,
       votosPrometidosUltimaEleicao: (json['votos_prometidos_ultima_eleicao'] as num?)?.toInt(),
+      cadastroViaQr: json['cadastro_via_qr'] as bool? ?? false,
+      cadastradoPeloCandidato: json['cadastrado_pelo_candidato'] as bool? ?? false,
     );
   }
 
@@ -87,5 +95,7 @@ class Votante {
         'numero': numero,
         'complemento': complemento,
         'votos_prometidos_ultima_eleicao': votosPrometidosUltimaEleicao,
+        'cadastro_via_qr': cadastroViaQr,
+        'cadastrado_pelo_candidato': cadastradoPeloCandidato,
       };
 }

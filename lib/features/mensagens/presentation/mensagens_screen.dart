@@ -1,13 +1,18 @@
+import 'dart:math' show min;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
 import '../../agenda/providers/agenda_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, refreshMunicipiosMTList;
+import '../../../models/municipio.dart';
 import '../providers/mensagens_provider.dart';
 
 class MensagensScreen extends ConsumerWidget {
@@ -169,7 +174,7 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
                           Text('Nenhuma mensagem', style: theme.textTheme.titleMedium),
                           const SizedBox(height: 8),
                           Text(
-                            'Crie mensagens globais, regionais ou de reunião',
+                            'Crie mensagens globais, por polo, por cidade (apoiadores e $kAmigosGilbertoLabel) ou privadas para assessores/apoiadores.',
                             style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                             textAlign: TextAlign.center,
                           ),
@@ -214,12 +219,22 @@ class _MensagemCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onNotificar;
 
-  static const _escopoLabel = {
+  static const _escoposBroadcast = {'global', 'polo', 'performance', 'reuniao'};
+
+  static String _tituloMenuPush(String escopo) {
+    return _escoposBroadcast.contains(escopo)
+        ? 'Enviar notificação (broadcast)'
+        : 'Enviar notificação segmentada';
+  }
+
+  static final _escopoLabel = {
     'global': 'Global',
     'polo': 'Por polo',
-    'cidade': 'Por cidade',
+    'cidade': 'Por cidade (apoiadores e $kAmigosGilbertoLabel)',
     'performance': 'Por performance',
     'reuniao': 'Reunião',
+    'privada_assessores': 'Privada — assessores',
+    'privada_apoiadores': 'Privada — apoiadores',
   };
 
   static const _escopoIcon = {
@@ -228,6 +243,8 @@ class _MensagemCard extends StatelessWidget {
     'cidade': Icons.location_city_outlined,
     'performance': Icons.trending_up_outlined,
     'reuniao': Icons.event_outlined,
+    'privada_assessores': Icons.admin_panel_settings_outlined,
+    'privada_apoiadores': Icons.groups_outlined,
   };
 
   @override
@@ -279,12 +296,12 @@ class _MensagemCard extends StatelessWidget {
                       if (v == 'delete') onDelete();
                     },
                     itemBuilder: (_) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'notify',
                         child: ListTile(
                           dense: true,
-                          leading: Icon(Icons.notifications_active_outlined),
-                          title: Text('Notificar todos'),
+                          leading: const Icon(Icons.notifications_active_outlined),
+                          title: Text(_MensagemCard._tituloMenuPush(m.escopo)),
                         ),
                       ),
                       const PopupMenuItem(
@@ -356,6 +373,8 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   final _titulo = TextEditingController();
   final _corpo = TextEditingController();
   String _escopo = 'global';
+  String? _poloId;
+  String? _municipioCidadeId;
   bool _enviarPush = false;
   bool _loading = false;
 
@@ -366,8 +385,33 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
     super.dispose();
   }
 
+  String _subtituloPush() {
+    switch (_escopo) {
+      case 'global':
+        return 'Envia para todos com push ativado (broadcast).';
+      case 'polo':
+        return 'Envia para todos com push (broadcast). Refine o polo abaixo.';
+      case 'cidade':
+        return 'Apenas apoiadores e $kAmigosGilbertoLabel com conta na cidade selecionada.';
+      case 'privada_assessores':
+        return 'Apenas assessores ativos com conta no app.';
+      case 'privada_apoiadores':
+        return 'Apenas apoiadores com login vinculado (não excluídos).';
+      default:
+        return 'Notificação conforme abrangência.';
+    }
+  }
+
   Future<void> _salvar() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (_escopo == 'polo' && (_poloId == null || _poloId!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione um polo regional.')));
+      return;
+    }
+    if (_escopo == 'cidade' && (_municipioCidadeId == null || _municipioCidadeId!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione o município.')));
+      return;
+    }
     setState(() => _loading = true);
     try {
       await ref.read(criarMensagemProvider)(
@@ -375,6 +419,8 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
           titulo: _titulo.text.trim(),
           corpo: _corpo.text.trim().isEmpty ? null : _corpo.text.trim(),
           escopo: _escopo,
+          poloId: _escopo == 'polo' ? _poloId : null,
+          municipiosIds: _escopo == 'cidade' && _municipioCidadeId != null ? [_municipioCidadeId!] : const [],
           enviarPush: _enviarPush,
         ),
       );
@@ -394,10 +440,16 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final polosAsync = ref.watch(polosRegioesListProvider);
+    final munAsync = ref.watch(municipiosMTListProvider);
+
+    final maxDialogW = min(480.0, MediaQuery.sizeOf(context).width - 48);
+
     return AlertDialog(
       title: const Text('Nova Mensagem'),
       content: SizedBox(
-        width: 480,
+        width: maxDialogW,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -426,26 +478,147 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _escopo,
                   decoration: const InputDecoration(
                     labelText: 'Abrangência',
                     prefixIcon: Icon(Icons.public_outlined),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'global', child: Text('Global — todos os usuários')),
-                    DropdownMenuItem(value: 'polo', child: Text('Por polo regional')),
-                    DropdownMenuItem(value: 'cidade', child: Text('Por cidade')),
+                  items: [
+                    const DropdownMenuItem(
+                      value: 'global',
+                      child: Text('Global — todos os usuários', overflow: TextOverflow.ellipsis, maxLines: 1),
+                    ),
+                    const DropdownMenuItem(
+                      value: 'privada_assessores',
+                      child: Text('Privada — apenas assessores', overflow: TextOverflow.ellipsis, maxLines: 1),
+                    ),
+                    const DropdownMenuItem(
+                      value: 'privada_apoiadores',
+                      child: Text('Privada — apenas apoiadores', overflow: TextOverflow.ellipsis, maxLines: 1),
+                    ),
+                    DropdownMenuItem(
+                      value: 'cidade',
+                      child: Text(
+                        'Por cidade — apoiadores e $kAmigosGilbertoLabel da cidade',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const DropdownMenuItem(
+                      value: 'polo',
+                      child: Text('Por polo regional', overflow: TextOverflow.ellipsis, maxLines: 1),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _escopo = v ?? 'global'),
+                  onChanged: (v) => setState(() {
+                    _escopo = v ?? 'global';
+                    _poloId = null;
+                    _municipioCidadeId = null;
+                  }),
                 ),
+                if (_escopo == 'polo') ...[
+                  const SizedBox(height: 12),
+                  polosAsync.when(
+                    data: (polos) {
+                      if (polos.isEmpty) {
+                        return Text(
+                          'Nenhum polo cadastrado.',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                        );
+                      }
+                      return DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: _poloId != null && polos.any((p) => p.id == _poloId) ? _poloId : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Polo regional *',
+                          prefixIcon: Icon(Icons.hub_outlined),
+                        ),
+                        items: [
+                          for (final p in polos)
+                            DropdownMenuItem(
+                              value: p.id,
+                              child: Text(p.nome, overflow: TextOverflow.ellipsis, maxLines: 1),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _poloId = v),
+                      );
+                    },
+                    loading: () => const LinearProgressIndicator(),
+                    error: (e, _) => Text('Erro ao carregar polos: $e', style: TextStyle(color: theme.colorScheme.error)),
+                  ),
+                ],
+                if (_escopo == 'cidade') ...[
+                  const SizedBox(height: 12),
+                  munAsync.when(
+                    data: (municipios) {
+                      if (municipios.isEmpty) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Municípios indisponíveis.',
+                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                await refreshMunicipiosMTList(ref);
+                                if (context.mounted) setState(() {});
+                              },
+                              icon: const Icon(Icons.sync, size: 18),
+                              label: const Text('Tentar novamente'),
+                            ),
+                          ],
+                        );
+                      }
+                      final ordenados = List<Municipio>.from(municipios)
+                        ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+
+                      return DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: _municipioCidadeId != null && ordenados.any((m) => m.id == _municipioCidadeId)
+                            ? _municipioCidadeId
+                            : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Município *',
+                          prefixIcon: Icon(Icons.location_city_outlined),
+                          helperText: 'Só recebem quem tem perfil vinculado neste município.',
+                        ),
+                        items: [
+                          for (final m in ordenados)
+                            DropdownMenuItem(
+                              value: m.id,
+                              child: Text(m.nome, overflow: TextOverflow.ellipsis, maxLines: 1),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _municipioCidadeId = v),
+                      );
+                    },
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, __) => OutlinedButton.icon(
+                      onPressed: () async {
+                        await refreshMunicipiosMTList(ref);
+                        if (context.mounted) setState(() {});
+                      },
+                      icon: const Icon(Icons.sync, size: 18),
+                      label: const Text('Carregar municípios'),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
-                SwitchListTile(
+                ListTile(
                   contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.notifications_active_outlined),
                   title: const Text('Enviar notificação push'),
-                  subtitle: const Text('Notifica todos os usuários com push ativado.'),
-                  value: _enviarPush,
-                  onChanged: (v) => setState(() => _enviarPush = v),
-                  secondary: const Icon(Icons.notifications_active_outlined),
+                  subtitle: Text(
+                    _subtituloPush(),
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    maxLines: 5,
+                    softWrap: true,
+                  ),
+                  trailing: Switch(
+                    value: _enviarPush,
+                    onChanged: (v) => setState(() => _enviarPush = v),
+                  ),
                 ),
               ],
             ),
@@ -601,7 +774,7 @@ class _AniversarianteCard extends StatelessWidget {
         tipoColor = theme.colorScheme.secondary;
         break;
       default:
-        tipoLabel = 'Votante';
+        tipoLabel = kAmigosGilbertoLabel;
         tipoColor = theme.colorScheme.tertiary;
     }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
@@ -82,7 +83,7 @@ class ApoiadorHomeScreen extends ConsumerWidget {
                 Expanded(
                   child: _KpiCard(
                     icon: Icons.how_to_reg_outlined,
-                    label: 'Votantes',
+                    label: kAmigosGilbertoLabel,
                     valor: '${votantes.length}',
                     sub: 'cadastrados',
                     color: theme.colorScheme.primary,
@@ -120,7 +121,7 @@ class ApoiadorHomeScreen extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Meus Votantes', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  Text('Meus $kAmigosGilbertoLabel', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                   Text(
                     '${votantes.length} no total',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -138,47 +139,101 @@ class ApoiadorHomeScreen extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    '+ ${votantes.length - 5} votantes — veja em Votantes',
+                    '+ ${votantes.length - 5} — veja a lista em $kAmigosGilbertoLabel',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
             ],
 
-            // ── Notificações / Mensagens da campanha ──────────────────────
+            // ── Mensagens da campanha (único local para o apoiador) ───────
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Icon(Icons.notifications_outlined, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('Notificações da Campanha',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            if (mensagensAsync.isLoading)
-              const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
-            else if (mensagens.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.notifications_none, size: 36, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Nenhuma notificação ainda.',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.9),
+                    theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
                   ],
                 ),
-              )
-            else
-              ...mensagens.map((m) => _MensagemCard(mensagem: m)),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.chat_bubble_outline_rounded, size: 22, color: theme.colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Mensagens da campanha',
+                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Avisos e comunicados enviados pela equipe aparecem aqui.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  if (mensagensAsync.isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else if (mensagens.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surface.withValues(alpha: 0.35),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.mark_chat_unread_outlined,
+                            size: 40,
+                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Nenhuma mensagem por enquanto.',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Quando houver novidades, você verá aqui e pode receber notificação no celular.',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ...mensagens.map((m) => _MensagemCard(mensagem: m)),
+                ],
+              ),
+            ),
           ],
         ),
       ),

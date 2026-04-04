@@ -15,6 +15,7 @@ class Visita {
     this.criadoPor,
     this.notificadosEm,
     this.visivelApoiadores = true,
+    this.notificacaoProfileIds = const [],
   });
 
   final String id;
@@ -30,6 +31,11 @@ class Visita {
   final String? criadoPor;
   final DateTime? notificadosEm;
   final bool visivelApoiadores;
+  /// Quando [visivelApoiadores] é false, só estes perfis recebem push e veem a visita (apoiador).
+  final List<String> notificacaoProfileIds;
+
+  bool get agendaPrivada =>
+      !visivelApoiadores && notificacaoProfileIds.isNotEmpty;
 
   bool get isFutura => dataReuniao.isAfter(DateTime.now().subtract(const Duration(days: 1)));
   bool get isHoje {
@@ -78,7 +84,16 @@ class Visita {
           ? DateTime.tryParse(json['notificados_em'].toString())
           : null,
       visivelApoiadores: json['visivel_apoiadores'] as bool? ?? true,
+      notificacaoProfileIds: _parseUuidList(json['notificacao_profile_ids']),
     );
+  }
+
+  static List<String> _parseUuidList(dynamic raw) {
+    if (raw == null) return const [];
+    if (raw is List) {
+      return raw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+    }
+    return const [];
   }
 
   Map<String, dynamic> toInsertJson() => {
@@ -91,6 +106,7 @@ class Visita {
         if (descricao != null && descricao!.isNotEmpty) 'descricao': descricao,
         if (municipioId != null) 'municipio_id': municipioId,
         'visivel_apoiadores': visivelApoiadores,
+        'notificacao_profile_ids': notificacaoProfileIds,
       };
 }
 

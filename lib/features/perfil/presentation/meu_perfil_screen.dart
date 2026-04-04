@@ -15,13 +15,13 @@ import '../../assessores/providers/assessores_provider.dart'
         AtualizarMeuAssessorEnderecoParams,
         atualizarMeuAssessorEnderecoProvider,
         meuAssessorRegistroProvider;
-import 'widgets/bandeira_apoiador_editor.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/router/profile_role_cache.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../providers/perfil_provider.dart';
 import '../providers/partidos_provider.dart';
 import '../../../models/partido.dart';
+import '../../../core/constants/amigos_gilberto.dart';
 
 /// Cargos (dropdown) conforme solicitado.
 const List<String> cargosOpcoes = [
@@ -559,44 +559,15 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                     if (role == 'apoiador') ...[
                       const SizedBox(height: 24),
                       Text(
-                        'Bandeira no mapa',
+                        'Marcador no mapa',
                         style: theme.textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Cores, formato do fundo, emoji e estilo das iniciais no marcador da sua cidade.',
+                        'Nas cidades onde você tem presença cadastrada, o mapa mostra uma bandeirinha fixa na cidade (verde para apoiadores). O estilo é o mesmo para todos; não há personalização de cores ou iniciais.',
                         style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: 12),
-                      Consumer(
-                        builder: (context, ref, _) {
-                          final async = ref.watch(meuApoiadorProvider);
-                          return async.when(
-                            data: (ap) {
-                              if (ap == null) {
-                                return Text(
-                                  'Cadastro de apoiador não encontrado para esta conta.',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.error),
-                                );
-                              }
-                              return BandeiraApoiadorEditor(
-                                  key: ValueKey(ap.id), apoiador: ap);
-                            },
-                            loading: () => const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              child: Center(
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2)),
-                            ),
-                            error: (e, _) => Text(
-                              'Erro ao carregar apoiador: $e',
-                              style: TextStyle(color: theme.colorScheme.error),
-                            ),
-                          );
-                        },
                       ),
                       const SizedBox(height: 24),
                       Text(
@@ -680,7 +651,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
       case 'apoiador':
         return 'Apoiador';
       case 'votante':
-        return 'Votante';
+        return kAmigosGilbertoLabel;
       default:
         return role;
     }

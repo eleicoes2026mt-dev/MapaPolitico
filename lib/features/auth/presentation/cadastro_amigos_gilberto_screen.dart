@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/supabase/supabase_provider.dart';
@@ -9,7 +10,7 @@ import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
 import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
     show cepSoDigitos, telefoneSoDigitos;
 import '../../votantes/presentation/widgets/amigos_gilberto_dados_form_fields.dart';
-import '../../votantes/providers/votantes_provider.dart';
+import '../../votantes/providers/votantes_provider.dart' show refreshMunicipiosMTList, votantesListProvider;
 import '../providers/auth_provider.dart';
 
 /// Página pública: mesmo conjunto de dados do painel «Novo — Amigos do Gilberto» + senha para login.
@@ -120,22 +121,28 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
       }
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
 
-      await ref.read(atualizarVotanteProvider)(
-        row['id'] as String,
-        AtualizarVotanteParams(
-          nome: _nomeController.text.trim(),
-          telefone: telefoneSoDigitos(_telefone.text).isEmpty ? null : telefoneSoDigitos(_telefone.text),
-          email: email,
-          municipioId: municipioIdResolvido,
-          cidadeNome: cidadeTexto,
-          abrangencia: _abrangencia,
-          qtdVotosFamilia: qtd < 1 ? 1 : qtd,
-          cep: cepSoDigitos(_cep.text).isEmpty ? null : cepSoDigitos(_cep.text),
-          logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
-          numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
-          complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
-        ),
-      );
+      // RPC no servidor: garante persistência de cidade/município (RLS do UPDATE pelo cliente pode bloquear).
+      try {
+        await supabase.rpc(
+          'finalize_votante_amigos_cadastro',
+          params: {
+            'p_nome': _nomeController.text.trim(),
+            'p_cidade_nome': cidadeTexto,
+            'p_municipio_id': municipioIdResolvido,
+            'p_telefone': telefoneSoDigitos(_telefone.text).isEmpty ? null : telefoneSoDigitos(_telefone.text),
+            'p_email': email,
+            'p_abrangencia': _abrangencia,
+            'p_qtd_votos_familia': qtd < 1 ? 1 : qtd,
+            'p_cep': cepSoDigitos(_cep.text).isEmpty ? null : cepSoDigitos(_cep.text),
+            'p_logradouro': _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
+            'p_numero': _numero.text.trim().isEmpty ? null : _numero.text.trim(),
+            'p_complemento': _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+          },
+        );
+      } on PostgrestException catch (e) {
+        throw Exception(e.message.isNotEmpty ? e.message : 'Não foi possível salvar cidade e dados.');
+      }
+      ref.invalidate(votantesListProvider);
 
       await ref.read(authNotifierProvider.notifier).signOut();
 

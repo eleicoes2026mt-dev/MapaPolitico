@@ -1,28 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config/env_config.dart';
 import '../constants/amigos_gilberto.dart';
 
-/// URL pública de cadastro «Amigos do Gilberto» (`?amigos=1` nos metadados do signup).
-///
-/// Usa [EnvConfig.appUrl] (`APP_URL` na build / Vercel), igual aos redirects de convite —
-/// **não** usa [Uri.base], para o QR e o link copiado apontarem sempre ao site online.
-/// A rota `/cadastro-amigos` é pública e exibe só o formulário de cadastro.
-String urlCadastroAmigosGilberto() {
+/// URL pública de cadastro com `?ref=<uuid do perfil convidador>` para rastrear a rede.
+String urlCadastroAmigosGilberto({String? convitePorProfileId}) {
   final base = EnvConfig.supabaseRedirectOrigin;
-  return '$base/cadastro-amigos';
+  final id = convitePorProfileId?.trim();
+  if (id == null || id.isEmpty) return '$base/cadastro-amigos';
+  return '$base/cadastro-amigos?${Uri(queryParameters: {'ref': id}).query}';
 }
 
-/// Painel largo estilo infográfico: foto do candidato, benefícios e QR.
-/// [candidatePhotoUrl] — preferencialmente `avatarUrl`; use `Profile.sidebarBrandImageUrl` ao chamar.
+String _mensagemConviteCartao({required String url, required String inviterLabel}) {
+  final n = inviterLabel.trim();
+  if (n.isEmpty) return 'Cadastre-se nos $kAmigosGilbertoLabel: $url';
+  return '$n convida você a participar da campanha. Cadastre-se aqui: $url';
+}
+
+Future<void> _abrirWhatsAppConvite(BuildContext context, String url, String inviterLabel) async {
+  final text = Uri.encodeComponent(_mensagemConviteCartao(url: url, inviterLabel: inviterLabel));
+  final uri = Uri.parse('https://wa.me/?text=$text');
+  final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Não foi possível abrir o WhatsApp.')),
+    );
+  }
+}
+
+/// QR e link amarrados ao perfil logado ([inviterProfileId]) para rede de convites.
 void showAmigosGilbertoQrDialog(
   BuildContext context, {
+  required String inviterProfileId,
+  String? inviterDisplayName,
   String? candidatePhotoUrl,
   String? candidateName,
 }) {
-  final url = urlCadastroAmigosGilberto();
+  final url = urlCadastroAmigosGilberto(convitePorProfileId: inviterProfileId);
+  final nomeCartao = (candidateName != null && candidateName.trim().isNotEmpty)
+      ? candidateName.trim()
+      : (inviterDisplayName != null && inviterDisplayName.trim().isNotEmpty)
+          ? inviterDisplayName.trim()
+          : null;
+  final labelConvite = inviterDisplayName?.trim().isNotEmpty == true
+      ? inviterDisplayName!.trim()
+      : (nomeCartao ?? '');
   showDialog<void>(
     context: context,
     barrierDismissible: true,
@@ -30,7 +56,9 @@ void showAmigosGilbertoQrDialog(
     builder: (ctx) => _AmigosGilbertoQrInfographic(
       url: url,
       candidatePhotoUrl: candidatePhotoUrl,
-      candidateName: candidateName,
+      candidateName: nomeCartao,
+      inviterSubtitle: labelConvite.isNotEmpty ? labelConvite : null,
+      inviterLabelForShare: labelConvite,
     ),
   );
 }
@@ -40,11 +68,15 @@ class _AmigosGilbertoQrInfographic extends StatelessWidget {
     required this.url,
     this.candidatePhotoUrl,
     this.candidateName,
+    this.inviterSubtitle,
+    required this.inviterLabelForShare,
   });
 
   final String url;
   final String? candidatePhotoUrl;
   final String? candidateName;
+  final String? inviterSubtitle;
+  final String inviterLabelForShare;
 
   static const double _maxDialogWidth = 920;
 
@@ -71,6 +103,7 @@ class _AmigosGilbertoQrInfographic extends StatelessWidget {
           children: [
             _HeaderBar(
               onClose: () => Navigator.of(context).pop(),
+              inviterSubtitle: inviterSubtitle,
             ),
             Flexible(
               child: SingleChildScrollView(
@@ -104,7 +137,6 @@ class _AmigosGilbertoQrInfographic extends StatelessWidget {
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: url));
                       if (context.mounted) {
-                        Navigator.of(context).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: const Text('Link de cadastro copiado.'),
@@ -120,6 +152,29 @@ class _AmigosGilbertoQrInfographic extends StatelessWidget {
                     label: const Text('Copiar link de cadastro'),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () => Share.share(
+                      _mensagemConviteCartao(url: url, inviterLabel: inviterLabelForShare),
+                    ),
+                    icon: const Icon(Icons.share_rounded, size: 20),
+                    label: const Text('Compartilhar cartão de convite'),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.tonal(
+                    onPressed: () => _abrirWhatsAppConvite(context, url, inviterLabelForShare),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.chat_rounded, size: 20),
+                        SizedBox(width: 8),
+                        Text('Enviar pelo WhatsApp'),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -138,9 +193,10 @@ class _AmigosGilbertoQrInfographic extends StatelessWidget {
 }
 
 class _HeaderBar extends StatelessWidget {
-  const _HeaderBar({required this.onClose});
+  const _HeaderBar({required this.onClose, this.inviterSubtitle});
 
   final VoidCallback onClose;
+  final String? inviterSubtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -196,6 +252,16 @@ class _HeaderBar extends StatelessWidget {
                     height: 1.15,
                   ),
                 ),
+                if (inviterSubtitle != null && inviterSubtitle!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Convite de ${inviterSubtitle!.trim()}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onPrimary.withValues(alpha: 0.92),
+                      height: 1.3,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

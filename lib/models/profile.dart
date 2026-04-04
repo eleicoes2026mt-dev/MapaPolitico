@@ -21,6 +21,8 @@ class Profile {
   final DateTime? lastAccessApoiadoresAt;
   /// Conta criada pelo link/QR público «Amigos do Gilberto».
   final bool cadastroViaQr;
+  /// Perfil que convidou por link/QR (`ref` no cadastro).
+  final String? indicadoPorProfileId;
 
   const Profile({
     required this.id,
@@ -43,6 +45,7 @@ class Profile {
     this.lastAccessAssessoresAt,
     this.lastAccessApoiadoresAt,
     this.cadastroViaQr = false,
+    this.indicadoPorProfileId,
   });
 
   /// Normaliza o papel vindo do PostgREST (`app_role` → string).
@@ -94,6 +97,7 @@ class Profile {
           ? DateTime.tryParse(json['last_access_apoiadores_at'].toString())
           : null,
       cadastroViaQr: json['cadastro_via_qr'] as bool? ?? false,
+      indicadoPorProfileId: json['indicado_por_profile_id'] as String?,
     );
   }
 

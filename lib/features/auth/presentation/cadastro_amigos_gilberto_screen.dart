@@ -86,6 +86,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
     });
 
     final email = _emailController.text.trim();
+    final refConv = GoRouterState.of(context).uri.queryParameters['ref']?.trim();
 
     try {
       await ref.read(authNotifierProvider.notifier).signUp(
@@ -93,6 +94,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
             _passwordController.text,
             fullName: _nomeController.text.trim().isEmpty ? null : _nomeController.text.trim(),
             cadastroAmigosGilberto: true,
+            convitePorProfileId: (refConv != null && refConv.isNotEmpty) ? refConv : null,
           );
 
       final user = supabase.auth.currentUser;

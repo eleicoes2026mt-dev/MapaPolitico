@@ -12,6 +12,19 @@ import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../models/profile.dart';
 
+bool _mostrarQrConviteAmigos(Profile? p) =>
+    p != null && const {'candidato', 'assessor', 'apoiador', 'votante'}.contains(p.role);
+
+void _abrirDialogQrAmigos(BuildContext context, Profile p) {
+  showAmigosGilbertoQrDialog(
+    context,
+    inviterProfileId: p.id,
+    inviterDisplayName: p.fullName,
+    candidatePhotoUrl: p.role == 'candidato' ? p.sidebarBrandImageUrl : p.avatarUrl,
+    candidateName: p.fullName,
+  );
+}
+
 class MainScaffold extends ConsumerStatefulWidget {
   const MainScaffold({super.key, required this.child});
 
@@ -129,15 +142,11 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
-          if (profile?.role == 'candidato')
+          if (_mostrarQrConviteAmigos(profile))
             IconButton(
               icon: const Icon(Icons.qr_code_2_rounded),
-              tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
-              onPressed: () => showAmigosGilbertoQrDialog(
-                    context,
-                    candidatePhotoUrl: profile?.sidebarBrandImageUrl,
-                    candidateName: profile?.fullName,
-                  ),
+              tooltip: 'QR — convite $kAmigosGilbertoLabel',
+              onPressed: () => _abrirDialogQrAmigos(context, profile!),
             ),
           if (kIsWeb)
             IconButton(
@@ -266,7 +275,7 @@ class _SidebarCollapsed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final showQr = profile?.role == 'candidato';
+    final showQr = _mostrarQrConviteAmigos(profile);
     return Container(
       width: 56,
       color: theme.colorScheme.surfaceContainerHighest,
@@ -291,12 +300,8 @@ class _SidebarCollapsed extends StatelessWidget {
               const SizedBox(height: 8),
               IconButton(
                 icon: const Icon(Icons.qr_code_2_rounded),
-                onPressed: () => showAmigosGilbertoQrDialog(
-                    context,
-                    candidatePhotoUrl: profile?.sidebarBrandImageUrl,
-                    candidateName: profile?.fullName,
-                  ),
-                tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
+                onPressed: () => _abrirDialogQrAmigos(context, profile!),
+                tooltip: 'QR — convite $kAmigosGilbertoLabel',
               ),
             ],
             if (kIsWeb) ...[
@@ -447,7 +452,7 @@ class _Sidebar extends StatelessWidget {
                   ),
               ],
             ),
-            if (onOpenPwaOrientacao != null || prof?.role == 'candidato' || kIsWeb) ...[
+            if (onOpenPwaOrientacao != null || _mostrarQrConviteAmigos(prof) || kIsWeb) ...[
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -458,20 +463,16 @@ class _Sidebar extends StatelessWidget {
                       icon: const Icon(Icons.add_to_home_screen_outlined),
                       tooltip: 'Instalar app e ativar notificações',
                     ),
-                  if (prof?.role == 'candidato') ...[
+                  if (_mostrarQrConviteAmigos(prof)) ...[
                     if (onOpenPwaOrientacao != null) const SizedBox(width: 4),
                     IconButton.filledTonal(
-                      onPressed: () => showAmigosGilbertoQrDialog(
-                        context,
-                        candidatePhotoUrl: prof?.sidebarBrandImageUrl,
-                        candidateName: prof?.fullName,
-                      ),
+                      onPressed: () => _abrirDialogQrAmigos(context, prof!),
                       icon: const Icon(Icons.qr_code_2_rounded),
-                      tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
+                      tooltip: 'QR — convite $kAmigosGilbertoLabel',
                     ),
                   ],
                   if (kIsWeb) ...[
-                    if (onOpenPwaOrientacao != null || prof?.role == 'candidato')
+                    if (onOpenPwaOrientacao != null || _mostrarQrConviteAmigos(prof))
                       const SizedBox(width: 4),
                     IconButton.filledTonal(
                       onPressed: () => reload_page.reloadPageIfWeb(),

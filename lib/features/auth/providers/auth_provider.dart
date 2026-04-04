@@ -53,6 +53,10 @@ Future<Profile?> fetchProfileForUser(User user) async {
     if (user.userMetadata?['cadastro_via_qr'] == true) {
       payload['cadastro_via_qr'] = true;
     }
+    final conv = user.userMetadata?['convite_por']?.toString().trim();
+    if (conv != null && conv.isNotEmpty) {
+      payload['indicado_por_profile_id'] = conv;
+    }
     await supabase.from('profiles').upsert(
       payload,
       onConflict: 'id',
@@ -137,6 +141,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
     String password, {
     String? fullName,
     bool cadastroAmigosGilberto = false,
+    String? convitePorProfileId,
   }) async {
     clearProfileRoleCache();
     final data = <String, dynamic>{};
@@ -144,6 +149,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
     if (cadastroAmigosGilberto) {
       data['role'] = 'votante';
       data['cadastro_via_qr'] = true;
+    }
+    final cp = convitePorProfileId?.trim();
+    if (cp != null && cp.isNotEmpty) {
+      data['convite_por'] = cp;
     }
     await _client.auth.signUp(
       email: email,

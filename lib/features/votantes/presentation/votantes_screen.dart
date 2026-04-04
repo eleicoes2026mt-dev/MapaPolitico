@@ -243,12 +243,13 @@ class _VotantesTable extends StatelessWidget {
           final v = votantes[i];
           final cidade = v.cidadeDisplay.isNotEmpty ? displayNomeCidadeMT(v.cidadeDisplay) : '—';
           final ap = v.apoiadorId != null ? (apoiadorPorId[v.apoiadorId!] ?? '—') : '—';
+          final ind = v.convitePorNome ?? '—';
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               title: Text(v.nome),
               subtitle: Text(
-                '${v.telefone == null || v.telefone!.isEmpty ? "—" : formatTelefoneBrFromDigits(v.telefone)} • $cidade • ${v.abrangencia} • ${v.qtdVotosFamilia} voto(s) • $ap',
+                '${v.telefone == null || v.telefone!.isEmpty ? "—" : formatTelefoneBrFromDigits(v.telefone)} • $cidade • ${v.abrangencia} • ${v.qtdVotosFamilia} voto(s) • Apoiador: $ap • Convite: $ind',
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -278,11 +279,13 @@ class _VotantesTable extends StatelessWidget {
           DataColumn(label: Text('Abrangência')),
           DataColumn(label: Text('Votos')),
           DataColumn(label: Text('Apoiador')),
+          DataColumn(label: Text('Indicação')),
           DataColumn(label: Text('Ações')),
         ],
         rows: votantes.map((v) {
           final cidade = v.cidadeDisplay.isNotEmpty ? displayNomeCidadeMT(v.cidadeDisplay) : '—';
           final ap = v.apoiadorId != null ? (apoiadorPorId[v.apoiadorId!] ?? '—') : '—';
+          final ind = v.convitePorNome ?? '—';
           final podePromover = podePromoverApoiador && v.apoiadorId == null && v.municipioId != null;
           return DataRow(
             cells: [
@@ -296,6 +299,7 @@ class _VotantesTable extends StatelessWidget {
               DataCell(Text(v.abrangencia)),
               DataCell(Text('${v.qtdVotosFamilia}')),
               DataCell(Text(ap)),
+              DataCell(Text(ind)),
               DataCell(Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

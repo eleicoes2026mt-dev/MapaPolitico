@@ -11,6 +11,8 @@ import '../../mapa/providers/benfeitorias_agg_provider.dart';
 import '../../assessores/providers/assessores_provider.dart'
     show assessoresListProvider, meuAssessorIdProvider;
 
+const _kVotantesSelect = '*, municipios(nome)';
+
 List<Municipio> _municipiosFromRpc(dynamic raw) {
   if (raw is! List) return [];
   return raw.map((e) {
@@ -37,7 +39,7 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
     final uid = profile.id;
     final res = await supabase
         .from('votantes')
-        .select('*, municipios(nome)')
+        .select(_kVotantesSelect)
         .eq('profile_id', uid)
         .order('nome');
     return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
@@ -49,7 +51,7 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
             if (apoiadorId == null) return [];
             final res = await supabase
                 .from('votantes')
-                .select('*, municipios(nome)')
+                .select(_kVotantesSelect)
                 .eq('apoiador_id', apoiadorId)
                 .order('nome');
             return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
@@ -59,7 +61,7 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
         );
   }
 
-  final res = await supabase.from('votantes').select('*, municipios(nome)').order('nome');
+  final res = await supabase.from('votantes').select(_kVotantesSelect).order('nome');
   return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
 });
 

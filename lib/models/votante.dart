@@ -23,6 +23,10 @@ class Votante {
   final bool cadastroViaQr;
   /// Cadastro feito pelo candidato (azul no mapa), distinto do cadastro por assessor.
   final bool cadastradoPeloCandidato;
+  /// Perfil que gerou o link/QR de convite.
+  final String? convitePorProfileId;
+  /// Nome do perfil convidador (join opcional `inviter`).
+  final String? convitePorNome;
 
   const Votante({
     required this.id,
@@ -44,6 +48,8 @@ class Votante {
     this.votosPrometidosUltimaEleicao,
     this.cadastroViaQr = false,
     this.cadastradoPeloCandidato = false,
+    this.convitePorProfileId,
+    this.convitePorNome,
   });
 
   /// Nome de exibição da cidade: join > texto livre > '—'.
@@ -55,6 +61,8 @@ class Votante {
     if (mun is Map && mun['nome'] != null) {
       munNome = mun['nome'].toString();
     }
+    final rawConvNome = json['convite_por_nome']?.toString().trim();
+    final conviteNome = (rawConvNome != null && rawConvNome.isNotEmpty) ? rawConvNome : null;
     return Votante(
       id: json['id'] as String,
       profileId: json['profile_id'] as String?,
@@ -75,6 +83,8 @@ class Votante {
       votosPrometidosUltimaEleicao: (json['votos_prometidos_ultima_eleicao'] as num?)?.toInt(),
       cadastroViaQr: json['cadastro_via_qr'] as bool? ?? false,
       cadastradoPeloCandidato: json['cadastrado_pelo_candidato'] as bool? ?? false,
+      convitePorProfileId: json['convite_por_profile_id'] as String?,
+      convitePorNome: conviteNome,
     );
   }
 
@@ -97,5 +107,7 @@ class Votante {
         'votos_prometidos_ultima_eleicao': votosPrometidosUltimaEleicao,
         'cadastro_via_qr': cadastroViaQr,
         'cadastrado_pelo_candidato': cadastradoPeloCandidato,
+        'convite_por_profile_id': convitePorProfileId,
+        'convite_por_nome': convitePorNome,
       };
 }

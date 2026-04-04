@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../core/services/realtime_notifications_service.dart';
+import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../models/profile.dart';
 
@@ -60,10 +62,19 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
     });
   }
 
+  void _abrirOrientacaoAppENotificacoes() {
+    if (!kIsWeb) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      mostrarPwaOnboarding(context, ref, force: true);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider).valueOrNull;
     final isWide = MediaQuery.sizeOf(context).width >= 800;
+    final abrirPwa = kIsWeb ? _abrirOrientacaoAppENotificacoes : null;
 
     void onSignOut() async {
       await ref.read(authNotifierProvider.notifier).signOut();
@@ -81,9 +92,11 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
                       onSignOut: onSignOut,
                       onCollapse: () => setState(() => _sidebarExpanded = false),
                       expanded: true,
+                      onOpenPwaOrientacao: abrirPwa,
                     )
                   : _SidebarCollapsed(
                       onExpand: () => setState(() => _sidebarExpanded = true),
+                      onOpenPwaOrientacao: abrirPwa,
                     ),
             ),
             Expanded(child: widget.child),
@@ -110,9 +123,21 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
           _titleForRoute(GoRouterState.of(context).uri.path),
           overflow: TextOverflow.ellipsis,
         ),
+        actions: [
+          if (kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.add_to_home_screen_outlined),
+              tooltip: 'Instalar app e ativar notificações',
+              onPressed: _abrirOrientacaoAppENotificacoes,
+            ),
+        ],
       ),
       drawer: Drawer(
-        child: _Sidebar(profile: profile, onSignOut: onSignOut),
+        child: _Sidebar(
+          profile: profile,
+          onSignOut: onSignOut,
+          onOpenPwaOrientacao: abrirPwa,
+        ),
       ),
       body: widget.child,
     );
@@ -207,9 +232,13 @@ String? _subtitleUltimoAcesso(String path, Profile? p) {
 
 /// Barra estreita com botão para expandir o menu (telas largas).
 class _SidebarCollapsed extends StatelessWidget {
-  const _SidebarCollapsed({required this.onExpand});
+  const _SidebarCollapsed({
+    required this.onExpand,
+    this.onOpenPwaOrientacao,
+  });
 
   final VoidCallback onExpand;
+  final VoidCallback? onOpenPwaOrientacao;
 
   @override
   Widget build(BuildContext context) {
@@ -226,6 +255,14 @@ class _SidebarCollapsed extends StatelessWidget {
               onPressed: onExpand,
               tooltip: 'Expandir menu',
             ),
+            if (onOpenPwaOrientacao != null) ...[
+              const SizedBox(height: 8),
+              IconButton(
+                icon: const Icon(Icons.add_to_home_screen_outlined),
+                onPressed: onOpenPwaOrientacao,
+                tooltip: 'Instalar app e notificações',
+              ),
+            ],
           ],
         ),
       ),
@@ -239,12 +276,14 @@ class _Sidebar extends StatelessWidget {
     required this.onSignOut,
     this.onCollapse,
     this.expanded = false,
+    this.onOpenPwaOrientacao,
   });
 
   final Profile? profile;
   final VoidCallback onSignOut;
   final VoidCallback? onCollapse;
   final bool expanded;
+  final VoidCallback? onOpenPwaOrientacao;
 
   static const _items = [
     _NavItem('/apoiador-home', 'Início', Icons.home_outlined),
@@ -363,6 +402,14 @@ class _Sidebar extends StatelessWidget {
                   ),
               ],
             ),
+            if (onOpenPwaOrientacao != null) ...[
+              const SizedBox(height: 12),
+              IconButton.filledTonal(
+                onPressed: onOpenPwaOrientacao,
+                icon: const Icon(Icons.add_to_home_screen_outlined),
+                tooltip: 'Instalar app e ativar notificações',
+              ),
+            ],
             const SizedBox(height: 24),
             Expanded(
               child: SingleChildScrollView(

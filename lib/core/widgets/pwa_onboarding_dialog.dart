@@ -2,19 +2,33 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../router/navigation_keys.dart';
 import '../services/push_subscription_service.dart';
 import '../services/pwa_service.dart';
 import '../../features/auth/providers/auth_provider.dart';
 
-/// Exibe o fluxo de onboarding PWA (instalar + notificações) na primeira visita.
-/// Retorna após o usuário concluir ou pular todas as etapas.
-Future<void> mostrarPwaOnboarding(BuildContext context, WidgetRef ref) async {
+/// Exibe o fluxo de onboarding PWA (instalar + notificações).
+/// [force]: ignora `hasSeenOnboarding` e permite fechar tocando fora (ícone do menu).
+/// Contexto: [shellNavigatorKey] — na web, `context` do shell sozinho pode não abrir o overlay.
+Future<void> mostrarPwaOnboarding(
+  BuildContext context,
+  WidgetRef ref, {
+  bool force = false,
+}) async {
   if (!kIsWeb) return;
-  if (PwaService.instance.hasSeenOnboarding) return;
+  if (!force && PwaService.instance.hasSeenOnboarding) return;
+
+  BuildContext dialogContext = shellNavigatorKey.currentContext ?? context;
+  if (!dialogContext.mounted) {
+    await WidgetsBinding.instance.endOfFrame;
+    dialogContext = shellNavigatorKey.currentContext ?? context;
+  }
+  if (!dialogContext.mounted) return;
 
   await showGeneralDialog<void>(
-    context: context,
-    barrierDismissible: false,
+    context: dialogContext,
+    useRootNavigator: false,
+    barrierDismissible: force,
     barrierColor: Colors.black87,
     transitionDuration: const Duration(milliseconds: 350),
     transitionBuilder: (_, anim, __, child) => FadeTransition(
@@ -29,15 +43,15 @@ Future<void> mostrarPwaOnboarding(BuildContext context, WidgetRef ref) async {
   );
 }
 
-class _PwaOnboardingDialog extends ConsumerStatefulWidget {
+class _PwaOnboardingDialog extends StatefulWidget {
   const _PwaOnboardingDialog({required this.ref});
   final WidgetRef ref;
 
   @override
-  ConsumerState<_PwaOnboardingDialog> createState() => _PwaOnboardingDialogState();
+  State<_PwaOnboardingDialog> createState() => _PwaOnboardingDialogState();
 }
 
-class _PwaOnboardingDialogState extends ConsumerState<_PwaOnboardingDialog> {
+class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
   int _step = 0; // 0 = install, 1 = notifications
   bool _loading = false;
   String _notifStatus = ''; // '' | 'granted' | 'denied' | 'loading'

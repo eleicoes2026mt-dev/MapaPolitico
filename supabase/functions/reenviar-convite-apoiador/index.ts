@@ -3,6 +3,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { assertCanManageApoiador, type ApoiadorRow } from '../_shared/apoiador-gate.ts';
+import {
+  candidatoNomeForApoiadorInvite,
+  displayNameForProfile,
+  inviteUserMetadataApoiador,
+} from '../_shared/invite-metadata.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -109,8 +114,21 @@ serve(async (req) => {
     const isLocalhost = rawRedirect.includes('localhost') || rawRedirect.includes('127.0.0.1');
     const redirectTo = !isLocalhost && rawRedirect ? rawRedirect : (Deno.env.get('REDIRECT_URL') || undefined);
 
+    const { data: callerProfile } = await supabaseAdmin.from('profiles').select('role').eq('id', callerId)
+      .maybeSingle();
+    const callerRole = ((callerProfile as { role?: string } | null)?.role ?? '').trim();
+    const candidatoNome = await candidatoNomeForApoiadorInvite(supabaseAdmin, callerId, callerRole);
+    const convidanteNome = await displayNameForProfile(supabaseAdmin, callerId);
+    const convidantePapel: 'candidato' | 'assessor' = callerRole === 'candidato' ? 'candidato' : 'assessor';
+    const inviteMeta = inviteUserMetadataApoiador({
+      convidadoNome: nome,
+      candidatoNome,
+      convidanteNome,
+      convidantePapel,
+    });
+
     const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: nome, role: 'apoiador' },
+      data: inviteMeta,
       redirectTo,
     });
 

@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { displayNameForProfile, inviteUserMetadataAssessor } from '../_shared/invite-metadata.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -104,8 +105,10 @@ serve(async (req) => {
     const rawRedirect = (body?.redirect_to && String(body.redirect_to).trim()) || '';
     const isLocalhost = rawRedirect.includes('localhost') || rawRedirect.includes('127.0.0.1');
     const redirectTo = !isLocalhost && rawRedirect ? rawRedirect : (Deno.env.get('REDIRECT_URL') || undefined);
+    const candidatoNome = await displayNameForProfile(supabaseAdmin, callerId);
+    const inviteMeta = inviteUserMetadataAssessor({ convidadoNome: nome, candidatoNome });
     const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      data: { full_name: nome },
+      data: inviteMeta,
       redirectTo,
     });
 

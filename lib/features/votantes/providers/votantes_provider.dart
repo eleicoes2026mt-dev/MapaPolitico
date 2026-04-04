@@ -205,7 +205,8 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       'complemento': params.complemento?.trim().isEmpty == true ? null : params.complemento?.trim(),
       if (params.votosPrometidosUltimaEleicao != null)
         'votos_prometidos_ultima_eleicao': params.votosPrometidosUltimaEleicao,
-      if (params.cadastroViaQr || role == 'votante') 'cadastro_via_qr': true,
+      // Só marca na linha quando o perfil veio do link/QR (evita confundir com cadastro pelo candidato).
+      if (params.cadastroViaQr) 'cadastro_via_qr': true,
       if (role == 'candidato') 'cadastrado_pelo_candidato': true,
     };
 

@@ -15,7 +15,6 @@ import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
         cepSoDigitos,
         formatCepDisplayFromDigits,
         formatTelefoneBrFromDigits,
-        parseLegado,
         telefoneSoDigitos;
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/profile.dart';
@@ -342,7 +341,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   late final TextEditingController _logradouro;
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
-  late final TextEditingController _legado;
   /// Chave normalizada (lista `listCidadesMTNomesNormalizados`), igual ao cadastro de apoiadores.
   String? _cidadeNomeNormalizado;
   String? _cidadeErro;
@@ -368,9 +366,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _logradouro = TextEditingController(text: v?.logradouro ?? '');
     _numero = TextEditingController(text: v?.numero ?? '');
     _complemento = TextEditingController(text: v?.complemento ?? '');
-    _legado = TextEditingController(
-      text: v?.votosPrometidosUltimaEleicao != null ? '${v!.votosPrometidosUltimaEleicao}' : '',
-    );
     // Prioridade: nome do join > cidade_nome salvo > vazio
     final cidadeInicial = v?.municipioNome?.trim().isNotEmpty == true
         ? v!.municipioNome!
@@ -434,7 +429,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _logradouro.dispose();
     _numero.dispose();
     _complemento.dispose();
-    _legado.dispose();
     super.dispose();
   }
 
@@ -461,7 +455,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
       final profile = ref.read(profileProvider).valueOrNull;
       final cadastroAvulsoQr = profile?.cadastroViaQr == true;
-      final legadoVal = cadastroAvulsoQr ? null : parseLegado(_legado.text);
       if (widget.existente != null) {
         await ref.read(atualizarVotanteProvider)(
           widget.existente!.id,
@@ -477,8 +470,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
-            votosPrometidosUltimaEleicao: legadoVal,
-            atualizarLegado: !cadastroAvulsoQr,
           ),
         );
       } else {
@@ -497,7 +488,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
-            votosPrometidosUltimaEleicao: legadoVal,
             cadastroViaQr: cadastroAvulsoQr,
           ),
         );
@@ -530,7 +520,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
-    final ocultarLegado = profile?.cadastroViaQr == true;
     final munAsync = ref.watch(municipiosMTListProvider);
     return AlertDialog(
       title: Text(
@@ -697,17 +686,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                     if (widget.existente == null && profile != null) ...[
                       const SizedBox(height: 12),
                       _VinculoCadastroNovoVotante(theme: theme, profile: profile),
-                    ],
-                    if (!ocultarLegado) ...[
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: _legado,
-                        decoration: const InputDecoration(
-                          labelText: 'Votos prometidos na última eleição',
-                          hintText: 'Opcional — referência histórica',
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
                     ],
                     const SizedBox(height: 8),
                     Text(

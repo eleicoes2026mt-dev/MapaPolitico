@@ -72,13 +72,15 @@ Future<void> _mainAsync() async {
         replaceBrowserPath('/login');
         initialLocation = '/login';
       } else {
-      // PKCE: o SDK processa o link em async; forçar troca do `code` antes de ler a sessão
-      // evita cair no login sem sessão (race no primeiro paint).
-      if (uri.queryParameters.containsKey('code')) {
+      // PKCE: [Supabase.initialize] já executa getSessionFromUrl no URL inicial
+      // (supabase_flutter → _handleInitialUri). Chamar de novo aqui consome o
+      // código duas vezes e o Auth devolve otp_expired / «link já usado».
+      if (uri.queryParameters.containsKey('code') &&
+          Supabase.instance.client.auth.currentSession == null) {
         try {
           await Supabase.instance.client.auth.getSessionFromUrl(uri);
         } catch (e) {
-          debugPrint('getSessionFromUrl (PKCE): $e');
+          debugPrint('getSessionFromUrl (PKCE, fallback): $e');
         }
       }
 

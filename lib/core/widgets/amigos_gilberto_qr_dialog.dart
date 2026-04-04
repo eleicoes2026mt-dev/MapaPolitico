@@ -6,15 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config/env_config.dart';
 import '../constants/amigos_gilberto.dart';
+import 'share_cartao_invite.dart';
 
 /// URL pública de cadastro com `?ref=<uuid do perfil convidador>` para rastrear a rede.
 String urlCadastroAmigosGilberto({String? convitePorProfileId}) {
@@ -37,6 +34,49 @@ String _legendaCompartilhamentoComLink({required String url, required String inv
   return '${_mensagemConviteSemUrl(inviterLabel: inviterLabel)}\n\n$url';
 }
 
+/// QR ampliado em ecrã preto (a partir do cartão já em tela cheia).
+void _showQrFullscreenOnly(BuildContext context, String url) {
+  final mq = MediaQuery.of(context);
+  final pad = MediaQuery.paddingOf(context);
+  final maxSide = math.min(
+    mq.size.width - 32,
+    mq.size.height - pad.vertical - kToolbarHeight - 24,
+  );
+  final side = (maxSide * 0.88).clamp(180.0, 560.0);
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (ctx) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          foregroundColor: Colors.white,
+          title: const Text('Código QR'),
+        ),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: QrImageView(
+              data: url,
+              size: side,
+              backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Color(0xFF0D1117),
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Color(0xFF0D1117),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 /// QR e link amarrados ao perfil logado ([inviterProfileId]) para rede de convites.
 void showAmigosGilbertoQrDialog(
   BuildContext context, {
@@ -54,342 +94,18 @@ void showAmigosGilbertoQrDialog(
   final labelConvite = inviterDisplayName?.trim().isNotEmpty == true
       ? inviterDisplayName!.trim()
       : (nomeCartao ?? '');
-  showDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    barrierColor: Colors.black.withValues(alpha: 0.55),
-    builder: (ctx) => _AmigosGilbertoQrInfographic(
-      url: url,
-      candidatePhotoUrl: candidatePhotoUrl,
-      candidateName: nomeCartao,
-      inviterSubtitle: labelConvite.isNotEmpty ? labelConvite : null,
-      inviterLabelForShare: labelConvite,
+  Navigator.of(context, rootNavigator: true).push(
+    MaterialPageRoute<void>(
+      fullscreenDialog: true,
+      builder: (ctx) => _ConviteFullscreenPage(
+        url: url,
+        candidatePhotoUrl: candidatePhotoUrl,
+        candidateName: nomeCartao,
+        inviterSubtitle: labelConvite.isNotEmpty ? labelConvite : null,
+        inviterLabelForShare: labelConvite,
+      ),
     ),
   );
-}
-
-class _AmigosGilbertoQrInfographic extends StatefulWidget {
-  const _AmigosGilbertoQrInfographic({
-    required this.url,
-    this.candidatePhotoUrl,
-    this.candidateName,
-    this.inviterSubtitle,
-    required this.inviterLabelForShare,
-  });
-
-  final String url;
-  final String? candidatePhotoUrl;
-  final String? candidateName;
-  final String? inviterSubtitle;
-  final String inviterLabelForShare;
-
-  static const double _maxDialogWidth = 1400;
-
-  @override
-  State<_AmigosGilbertoQrInfographic> createState() => _AmigosGilbertoQrInfographicState();
-}
-
-class _AmigosGilbertoQrInfographicState extends State<_AmigosGilbertoQrInfographic> {
-  final GlobalKey _exportKey = GlobalKey();
-  bool _exportBusy = false;
-
-  String get _url => widget.url;
-  String get _inviterLabelForShare => widget.inviterLabelForShare;
-
-  /// Captura o cartão em PNG. Usa [Overlay] temporário para garantir pintura (evita
-  /// `debugNeedsPaint` em web com widget fora da viewport).
-  Future<Uint8List?> _captureCartaoPng({double pixelRatio = 2.5}) async {
-    if (!mounted) return null;
-    final overlay = Overlay.of(context, rootOverlay: true);
-    late OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (ctx) => Positioned(
-        left: 0,
-        top: 0,
-        width: 1100,
-        child: IgnorePointer(
-          child: Opacity(
-            opacity: 0.01,
-            child: Material(
-              color: Colors.white,
-              child: RepaintBoundary(
-                key: _exportKey,
-                child: SizedBox(
-                  width: 1100,
-                  child: _ExportCaptureCard(
-                    url: widget.url,
-                    candidatePhotoUrl: widget.candidatePhotoUrl,
-                    candidateName: widget.candidateName,
-                    inviterSubtitle: widget.inviterSubtitle,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    overlay.insert(entry);
-    try {
-      for (var i = 0; i < 8; i++) {
-        await Future<void>.delayed(Duration.zero);
-        await SchedulerBinding.instance.endOfFrame;
-        await Future<void>.delayed(const Duration(milliseconds: 40));
-        if (!mounted) return null;
-        final ctx = _exportKey.currentContext;
-        if (ctx == null || !ctx.mounted) continue;
-        final ro = ctx.findRenderObject();
-        if (ro is! RenderRepaintBoundary) continue;
-        try {
-          final image = await ro.toImage(pixelRatio: pixelRatio);
-          final bd = await image.toByteData(format: ui.ImageByteFormat.png);
-          final out = bd?.buffer.asUint8List();
-          if (out != null && out.isNotEmpty) return out;
-        } catch (_) {
-          await Future<void>.delayed(const Duration(milliseconds: 60));
-        }
-      }
-      return null;
-    } finally {
-      entry.remove();
-    }
-  }
-
-  Future<void> _shareImageAndLink() async {
-    if (_exportBusy) return;
-    setState(() => _exportBusy = true);
-    try {
-      final bytes = await _captureCartaoPng();
-      if (!mounted) return;
-      if (bytes == null || bytes.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível gerar a imagem do cartão. Tente de novo.')),
-        );
-        return;
-      }
-      final caption = _legendaCompartilhamentoComLink(
-        url: _url,
-        inviterLabel: _inviterLabelForShare,
-      );
-      await Share.shareXFiles(
-        [
-          XFile.fromData(
-            bytes,
-            mimeType: 'image/png',
-            name: 'convite_amigos_gilberto.png',
-          ),
-        ],
-        text: caption,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Compartilhamento: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _exportBusy = false);
-    }
-  }
-
-  Future<void> _printCartao() async {
-    if (_exportBusy) return;
-    setState(() => _exportBusy = true);
-    try {
-      final bytes = await _captureCartaoPng(pixelRatio: 3.75);
-      if (!mounted) return;
-      if (bytes == null || bytes.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível gerar a imagem do cartão.')),
-        );
-        return;
-      }
-      final image = pw.MemoryImage(bytes);
-      final doc = pw.Document();
-      doc.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4.landscape,
-          margin: const pw.EdgeInsets.all(14),
-          build: (ctx) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.center,
-            children: [
-              pw.Expanded(
-                child: pw.Center(
-                  child: pw.Image(image, fit: pw.BoxFit.contain),
-                ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text(
-                _url,
-                style: const pw.TextStyle(fontSize: 9),
-                textAlign: pw.TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-      await Printing.layoutPdf(onLayout: (format) async => doc.save());
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('PDF: $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _exportBusy = false);
-    }
-  }
-
-  void _openFullscreen() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        fullscreenDialog: true,
-        builder: (ctx) => _ConviteFullscreenPage(
-          url: widget.url,
-          candidatePhotoUrl: widget.candidatePhotoUrl,
-          candidateName: widget.candidateName,
-          inviterSubtitle: widget.inviterSubtitle,
-          onClose: () => Navigator.of(ctx).pop(),
-          onPrint: _printCartao,
-          onShareImage: _shareImageAndLink,
-          exportBusy: _exportBusy,
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenH = MediaQuery.sizeOf(context).height;
-    final screenW = MediaQuery.sizeOf(context).width;
-    final maxW = (screenW - 24).clamp(320.0, _AmigosGilbertoQrInfographic._maxDialogWidth);
-    final useWideLayout = maxW >= 720;
-
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
-      elevation: 8,
-      shadowColor: Colors.black45,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      clipBehavior: Clip.none,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: maxW,
-              maxHeight: screenH * 0.94,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _HeaderBar(
-                  onClose: () => Navigator.of(context).pop(),
-                  inviterSubtitle: widget.inviterSubtitle,
-                  trailingActions: [
-                    IconButton(
-                      tooltip: 'Tela cheia',
-                      onPressed: _exportBusy ? null : _openFullscreen,
-                      icon: const Icon(Icons.fullscreen_rounded),
-                    ),
-                    IconButton(
-                      tooltip: 'Gerar PDF horizontal (cartão + link)',
-                      onPressed: _exportBusy ? null : _printCartao,
-                      icon: const Icon(Icons.print_outlined),
-                    ),
-                  ],
-                ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(
-                      useWideLayout ? 28 : 18,
-                      20,
-                      useWideLayout ? 28 : 18,
-                      8,
-                    ),
-                    child: useWideLayout
-                        ? _WideBody(
-                            url: widget.url,
-                            candidatePhotoUrl: widget.candidatePhotoUrl,
-                            candidateName: widget.candidateName,
-                            screenW: screenW,
-                          )
-                        : _NarrowBody(
-                            url: widget.url,
-                            candidatePhotoUrl: widget.candidatePhotoUrl,
-                            candidateName: widget.candidateName,
-                            screenW: screenW,
-                          ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_exportBusy)
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 10),
-                          child: Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        ),
-                      FilledButton.icon(
-                        onPressed: () async {
-                          await Clipboard.setData(ClipboardData(text: widget.url));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Link de cadastro copiado.'),
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.link_rounded, size: 20),
-                        label: const Text('Copiar link de cadastro'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      FilledButton.icon(
-                        onPressed: _exportBusy ? null : _shareImageAndLink,
-                        icon: const Icon(Icons.chat_rounded, size: 20),
-                        label: const Text('Compartilhar cartão e link'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'O cartão (imagem) e a mensagem com o link de cadastro vão juntos. Escolha o WhatsApp na lista ao compartilhar.',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Fechar'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Cartão estático (sem animação no QR) para captura PNG / impressão.
@@ -525,168 +241,350 @@ class _QrCardStatic extends StatelessWidget {
   }
 }
 
-class _ConviteFullscreenPage extends StatelessWidget {
+BoxDecoration _conviteFullscreenCardDecoration() {
+  return BoxDecoration(
+    borderRadius: BorderRadius.circular(24),
+    color: Colors.white,
+    border: Border.all(color: const Color(0xFFE0E7EF)),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: 0.18),
+        blurRadius: 32,
+        offset: const Offset(0, 12),
+      ),
+    ],
+  );
+}
+
+class _ConviteFullscreenPage extends StatefulWidget {
   const _ConviteFullscreenPage({
     required this.url,
     this.candidatePhotoUrl,
     this.candidateName,
     this.inviterSubtitle,
-    required this.onClose,
-    required this.onPrint,
-    required this.onShareImage,
-    required this.exportBusy,
+    required this.inviterLabelForShare,
   });
 
   final String url;
   final String? candidatePhotoUrl;
   final String? candidateName;
   final String? inviterSubtitle;
-  final VoidCallback onClose;
-  final VoidCallback onPrint;
-  final VoidCallback onShareImage;
-  final bool exportBusy;
+  final String inviterLabelForShare;
+
+  @override
+  State<_ConviteFullscreenPage> createState() => _ConviteFullscreenPageState();
+}
+
+class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
+  static const Color _bgTop = Color(0xFF0A1628);
+  static const Color _bgBottom = Color(0xFF0D3D5C);
+
+  final GlobalKey _exportKey = GlobalKey();
+  bool _exportBusy = false;
+
+  String get _inviterLabelForShare => widget.inviterLabelForShare;
+
+  /// Captura o cartão em PNG (overlay invisível — necessário para pintura estável na web).
+  Future<Uint8List?> _captureCartaoPng({double pixelRatio = 2.5}) async {
+    if (!mounted) return null;
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (ctx) => Positioned(
+        left: 0,
+        top: 0,
+        width: 1100,
+        child: IgnorePointer(
+          child: Opacity(
+            opacity: 0.01,
+            child: Material(
+              color: Colors.white,
+              child: RepaintBoundary(
+                key: _exportKey,
+                child: SizedBox(
+                  width: 1100,
+                  child: _ExportCaptureCard(
+                    url: widget.url,
+                    candidatePhotoUrl: widget.candidatePhotoUrl,
+                    candidateName: widget.candidateName,
+                    inviterSubtitle: widget.inviterSubtitle,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(entry);
+    try {
+      for (var i = 0; i < 8; i++) {
+        await Future<void>.delayed(Duration.zero);
+        await SchedulerBinding.instance.endOfFrame;
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        if (!mounted) return null;
+        final ctx = _exportKey.currentContext;
+        if (ctx == null || !ctx.mounted) continue;
+        final ro = ctx.findRenderObject();
+        if (ro is! RenderRepaintBoundary) continue;
+        try {
+          final image = await ro.toImage(pixelRatio: pixelRatio);
+          final bd = await image.toByteData(format: ui.ImageByteFormat.png);
+          final out = bd?.buffer.asUint8List();
+          if (out != null && out.isNotEmpty) return out;
+        } catch (_) {
+          await Future<void>.delayed(const Duration(milliseconds: 60));
+        }
+      }
+      return null;
+    } finally {
+      entry.remove();
+    }
+  }
+
+  Future<void> _shareImageAndLink() async {
+    if (_exportBusy) return;
+    setState(() => _exportBusy = true);
+    try {
+      final bytes = await _captureCartaoPng();
+      if (!mounted) return;
+      if (bytes == null || bytes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível gerar a imagem do cartão. Tente de novo.')),
+        );
+        return;
+      }
+      final caption = _legendaCompartilhamentoComLink(
+        url: widget.url,
+        inviterLabel: _inviterLabelForShare,
+      );
+      await shareInvitePngWithCaption(
+        bytes: bytes,
+        caption: caption,
+        fileName: 'convite_amigos_gilberto.png',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Compartilhamento: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportBusy = false);
+    }
+  }
+
+  Future<void> _copyLink() async {
+    await Clipboard.setData(ClipboardData(text: widget.url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Link de cadastro copiado.'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.sizeOf(context).width;
-    final useWideLayout = screenW >= 720;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
+      backgroundColor: _bgTop,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: const Color(0xFF0D2137),
         foregroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Cartão de convite'),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Conexão com a campanha',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.75),
+                    letterSpacing: 0.4,
+                  ),
+            ),
+            Text(
+              'Cartão de convite',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
+        ),
         leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: onClose,
+          icon: const Icon(Icons.close_rounded),
+          tooltip: 'Fechar',
+          onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          if (_exportBusy)
+            const Padding(
+              padding: EdgeInsets.only(right: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+              ),
+            ),
           IconButton(
-            tooltip: 'Gerar PDF horizontal (cartão + link)',
-            onPressed: exportBusy ? null : onPrint,
-            icon: const Icon(Icons.print_outlined),
+            tooltip: 'Copiar link de cadastro',
+            onPressed: _exportBusy ? null : _copyLink,
+            icon: const Icon(Icons.link_rounded),
           ),
           IconButton(
             tooltip: 'Compartilhar cartão e link',
-            onPressed: exportBusy ? null : onShareImage,
-            icon: const Icon(Icons.share_rounded),
+            onPressed: _exportBusy ? null : _shareImageAndLink,
+            icon: const Icon(Icons.ios_share_rounded),
           ),
         ],
       ),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF051923),
-                  Color(0xFF0D47A1),
-                  Color(0xFF0277BD),
-                  Color(0xFF004D6B),
-                ],
-                stops: [0.0, 0.28, 0.62, 1.0],
-              ),
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [_bgTop, _bgBottom],
           ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0.15, -0.55),
-                  radius: 1.15,
-                  colors: [
-                    const Color(0xFF00E5FF).withValues(alpha: 0.28),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    const Color(0xFF000A12).withValues(alpha: 0.45),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.only(
-                top: MediaQuery.paddingOf(context).top + kToolbarHeight + 4,
-                left: 4,
-                right: 4,
-                bottom: MediaQuery.paddingOf(context).bottom + 6,
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final maxW = constraints.maxWidth;
-                  final maxH = constraints.maxHeight;
-                  final cardW = maxW;
-                  return SizedBox(
-                    width: maxW,
-                    height: maxH,
-                    child: FittedBox(
-                      fit: BoxFit.contain,
-                      alignment: Alignment.center,
-                      child: SizedBox(
-                        width: cardW,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(28),
-                            color: Colors.white.withValues(alpha: 0.94),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.45),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.22),
-                                blurRadius: 28,
-                                offset: const Offset(0, 14),
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
-                            child: useWideLayout
-                                ? _WideBody(
-                                    url: url,
-                                    candidatePhotoUrl: candidatePhotoUrl,
-                                    candidateName: candidateName,
-                                    inviterSubtitle: inviterSubtitle,
-                                    screenW: screenW,
-                                    isFullscreen: true,
-                                  )
-                                : _NarrowBody(
-                                    url: url,
-                                    candidatePhotoUrl: candidatePhotoUrl,
-                                    candidateName: candidateName,
-                                    inviterSubtitle: inviterSubtitle,
-                                    screenW: screenW,
-                                    isFullscreen: true,
-                                  ),
-                          ),
-                        ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxW = constraints.maxWidth;
+              final maxH = constraints.maxHeight;
+              final isWide = maxW >= 800;
+              final hPad = maxW >= 1400
+                  ? 48.0
+                  : maxW >= 1000
+                      ? 32.0
+                      : maxW >= 600
+                          ? 20.0
+                          : 12.0;
+              const vPad = 10.0;
+              final innerW = (maxW - 2 * hPad).clamp(280.0, double.infinity);
+              final cardViewportH = math.max(0.0, maxH - 2 * vPad);
+
+              void onQrTap() => _showQrFullscreenOnly(context, widget.url);
+
+              if (!isWide) {
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.fromLTRB(hPad, vPad, hPad, vPad + 8),
+                  child: DecoratedBox(
+                    decoration: _conviteFullscreenCardDecoration(),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 22, 20, 24),
+                      child: _NarrowBody(
+                        url: widget.url,
+                        candidatePhotoUrl: widget.candidatePhotoUrl,
+                        candidateName: widget.candidateName,
+                        inviterSubtitle: widget.inviterSubtitle,
+                        screenW: screenW,
+                        layoutWidth: innerW,
+                        isFullscreen: true,
+                        onQrTap: onQrTap,
                       ),
                     ),
-                  );
-                },
+                  ),
+                );
+              }
+
+              return Padding(
+                padding: EdgeInsets.fromLTRB(hPad, vPad, hPad, vPad),
+                child: DecoratedBox(
+                  decoration: _conviteFullscreenCardDecoration(),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: SizedBox(
+                      height: cardViewportH,
+                      width: double.infinity,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (widget.inviterSubtitle != null &&
+                              widget.inviterSubtitle!.trim().isNotEmpty) ...[
+                            _ConviteInviteBanner(text: widget.inviterSubtitle!.trim()),
+                          ],
+                          Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                24,
+                                widget.inviterSubtitle != null &&
+                                        widget.inviterSubtitle!.trim().isNotEmpty
+                                    ? 8
+                                    : 20,
+                                24,
+                                20,
+                              ),
+                              child: _WideBody(
+                                url: widget.url,
+                                candidatePhotoUrl: widget.candidatePhotoUrl,
+                                candidateName: widget.candidateName,
+                                inviterSubtitle: widget.inviterSubtitle,
+                                screenW: screenW,
+                                layoutWidth: innerW,
+                                isFullscreen: true,
+                                fullscreenDesktopSplit: true,
+                                onQrTap: onQrTap,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ConviteInviteBanner extends StatelessWidget {
+  const _ConviteInviteBanner({required this.text});
+
+  final String text;
+  static const Color _fsBlue = Color(0xFF0D47A1);
+  static const Color _fsBlueMid = Color(0xFF0277BD);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: const Color(0xFFE8F4FC),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
+        child: Row(
+          children: [
+            Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Convite de $text',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  color: _fsBlue,
+                  height: 1.25,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -697,13 +595,11 @@ class _HeaderBar extends StatelessWidget {
     required this.onClose,
     this.inviterSubtitle,
     this.showCloseButton = true,
-    this.trailingActions = const [],
   });
 
   final VoidCallback onClose;
   final String? inviterSubtitle;
   final bool showCloseButton;
-  final List<Widget> trailingActions;
 
   @override
   Widget build(BuildContext context) {
@@ -772,12 +668,6 @@ class _HeaderBar extends StatelessWidget {
               ],
             ),
           ),
-          ...trailingActions.map(
-            (w) => IconTheme(
-              data: IconThemeData(color: cs.onPrimary),
-              child: w,
-            ),
-          ),
           if (showCloseButton)
             IconButton(
               onPressed: onClose,
@@ -793,6 +683,7 @@ class _HeaderBar extends StatelessWidget {
   }
 }
 
+/// Cartão em duas colunas (PC / tela larga): preenche a largura e faz scroll por coluna se precisar.
 class _WideBody extends StatelessWidget {
   const _WideBody({
     required this.url,
@@ -801,6 +692,9 @@ class _WideBody extends StatelessWidget {
     this.candidateName,
     this.inviterSubtitle,
     this.isFullscreen = false,
+    this.layoutWidth,
+    this.fullscreenDesktopSplit = false,
+    this.onQrTap,
   });
 
   final String url;
@@ -809,6 +703,9 @@ class _WideBody extends StatelessWidget {
   final String? candidateName;
   final String? inviterSubtitle;
   final bool isFullscreen;
+  final double? layoutWidth;
+  final bool fullscreenDesktopSplit;
+  final VoidCallback? onQrTap;
 
   static const Color _fsBlue = Color(0xFF0D47A1);
   static const Color _fsBlueMid = Color(0xFF0277BD);
@@ -819,15 +716,128 @@ class _WideBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fs = isFullscreen;
+    final lw = layoutWidth ?? screenW;
+
+    if (fullscreenDesktopSplit && fs) {
+      final qrSize = math.min(340.0, math.max(210.0, lw * 0.17));
+      final photoMax = math.min(340.0, math.max(220.0, lw * 0.23));
+
+      final nameStyle = theme.textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w800,
+        fontSize: lw >= 1100 ? 24 : 22,
+        color: _fsBlue,
+        height: 1.2,
+      );
+
+      final taglineStyle = theme.textTheme.bodyLarge?.copyWith(
+        fontSize: lw >= 1100 ? 18.5 : 17.5,
+        height: 1.5,
+        color: _captionStrong,
+        fontWeight: FontWeight.w600,
+      );
+
+      final benefitsTitle = theme.textTheme.titleSmall?.copyWith(
+        fontWeight: FontWeight.w800,
+        fontSize: lw >= 1100 ? 19.5 : 18.5,
+        color: _fsBlue,
+        height: 1.35,
+      );
+
+      final scanLabel = theme.textTheme.labelLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.15,
+        fontSize: 16.5,
+        color: _fsBlueMid,
+      );
+
+      final footerStyle = theme.textTheme.bodySmall?.copyWith(
+        fontSize: 13.5,
+        color: _captionMuted,
+        fontStyle: FontStyle.italic,
+        fontWeight: FontWeight.w500,
+      );
+
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 42,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(right: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _CandidatePhotoBlock(
+                    imageUrl: candidatePhotoUrl,
+                    name: candidateName,
+                    maxWidth: photoMax,
+                    nameStyle: nameStyle,
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
+                    style: taglineStyle,
+                    textAlign: TextAlign.left,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            flex: 58,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(left: 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Ao cadastrar-se com e-mail válido, a pessoa passa a ter acesso a:',
+                    style: benefitsTitle,
+                  ),
+                  const SizedBox(height: 14),
+                  _benefitsTwoByTwo(context, dense: false),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Escaneie o código ou compartilhe o link de cadastro',
+                    textAlign: TextAlign.right,
+                    style: scanLabel,
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _QrCard(
+                      url: url,
+                      size: qrSize,
+                      onTap: onQrTap,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _LinkBlock(url: url, theme: theme, emphasize: true),
+                  const SizedBox(height: 10),
+                  Text(
+                    'O cadastro exige e-mail para acesso seguro ao painel.',
+                    textAlign: TextAlign.center,
+                    style: footerStyle,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
     final qrSize = fs
-        ? math.min(440.0, math.max(320.0, screenW * 0.38))
+        ? math.min(288.0, math.max(220.0, screenW * 0.26))
         : (screenW < 900 ? 220.0 : 260.0);
 
     final nameStyle = fs
-        ? theme.textTheme.headlineSmall?.copyWith(
+        ? theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w800,
+            fontSize: 22,
             color: _fsBlue,
-            height: 1.15,
+            height: 1.2,
           )
         : theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
@@ -835,48 +845,48 @@ class _WideBody extends StatelessWidget {
           );
 
     final taglineStyle = theme.textTheme.bodyLarge?.copyWith(
-      fontSize: fs ? 21 : 17,
-      height: 1.45,
+      fontSize: fs ? 17.5 : 17,
+      height: 1.5,
       color: fs ? _captionStrong : _captionMuted,
-      fontWeight: FontWeight.w700,
+      fontWeight: fs ? FontWeight.w600 : FontWeight.w700,
     );
 
     final benefitsTitle = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w800,
-      fontSize: fs ? 22 : 17,
+      fontSize: fs ? 18.5 : 17,
       color: _fsBlue,
-      height: 1.25,
+      height: 1.35,
     );
 
     final scanLabel = theme.textTheme.labelLarge?.copyWith(
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0.2,
-      fontSize: fs ? 19 : 16,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 0.15,
+      fontSize: fs ? 16.5 : 16,
       color: _fsBlueMid,
     );
 
     final footerStyle = theme.textTheme.bodySmall?.copyWith(
-      fontSize: fs ? 16 : 13.5,
+      fontSize: fs ? 13.5 : 13.5,
       color: _captionMuted,
       fontStyle: FontStyle.italic,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w500,
     );
 
     final mainRow = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          flex: fs ? 34 : 38,
+          flex: fs ? 42 : 38,
           child: Column(
             crossAxisAlignment: fs ? CrossAxisAlignment.start : CrossAxisAlignment.center,
             children: [
               _CandidatePhotoBlock(
                 imageUrl: candidatePhotoUrl,
                 name: candidateName,
-                maxWidth: fs ? 400 : 300,
+                maxWidth: fs ? 280 : 300,
                 nameStyle: nameStyle,
               ),
-              SizedBox(height: fs ? 22 : 18),
+              SizedBox(height: fs ? 18 : 18),
               Text(
                 'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
                 style: taglineStyle,
@@ -885,9 +895,9 @@ class _WideBody extends StatelessWidget {
             ],
           ),
         ),
-        SizedBox(width: fs ? 28 : 24),
+        SizedBox(width: fs ? 24 : 24),
         Expanded(
-          flex: fs ? 66 : 62,
+          flex: fs ? 58 : 62,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -895,25 +905,29 @@ class _WideBody extends StatelessWidget {
                 'Ao cadastrar-se com e-mail válido, a pessoa passa a ter acesso a:',
                 style: benefitsTitle,
               ),
-              SizedBox(height: fs ? 18 : 14),
+              SizedBox(height: fs ? 16 : 14),
               _benefitsTwoByTwo(context, dense: !fs),
-              SizedBox(height: fs ? 22 : 20),
+              SizedBox(height: fs ? 20 : 20),
               Text(
                 'Escaneie o código ou compartilhe o link de cadastro',
                 textAlign: TextAlign.right,
                 style: scanLabel,
               ),
-              SizedBox(height: fs ? 14 : 12),
+              SizedBox(height: fs ? 12 : 12),
               SizedBox(
                 width: double.infinity,
                 child: Align(
                   alignment: Alignment.centerRight,
-                  child: _QrCard(url: url, size: qrSize),
+                  child: _QrCard(
+                    url: url,
+                    size: qrSize,
+                    onTap: onQrTap,
+                  ),
                 ),
               ),
-              SizedBox(height: fs ? 18 : 14),
+              SizedBox(height: fs ? 16 : 14),
               _LinkBlock(url: url, theme: theme, emphasize: true),
-              SizedBox(height: fs ? 10 : 6),
+              SizedBox(height: fs ? 12 : 6),
               Text(
                 'O cadastro exige e-mail para acesso seguro ao painel.',
                 textAlign: TextAlign.center,
@@ -931,21 +945,22 @@ class _WideBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Material(
-            color: const Color(0xFFE3F2FD),
-            borderRadius: BorderRadius.circular(14),
+            color: const Color(0xFFE8F4FC),
+            borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: fs ? 26 : 22),
+                  Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Convite de $inv',
-                      style: theme.textTheme.titleMedium?.copyWith(
+                      style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w800,
-                        fontSize: fs ? 20 : null,
+                        fontSize: 16,
                         color: _fsBlue,
+                        height: 1.25,
                       ),
                     ),
                   ),
@@ -953,7 +968,7 @@ class _WideBody extends StatelessWidget {
               ),
             ),
           ),
-          SizedBox(height: fs ? 22 : 0),
+          SizedBox(height: fs ? 20 : 0),
           mainRow,
         ],
       );
@@ -971,6 +986,8 @@ class _NarrowBody extends StatelessWidget {
     this.candidateName,
     this.inviterSubtitle,
     this.isFullscreen = false,
+    this.layoutWidth,
+    this.onQrTap,
   });
 
   final String url;
@@ -979,6 +996,8 @@ class _NarrowBody extends StatelessWidget {
   final String? candidateName;
   final String? inviterSubtitle;
   final bool isFullscreen;
+  final double? layoutWidth;
+  final VoidCallback? onQrTap;
 
   static const Color _fsBlue = Color(0xFF0D47A1);
   static const Color _fsBlueMid = Color(0xFF0277BD);
@@ -989,14 +1008,17 @@ class _NarrowBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fs = isFullscreen;
+    final w = layoutWidth ?? screenW;
     final qrSize = fs
-        ? math.min(360.0, math.max(280.0, screenW * 0.82))
+        ? math.min(300.0, math.max(215.0, w * 0.72))
         : (screenW < 400 ? 220.0 : 248.0);
 
     final nameStyle = fs
         ? theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
+            fontSize: 21,
             color: _fsBlue,
+            height: 1.2,
           )
         : theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w700,
@@ -1004,27 +1026,27 @@ class _NarrowBody extends StatelessWidget {
           );
 
     final taglineStyle = theme.textTheme.bodyLarge?.copyWith(
-      fontSize: fs ? 17.5 : 16,
-      height: 1.45,
+      fontSize: fs ? 16.5 : 16,
+      height: 1.5,
       color: _captionStrong,
       fontWeight: FontWeight.w600,
     );
 
     final benefitsTitle = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w700,
-      fontSize: fs ? 18.5 : 16.5,
+      fontSize: fs ? 17.5 : 16.5,
       color: _fsBlue,
     );
 
     final scanLabel = theme.textTheme.labelLarge?.copyWith(
       fontWeight: FontWeight.w700,
-      letterSpacing: 0.2,
-      fontSize: fs ? 16.5 : 15,
+      letterSpacing: 0.15,
+      fontSize: fs ? 15.5 : 15,
       color: _fsBlueMid,
     );
 
     final footerStyle = theme.textTheme.bodySmall?.copyWith(
-      fontSize: fs ? 14 : 12.5,
+      fontSize: fs ? 13 : 12.5,
       color: _captionMuted,
       fontStyle: FontStyle.italic,
       fontWeight: FontWeight.w500,
@@ -1037,21 +1059,22 @@ class _NarrowBody extends StatelessWidget {
       children: [
         if (fs && inv != null && inv.isNotEmpty) ...[
           Material(
-            color: const Color(0xFFE3F2FD),
-            borderRadius: BorderRadius.circular(14),
+            color: const Color(0xFFE8F4FC),
+            borderRadius: BorderRadius.circular(12),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 26),
+                  Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'Convite de $inv',
                       style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
                         color: _fsBlue,
+                        height: 1.25,
                       ),
                     ),
                   ),
@@ -1059,13 +1082,13 @@ class _NarrowBody extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
         ],
         Center(
           child: _CandidatePhotoBlock(
             imageUrl: candidatePhotoUrl,
             name: candidateName,
-            maxWidth: fs ? 300 : 260,
+            maxWidth: fs ? 268 : 260,
             nameStyle: nameStyle,
           ),
         ),
@@ -1111,7 +1134,13 @@ class _NarrowBody extends StatelessWidget {
           style: scanLabel,
         ),
         SizedBox(height: fs ? 18 : 14),
-        Center(child: _QrCard(url: url, size: qrSize)),
+        Center(
+          child: _QrCard(
+            url: url,
+            size: qrSize,
+            onTap: onQrTap,
+          ),
+        ),
         SizedBox(height: fs ? 18 : 14),
         _LinkBlock(url: url, theme: theme, emphasize: true),
         SizedBox(height: fs ? 10 : 8),
@@ -1274,10 +1303,15 @@ class _CandidatePhotoBlock extends StatelessWidget {
 
 /// QR com anel animado (gradiente azul/ciano rotativo) por trás do cartão branco.
 class _QrCard extends StatefulWidget {
-  const _QrCard({required this.url, required this.size});
+  const _QrCard({
+    required this.url,
+    required this.size,
+    this.onTap,
+  });
 
   final String url;
   final double size;
+  final VoidCallback? onTap;
 
   @override
   State<_QrCard> createState() => _QrCardState();
@@ -1308,7 +1342,7 @@ class _QrCardState extends State<_QrCard> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     final total = widget.size + 2 * _innerPad + 2 * _ring;
 
-    return DecoratedBox(
+    Widget core = DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
         boxShadow: [
@@ -1389,6 +1423,26 @@ class _QrCardState extends State<_QrCard> with SingleTickerProviderStateMixin {
         ),
       ),
     );
+
+    final tap = widget.onTap;
+    if (tap != null) {
+      core = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Tooltip(
+          message: 'Abrir em tela cheia',
+          child: Semantics(
+            button: true,
+            label: 'Abrir em tela cheia',
+            child: GestureDetector(
+              onTap: tap,
+              behavior: HitTestBehavior.opaque,
+              child: core,
+            ),
+          ),
+        ),
+      );
+    }
+    return core;
   }
 }
 

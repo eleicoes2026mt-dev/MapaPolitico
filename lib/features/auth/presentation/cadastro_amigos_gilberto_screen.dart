@@ -115,6 +115,9 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
       municipioIdResolvido ??=
           municipioIdParaNomeCidade(displayNomeCidadeMT(_cidadeNomeNormalizado!), municipios);
       final cidadeTexto = displayNomeCidadeMT(_cidadeNomeNormalizado!);
+      if (cidadeTexto.trim().isEmpty) {
+        throw Exception('Cidade inválida. Selecione o município novamente e salve.');
+      }
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
 
       await ref.read(atualizarVotanteProvider)(
@@ -276,8 +279,10 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
                                 selectedCidadeKey: _cidadeNomeNormalizado,
                                 cidadeErro: _cidadeErro,
                                 onCidadeSelected: (k) => setState(() {
-                                  _cidadeNomeNormalizado = k;
-                                  _cidadeErro = null;
+                                  if (k != null && k.trim().isNotEmpty) {
+                                    _cidadeNomeNormalizado = k;
+                                    _cidadeErro = null;
+                                  }
                                 }),
                                 abrangencia: _abrangencia,
                                 onAbrangenciaChanged: (novo) => setState(() {

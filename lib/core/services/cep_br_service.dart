@@ -31,6 +31,8 @@ Future<CepBrResult?> fetchCepBr(String cepDigits) async {
     final city = (j['city'] as String?)?.trim() ?? '';
     final uf = (j['state'] as String?)?.trim() ?? '';
     if (city.isEmpty && street.isEmpty) return null;
+    // Sem cidade na BrasilAPI: tentar ViaCEP (evita localidade vazia e perda de vínculo com MT).
+    if (city.isEmpty) return null;
     return CepBrResult(
       logradouro: street,
       complemento: null,

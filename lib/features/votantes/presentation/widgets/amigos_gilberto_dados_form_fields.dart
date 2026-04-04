@@ -97,8 +97,12 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
           }
         }
       });
+      // Não sobrescreve o município já escolhido no picker (evita apagar cidade ao completar o CEP).
       if (chave != null) {
-        widget.onCidadeSelected(chave);
+        final jaEscolhido = widget.selectedCidadeKey?.trim();
+        if (jaEscolhido == null || jaEscolhido.isEmpty) {
+          widget.onCidadeSelected(chave);
+        }
       }
     } finally {
       if (mounted) setState(() => _cepLoading = false);
@@ -220,7 +224,8 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
                     ),
                   )
                 : null,
-            helperText: 'Preenche rua, complemento e cidade (MT) ao concluir o CEP.',
+            helperText:
+                'Ao concluir o CEP, preenche rua e complemento; a cidade do mapa só é definida pelo CEP se você ainda não tiver escolhido o município.',
           ),
           keyboardType: TextInputType.number,
           inputFormatters: [CepInputFormatter()],

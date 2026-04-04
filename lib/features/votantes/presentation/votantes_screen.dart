@@ -563,8 +563,10 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                   selectedCidadeKey: _cidadeNomeNormalizado,
                   cidadeErro: _cidadeErro,
                   onCidadeSelected: (k) => setState(() {
-                    _cidadeNomeNormalizado = k;
-                    _cidadeErro = null;
+                    if (k != null && k.trim().isNotEmpty) {
+                      _cidadeNomeNormalizado = k;
+                      _cidadeErro = null;
+                    }
                   }),
                   abrangencia: _abrangencia,
                   onAbrangenciaChanged: (novo) => setState(() {

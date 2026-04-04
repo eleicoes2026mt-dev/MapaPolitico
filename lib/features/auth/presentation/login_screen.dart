@@ -28,8 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSavedLogin();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final msg = takePendingAuthErrorMessage();
       if (msg != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -39,6 +38,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         );
       }
+      await _loadSavedLogin();
+      if (!mounted) return;
+      try {
+        final email = GoRouterState.of(context).uri.queryParameters['email'];
+        if (email != null && email.isNotEmpty) {
+          setState(() => _emailController.text = email);
+        }
+      } catch (_) {}
     });
   }
 

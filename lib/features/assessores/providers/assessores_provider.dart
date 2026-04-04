@@ -167,8 +167,8 @@ Future<String?> convidarAssessor({
     if (telefone != null && telefone.isNotEmpty) 'telefone': telefone.trim(),
     if (municipioId != null && municipioId.isNotEmpty) 'municipio_id': municipioId,
   };
-  // Sempre usar URL do app em produção no convite (evita link localhost no e-mail)
-  body['redirect_to'] = EnvConfig.appUrl;
+  // Abre direto na tela de definir senha após o clique no e-mail (path URL + Redirect URLs no Supabase).
+  body['redirect_to'] = EnvConfig.webInviteRedirectTo;
   final res = await supabase.functions.invoke('convidar-assessor', body: body);
   if (res.status == 401) {
     throw Exception(
@@ -199,7 +199,7 @@ Future<String?> reenviarConviteAssessor(Assessor assessor) async {
   try {
     final body = <String, dynamic>{
       'assessor_id': assessor.id,
-      'redirect_to': EnvConfig.appUrl,
+      'redirect_to': EnvConfig.webInviteRedirectTo,
     };
     final res = await supabase.functions.invoke('reenviar-convite-assessor', body: body);
     if (res.status == 401) {

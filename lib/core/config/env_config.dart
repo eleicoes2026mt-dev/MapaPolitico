@@ -53,8 +53,13 @@ class EnvConfig {
   static String get supabaseRedirectOrigin =>
       appUrl.replaceAll(RegExp(r'/+$'), '');
 
-  /// Web + hash router: onde o GoRouter deve abrir após o clique no e-mail de **reset**.
+  /// Web (path URL): após o clique no e-mail de **reset** de senha.
   /// Adiciona em Supabase → Authentication → URL Configuration → Redirect URLs.
   static String get webPasswordRecoveryRedirectTo =>
-      '$supabaseRedirectOrigin/#/redefinir-senha';
+      '$supabaseRedirectOrigin/redefinir-senha';
+
+  /// Web: após aceitar **convite** (assessor/apoiador). O utilizador já tem sessão
+  /// provisória e só define senha em [CompletarCadastroScreen].
+  /// Incluir esta URL exata nas Redirect URLs do Supabase (produção e localhost).
+  static String get webInviteRedirectTo => '$supabaseRedirectOrigin/completar-cadastro';
 }

@@ -331,7 +331,7 @@ Future<String?> convidarApoiadorPorEmail({required String apoiadorId}) async {
   try {
     final body = <String, dynamic>{
       'apoiador_id': apoiadorId,
-      'redirect_to': EnvConfig.appUrl,
+      'redirect_to': EnvConfig.webInviteRedirectTo,
     };
     final res = await supabase.functions.invoke('convidar-apoiador', body: body);
     if (res.status == 401) {
@@ -363,7 +363,7 @@ Future<String?> reenviarConviteApoiador({required String apoiadorId}) async {
   try {
     final body = <String, dynamic>{
       'apoiador_id': apoiadorId,
-      'redirect_to': EnvConfig.appUrl,
+      'redirect_to': EnvConfig.webInviteRedirectTo,
     };
     final res = await supabase.functions.invoke('reenviar-convite-apoiador', body: body);
     if (res.status == 401) throw Exception('Sessão expirada.');

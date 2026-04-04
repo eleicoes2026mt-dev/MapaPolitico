@@ -12,21 +12,28 @@ import 'core/auth/jwt_recovery.dart'
     show accessTokenIndicatesInvite, accessTokenIndicatesPasswordRecovery;
 import 'core/auth/supabase_auth_fragment.dart';
 import 'core/bootstrap/arcgis_environment.dart';
+import 'core/bootstrap/url_strategy_noop.dart'
+    if (dart.library.html) 'core/bootstrap/url_strategy_web.dart' as url_strategy;
 import 'core/config/env_config.dart';
 import 'core/router/app_router.dart';
 import 'core/services/pwa_service.dart';
 import 'core/theme/app_theme.dart';
 
-/// Fragmento `#access_token=...` ou `#/login?access_token=...` (hash router).
-Map<String, String> _queryParamsFromHashFragment(String frag) {
+/// Parâmetros no fragmento: `access_token=...`, `error=...` ou `#/rota?error=...`.
+Map<String, String> _fragmentQueryParams(String frag) {
   if (frag.isEmpty) return {};
   final q = frag.indexOf('?');
   final query = q >= 0 ? frag.substring(q + 1) : frag;
+  if (q < 0 && frag.startsWith('/') && !frag.contains('=')) return {};
   try {
     return Uri.splitQueryString(query);
   } catch (_) {
     return {};
   }
+}
+
+Map<String, String> _queryParamsFromHashFragment(String frag) {
+  return _fragmentQueryParams(frag);
 }
 
 void main() {
@@ -41,6 +48,7 @@ void main() {
 
 Future<void> _mainAsync() async {
   WidgetsFlutterBinding.ensureInitialized();
+  url_strategy.configureWebUrlStrategyIfNeeded();
   initArcgisEnvironment();
   if (kIsWeb) PwaService.instance.init();
   await Supabase.initialize(
@@ -48,20 +56,38 @@ Future<void> _mainAsync() async {
     anonKey: EnvConfig.supabaseAnonKey,
   );
 
-  /// Convite / magic link: na **web** o Supabase coloca tokens ou erros em `#fragmento`.
-  /// Se não limparmos o fragmento, o GoRouter trata `error=access_denied&...` como rota → "Page Not Found".
+  /// Convite / magic link (web): tokens em `?code=` (PKCE) ou no `#fragmento` (implicit).
+  /// Erros também vêm no fragmento — limpar a URL para o GoRouter não tratar como rota.
   String? initialLocation;
   try {
     if (kIsWeb) {
       final uri = currentUriWithFragment();
-      // PKCE (reset de senha): `?code=` é trocado no [Supabase.initialize]. O hash pode
-      // continuar `#/apoiadores` (sessão antiga / restauração) — forçar tela de nova senha.
-      final sess = Supabase.instance.client.auth.currentSession;
-      if (uri.queryParameters.containsKey('code') && sess != null) {
-        if (accessTokenIndicatesPasswordRecovery(sess.accessToken)) {
+
+      // Erro na query string (sem `code`) — ex.: redirect inválido ou link já usado.
+      if ((uri.queryParameters.containsKey('error') ||
+              uri.queryParameters.containsKey('error_code')) &&
+          !uri.queryParameters.containsKey('code')) {
+        final msg = messageForSupabaseAuthFragment(uri.queryParameters);
+        storePendingAuthErrorMessage(msg);
+        replaceBrowserPath('/login');
+        initialLocation = '/login';
+      } else {
+      // PKCE: o SDK processa o link em async; forçar troca do `code` antes de ler a sessão
+      // evita cair no login sem sessão (race no primeiro paint).
+      if (uri.queryParameters.containsKey('code')) {
+        try {
+          await Supabase.instance.client.auth.getSessionFromUrl(uri);
+        } catch (e) {
+          debugPrint('getSessionFromUrl (PKCE): $e');
+        }
+      }
+
+      final sessAfterCode = Supabase.instance.client.auth.currentSession;
+      if (uri.queryParameters.containsKey('code') && sessAfterCode != null) {
+        if (accessTokenIndicatesPasswordRecovery(sessAfterCode.accessToken)) {
           replaceBrowserPath('/redefinir-senha');
           initialLocation = '/redefinir-senha';
-        } else if (accessTokenIndicatesInvite(sess.accessToken)) {
+        } else if (accessTokenIndicatesInvite(sessAfterCode.accessToken)) {
           replaceBrowserPath('/completar-cadastro');
           initialLocation = '/completar-cadastro';
         }
@@ -69,14 +95,14 @@ Future<void> _mainAsync() async {
 
       final frag = uri.fragment;
       if (frag.isNotEmpty) {
-        final params = Uri.splitQueryString(frag);
-        if (params.containsKey('error')) {
+        final params = _fragmentQueryParams(frag);
+        if (params.containsKey('error') || params.containsKey('error_code')) {
           final msg = messageForSupabaseAuthFragment(params);
           storePendingAuthErrorMessage(msg);
           replaceBrowserPath('/login');
           initialLocation = '/login';
         } else if (frag.contains('access_token') || frag.contains('refresh_token')) {
-          // Sair da sessão anterior (ex.: deputado no mesmo browser) antes de aplicar o convite.
+          // Sair da sessão anterior (ex.: deputado no mesmo browser) antes de aplicar o convite (implicit).
           try {
             await Supabase.instance.client.auth.signOut();
           } catch (_) {}
@@ -102,6 +128,7 @@ Future<void> _mainAsync() async {
             }
           }
         }
+      }
       }
     } else {
       final Uri? uri = await AppLinks().getInitialLink();

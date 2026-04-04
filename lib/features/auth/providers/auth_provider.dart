@@ -12,12 +12,46 @@ final currentUserProvider = Provider<User?>((ref) {
   return ref.watch(authStateProvider).valueOrNull;
 });
 
+/// Busca [profiles] do utilizador. Se não existir linha (trigger de signup falhou),
+/// cria uma mínima por upsert (RLS: `id` = [User.id]) e volta a ler.
+Future<Profile?> fetchProfileForUser(User user) async {
+  Map<String, dynamic>? row;
+  try {
+    final data = await supabase.from('profiles').select().eq('id', user.id).maybeSingle();
+    if (data != null) {
+      row = Map<String, dynamic>.from(data);
+    }
+  } on PostgrestException {
+    rethrow;
+  }
+
+  if (row == null) {
+    final email = user.email ?? '';
+    final metaName = user.userMetadata?['full_name']?.toString().trim();
+    final fullName = (metaName != null && metaName.isNotEmpty)
+        ? metaName
+        : (email.contains('@') ? email.split('@').first : 'Usuário');
+    await supabase.from('profiles').upsert(
+      {
+        'id': user.id,
+        if (email.isNotEmpty) 'email': email,
+        'full_name': fullName,
+        'ativo': true,
+      },
+      onConflict: 'id',
+    );
+    final again = await supabase.from('profiles').select().eq('id', user.id).maybeSingle();
+    if (again == null) return null;
+    row = Map<String, dynamic>.from(again);
+  }
+
+  return Profile.fromJson(row);
+}
+
 final profileProvider = FutureProvider<Profile?>((ref) async {
   final user = ref.watch(currentUserProvider);
   if (user == null) return null;
-  final data = await supabase.from('profiles').select().eq('id', user.id).maybeSingle();
-  if (data == null) return null;
-  return Profile.fromJson(data);
+  return fetchProfileForUser(user);
 });
 
 class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
@@ -38,16 +72,18 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
 
   Future<void> _loadProfile(String uid) async {
     try {
-      final data = await _client.from('profiles').select().eq('id', uid).maybeSingle();
-      if (data != null) {
-        final ativo = data['ativo'] as bool? ?? true;
-        if (!ativo) {
-          await _client.auth.signOut();
-          state = const AsyncValue.data(null);
-          return;
-        }
+      final user = _client.auth.currentUser;
+      if (user == null || user.id != uid) {
+        state = const AsyncValue.data(null);
+        return;
       }
-      state = AsyncValue.data(data != null ? Profile.fromJson(data) : null);
+      final profile = await fetchProfileForUser(user);
+      if (profile != null && !profile.ativo) {
+        await _client.auth.signOut();
+        state = const AsyncValue.data(null);
+        return;
+      }
+      state = AsyncValue.data(profile);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -58,14 +94,13 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
     await _client.auth.signInWithPassword(email: email, password: password);
     final user = _client.auth.currentUser;
     if (user != null) {
-      final data = await _client.from('profiles').select().eq('id', user.id).maybeSingle();
-      final ativo = data?['ativo'] as bool? ?? true;
-      if (!ativo) {
+      final profile = await fetchProfileForUser(user);
+      if (profile != null && !profile.ativo) {
         await _client.auth.signOut();
         state = const AsyncValue.data(null);
         throw Exception('Sua conta foi desativada. Procure o candidato da campanha.');
       }
-      state = AsyncValue.data(data != null ? Profile.fromJson(data) : null);
+      state = AsyncValue.data(profile);
     }
   }
 

@@ -10,7 +10,8 @@ import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
 import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
     show cepSoDigitos, telefoneSoDigitos;
 import '../../votantes/presentation/widgets/amigos_gilberto_dados_form_fields.dart';
-import '../../votantes/providers/votantes_provider.dart' show refreshMunicipiosMTList, votantesListProvider;
+import '../../votantes/providers/votantes_provider.dart'
+    show AtualizarVotanteParams, atualizarVotanteProvider, refreshMunicipiosMTList, votantesListProvider;
 import '../providers/auth_provider.dart';
 
 /// Página pública: mesmo conjunto de dados do painel «Novo — Amigos do Gilberto» + senha para login.
@@ -90,19 +91,6 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
     final refConv = GoRouterState.of(context).uri.queryParameters['ref']?.trim();
 
     try {
-      await ref.read(authNotifierProvider.notifier).signUp(
-            email,
-            _passwordController.text,
-            fullName: _nomeController.text.trim().isEmpty ? null : _nomeController.text.trim(),
-            cadastroAmigosGilberto: true,
-            convitePorProfileId: (refConv != null && refConv.isNotEmpty) ? refConv : null,
-          );
-
-      final user = supabase.auth.currentUser;
-      if (user == null) {
-        throw Exception('Sessão não iniciada após cadastro. Tente entrar com e-mail e senha.');
-      }
-
       final municipios = await refreshMunicipiosMTList(ref);
       var municipioIdResolvido = municipioIdParaNomeCidade(_cidadeNomeNormalizado, municipios);
       municipioIdResolvido ??=
@@ -111,9 +99,66 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
       if (cidadeTexto.trim().isEmpty) {
         throw Exception('Cidade inválida. Selecione o município novamente e salve.');
       }
+
+      final hasSession = await ref.read(authNotifierProvider.notifier).signUp(
+            email,
+            _passwordController.text,
+            fullName: _nomeController.text.trim().isEmpty ? null : _nomeController.text.trim(),
+            cadastroAmigosGilberto: true,
+            convitePorProfileId: (refConv != null && refConv.isNotEmpty) ? refConv : null,
+            amigosCidadeNome: cidadeTexto,
+            amigosMunicipioId: municipioIdResolvido,
+          );
+
+      // Sem JWT (confirmação de e-mail obrigatória): cidade já foi gravada no trigger handle_new_user.
+      if (!hasSession) {
+        if (!mounted) return;
+        setState(() => _loading = false);
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            icon: Icon(
+              Icons.mark_email_unread_outlined,
+              color: Theme.of(ctx).colorScheme.primary,
+              size: 48,
+            ),
+            title: const Text('Cadastro recebido'),
+            content: const Text(
+              'Abra o link que enviamos ao seu e-mail para confirmar a conta. '
+              'Sua cidade e dados na campanha já foram registrados.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Ir para o login'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        context.go('/login?email=${Uri.encodeComponent(email)}');
+        return;
+      }
+
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        throw Exception('Sessão não iniciada após cadastro. Tente entrar com e-mail e senha.');
+      }
+
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
 
-      // RPC no servidor: ensure + UPDATE em votantes (SECURITY DEFINER; parâmetros com DEFAULT no banco cobrem JSON sem chaves null).
+      Future<bool> cidadeJaSalva() async {
+        final confirmacao = await supabase
+            .from('votantes')
+            .select('cidade_nome')
+            .eq('profile_id', user.id)
+            .maybeSingle();
+        final salvo = (confirmacao?['cidade_nome'] as String?)?.trim();
+        return salvo != null && salvo.isNotEmpty;
+      }
+
+      // RPC no servidor (reforço); trigger já pode ter gravado cidade via metadata.
       try {
         await supabase.rpc(
           'finalize_votante_amigos_cadastro',
@@ -132,16 +177,32 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
           },
         );
       } on PostgrestException catch (e) {
-        throw Exception(e.message.isNotEmpty ? e.message : 'Não foi possível salvar cidade e dados.');
+        if (!await cidadeJaSalva()) {
+          throw Exception(e.message.isNotEmpty ? e.message : 'Não foi possível salvar cidade e dados.');
+        }
       }
 
-      final confirmacao = await supabase
-          .from('votantes')
-          .select('cidade_nome')
-          .eq('profile_id', user.id)
-          .maybeSingle();
-      final salvo = (confirmacao?['cidade_nome'] as String?)?.trim();
-      if (salvo == null || salvo.isEmpty) {
+      if (!await cidadeJaSalva()) {
+        final rowV = await supabase.from('votantes').select('id').eq('profile_id', user.id).maybeSingle();
+        final vid = rowV?['id'] as String?;
+        if (vid != null) {
+          await ref.read(atualizarVotanteProvider)(vid, AtualizarVotanteParams(
+                nome: _nomeController.text.trim(),
+                cidadeNome: cidadeTexto,
+                municipioId: municipioIdResolvido,
+                telefone: telefoneSoDigitos(_telefone.text).isEmpty ? null : telefoneSoDigitos(_telefone.text),
+                email: email,
+                abrangencia: _abrangencia,
+                qtdVotosFamilia: qtd < 1 ? 1 : qtd,
+                cep: cepSoDigitos(_cep.text).isEmpty ? null : cepSoDigitos(_cep.text),
+                logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
+                numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
+                complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+              ));
+        }
+      }
+
+      if (!await cidadeJaSalva()) {
         throw Exception(
           'A cidade não foi registrada no servidor. Confirme a conexão, tente novamente ou avise o candidato.',
         );

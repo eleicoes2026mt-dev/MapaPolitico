@@ -136,12 +136,17 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
     }
   }
 
-  Future<void> signUp(
+  /// Retorna `true` se a sessão foi estabelecida (ex.: sem confirmação de e-mail).
+  /// Com confirmação obrigatória, retorna `false` — a cidade em Amigos do Gilberto deve ir no metadata
+  /// (`amigos_cidade_nome` / `amigos_municipio_id`) para o trigger `handle_new_user` gravar em `votantes`.
+  Future<bool> signUp(
     String email,
     String password, {
     String? fullName,
     bool cadastroAmigosGilberto = false,
     String? convitePorProfileId,
+    String? amigosCidadeNome,
+    String? amigosMunicipioId,
   }) async {
     clearProfileRoleCache();
     final data = <String, dynamic>{};
@@ -154,13 +159,25 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
     if (cp != null && cp.isNotEmpty) {
       data['convite_por'] = cp;
     }
-    await _client.auth.signUp(
+    final c = amigosCidadeNome?.trim();
+    if (c != null && c.isNotEmpty) {
+      data['amigos_cidade_nome'] = c;
+    }
+    final mid = amigosMunicipioId?.trim();
+    if (mid != null && mid.isNotEmpty) {
+      data['amigos_municipio_id'] = mid;
+    }
+    final res = await _client.auth.signUp(
       email: email,
       password: password,
       data: data.isEmpty ? null : data,
     );
-    final user = _client.auth.currentUser;
-    if (user != null) await _loadProfile(user.id);
+    if (res.session != null) {
+      final u = res.user ?? _client.auth.currentUser;
+      if (u != null) await _loadProfile(u.id);
+      return true;
+    }
+    return false;
   }
 
   Future<void> signOut() async {

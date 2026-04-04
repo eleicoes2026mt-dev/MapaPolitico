@@ -173,6 +173,7 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
                               try {
                                 await promoverACandidato();
                                 ref.invalidate(profileProvider);
+                                await ref.read(profileProvider.future);
                                 ref.invalidate(assessoresListProvider);
                                 if (!mounted) return;
                                 messenger.showSnackBar(

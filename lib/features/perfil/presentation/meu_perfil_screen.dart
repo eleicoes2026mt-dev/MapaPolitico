@@ -15,6 +15,7 @@ import '../../assessores/providers/assessores_provider.dart'
         meuAssessorRegistroProvider;
 import 'widgets/bandeira_apoiador_editor.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../../core/router/profile_role_cache.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../providers/perfil_provider.dart';
 
@@ -47,6 +48,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
   bool _uploadingImage = false;
   String? _error;
   bool _prefilled = false;
+  String? _prefillSignature;
 
   @override
   void initState() {
@@ -55,6 +57,11 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
     _phoneController = TextEditingController();
     _partidoController = TextEditingController();
     _numeroController = TextEditingController();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      clearProfileRoleCache();
+      ref.invalidate(profileProvider);
+    });
   }
 
   @override
@@ -161,6 +168,11 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
         final email = profile?.email ?? currentUser.email ?? '';
         final role = profile?.role ?? 'votante';
         final isCandidato = role == 'candidato';
+        final sig = '${profile?.id ?? ''}|$role';
+        if (_prefillSignature != sig) {
+          _prefillSignature = sig;
+          _prefilled = false;
+        }
         if (!_prefilled) {
           _prefilled = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {

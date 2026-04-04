@@ -35,13 +35,23 @@ class Profile {
     this.lastAccessApoiadoresAt,
   });
 
+  /// Normaliza o papel vindo do PostgREST (`app_role` → string).
+  static String roleFromJson(dynamic raw) {
+    if (raw == null) return 'votante';
+    final s = raw.toString().trim().toLowerCase();
+    if (s.isEmpty) return 'votante';
+    // Alguns painéis/editores mostram rótulo em inglês; o enum real é PT.
+    if (s == 'candidate') return 'candidato';
+    return s;
+  }
+
   factory Profile.fromJson(Map<String, dynamic> json) {
     return Profile(
       id: json['id'] as String,
       fullName: json['full_name'] as String?,
       email: json['email'] as String?,
       phone: json['phone'] as String?,
-      role: json['role'] as String,
+      role: roleFromJson(json['role']),
       invitedBy: json['invited_by'] as String?,
       regionalPoloId: json['regional_polo_id'] as String?,
       avatarUrl: json['avatar_url'] as String?,

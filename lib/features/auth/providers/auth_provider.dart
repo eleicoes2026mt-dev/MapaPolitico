@@ -66,7 +66,14 @@ Future<Profile?> fetchProfileForUser(User user) async {
     row = Map<String, dynamic>.from(again);
   }
 
-  return Profile.fromJson(row);
+  final profile = Profile.fromJson(row);
+  // Garante linha em votantes (Amigos do Gilberto) se o trigger do signup não tiver corrido.
+  if (profile.role == 'votante' && profile.cadastroViaQr) {
+    try {
+      await supabase.rpc('ensure_votante_amigos_cadastro');
+    } catch (_) {}
+  }
+  return profile;
 }
 
 final profileProvider = FutureProvider<Profile?>((ref) async {

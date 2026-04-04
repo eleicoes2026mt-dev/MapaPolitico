@@ -1,4 +1,5 @@
 // Lógica partilhada: quem pode convidar / reenviar convite a um apoiador.
+// Usa a mesma regra que public.app_assessor_ids_do_candidato() (RLS) via RPC.
 import { type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export type ApoiadorRow = {
@@ -9,13 +10,25 @@ export type ApoiadorRow = {
   email: string | null;
 };
 
-/** [candidatoId, ...perfis com invited_by = candidatoId] — igual à regra do candidato na UI. */
-export async function getCandidatoTeamProfileIds(
+/** IDs em assessores.id da campanha do candidato (alinhado a app_assessor_ids_do_candidato / RLS). */
+async function assessorIdsForCandidatoCampaign(
   supabaseAdmin: SupabaseClient,
-  candidatoId: string
-): Promise<string[]> {
-  const { data: inv } = await supabaseAdmin.from('profiles').select('id').eq('invited_by', candidatoId);
-  return [candidatoId, ...((inv ?? []) as { id: string }[]).map((x) => x.id)];
+  candidatoProfileId: string
+): Promise<{ ids: string[]; error: string | null }> {
+  const { data, error } = await supabaseAdmin.rpc('app_assessor_ids_for_candidato_profile', {
+    p_candidato: candidatoProfileId,
+  });
+  if (error) {
+    console.error('app_assessor_ids_for_candidato_profile', error);
+    return { ids: [], error: error.message ?? String(error) };
+  }
+  const ids = (data ?? []) as string[];
+  return { ids, error: null };
+}
+
+function isAssessorRowInCampaign(assessorRowId: string, campaignAssessorIds: string[]): boolean {
+  const a = String(assessorRowId);
+  return campaignAssessorIds.some((id) => String(id) === a);
 }
 
 /** Sobe invited_by até encontrar perfil com role candidato. */
@@ -36,21 +49,6 @@ export async function resolveCandidatoIdFromUserProfile(
     current = row.invited_by;
   }
   return null;
-}
-
-export async function apoiadorAssessorIsInProfileSet(
-  supabaseAdmin: SupabaseClient,
-  assessorIdOfApoiador: string,
-  profileIds: string[]
-): Promise<boolean> {
-  if (profileIds.length === 0) return false;
-  const { data: row } = await supabaseAdmin
-    .from('assessores')
-    .select('id')
-    .eq('id', assessorIdOfApoiador)
-    .in('profile_id', profileIds)
-    .maybeSingle();
-  return !!row;
 }
 
 export type ApoiadorGateOptions = {
@@ -77,18 +75,32 @@ export async function assertCanManageApoiador(
   const assessorIdOfApoiador = apoiador.assessor_id;
 
   if (role === 'candidato') {
-    const teamIds = await getCandidatoTeamProfileIds(supabaseAdmin, callerId);
-    const ok = await apoiadorAssessorIsInProfileSet(supabaseAdmin, assessorIdOfApoiador, teamIds);
-    if (!ok) return { ok: false, status: 403, error: 'Este apoiador não pertence à sua campanha' };
-    return { ok: true };
+    const { ids, error: rpcErr } = await assessorIdsForCandidatoCampaign(supabaseAdmin, callerId);
+    if (rpcErr) {
+      return {
+        ok: false,
+        status: 500,
+        error:
+          'Falha ao validar permissão da campanha. Confirme se a migração app_assessor_ids_for_candidato_profile foi aplicada no projeto.',
+      };
+    }
+    if (isAssessorRowInCampaign(assessorIdOfApoiador, ids)) return { ok: true };
+    return { ok: false, status: 403, error: 'Este apoiador não pertence à sua campanha' };
   }
 
   if (role === 'assessor') {
     const candidatoId = await resolveCandidatoIdFromUserProfile(supabaseAdmin, callerId);
     if (candidatoId) {
-      const teamIds = await getCandidatoTeamProfileIds(supabaseAdmin, candidatoId);
-      const inTeam = await apoiadorAssessorIsInProfileSet(supabaseAdmin, assessorIdOfApoiador, teamIds);
-      if (inTeam) return { ok: true };
+      const { ids, error: rpcErr } = await assessorIdsForCandidatoCampaign(supabaseAdmin, candidatoId);
+      if (rpcErr) {
+        return {
+          ok: false,
+          status: 500,
+          error:
+            'Falha ao validar permissão da campanha. Confirme se a migração app_assessor_ids_for_candidato_profile foi aplicada no projeto.',
+        };
+      }
+      if (isAssessorRowInCampaign(assessorIdOfApoiador, ids)) return { ok: true };
       return { ok: false, status: 403, error: 'Este apoiador não pertence à sua campanha' };
     }
     // Perfil assessor sem cadeia até candidato: mantém regra antiga (só o responsável direto).

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/assessor.dart';
@@ -35,6 +37,64 @@ String messageFromException(Object e) {
   } catch (_) {}
   if (e is Exception) return e.toString().replaceFirst('Exception: ', '');
   return e.toString();
+}
+
+/// Converte retorno de [SupabaseClient.rpc] (jsonb) em mapa, mesmo quando vier
+/// como `Map` genérico, JSON em string ou lista com um único objeto.
+Map<String, dynamic> _coerceRpcJsonbResult(dynamic res) {
+  if (res == null) {
+    return {};
+  }
+  if (res is Map<String, dynamic>) {
+    return res;
+  }
+  if (res is Map) {
+    return Map<String, dynamic>.from(
+      res.map((k, v) => MapEntry(k.toString(), v)),
+    );
+  }
+  if (res is String) {
+    final s = res.trim();
+    if (s.isEmpty) {
+      return {};
+    }
+    try {
+      return _coerceRpcJsonbResult(jsonDecode(s));
+    } catch (_) {
+      return {'error': s};
+    }
+  }
+  if (res is List && res.isNotEmpty) {
+    return _coerceRpcJsonbResult(res.first);
+  }
+  return {'error': 'Resposta inválida do servidor (${res.runtimeType}).'};
+}
+
+bool _rpcOkFlag(dynamic v) =>
+    v == true || v == 1 || v?.toString().toLowerCase() == 'true';
+
+/// Garante [profiles] com `id` = usuário atual (RLS: linha própria). Cobre falha
+/// do trigger `handle_new_user` e ambientes sem migração mais recente da RPC.
+Future<void> _ensureMeuProfileRowNoCliente(User user) async {
+  final email = user.email ?? '';
+  final metaName = user.userMetadata?['full_name']?.toString().trim();
+  final fullName = (metaName != null && metaName.isNotEmpty)
+      ? metaName
+      : (email.contains('@') ? email.split('@').first : 'Usuário');
+
+  try {
+    await supabase.from('profiles').upsert(
+      {
+        'id': user.id,
+        if (email.isNotEmpty) 'email': email,
+        'full_name': fullName,
+        'ativo': true,
+      },
+      onConflict: 'id',
+    );
+  } on PostgrestException catch (e) {
+    throw Exception(messageFromException(e));
+  }
 }
 
 /// Registro completo do assessor logado (endereço, etc.).
@@ -192,11 +252,35 @@ Future<void> setAssessorAtivo({required String assessorId, required bool ativo})
 /// Usa RPC no Postgres (migração `promover_candidato_se_vazio`); não depende da Edge Function deployada.
 Future<void> promoverACandidato() async {
   await supabase.auth.refreshSession();
-  final res = await supabase.rpc('promover_candidato_se_vazio');
-  if (res is Map) {
-    final err = res['error'];
-    if (err != null) {
-      throw Exception(err is String ? err : err.toString());
+  final user = supabase.auth.currentUser;
+  if (user == null) {
+    throw Exception('Sessão inválida. Faça login novamente.');
+  }
+
+  await _ensureMeuProfileRowNoCliente(user);
+
+  dynamic raw;
+  try {
+    raw = await supabase.rpc('promover_candidato_se_vazio');
+  } on PostgrestException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+
+  final map = _coerceRpcJsonbResult(raw);
+  final err = map['error'];
+  if (err != null) {
+    throw Exception(err is String ? err : err.toString());
+  }
+  if (!_rpcOkFlag(map['ok'])) {
+    final m = map['message']?.toString() ?? '';
+    if (m.contains('Acesso Candidato ativado')) {
+      // Resposta legada sem campo `ok`
+    } else {
+      throw Exception(
+        m.isNotEmpty
+            ? m
+            : 'O servidor não confirmou a ativação. Rode as migrações Supabase mais recentes e tente de novo.',
+      );
     }
   }
   clearProfileRoleCache();

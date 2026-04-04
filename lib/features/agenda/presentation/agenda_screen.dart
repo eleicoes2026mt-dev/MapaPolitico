@@ -1,13 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-
+import '../../../core/config/env_config.dart';
+import '../../../core/geo/lat_lng.dart' as app_geo;
+import '../../../core/services/cep_br_service.dart';
+import '../../../core/services/google_places_service.dart';
+import '../../../core/services/maps_navigation_service.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../../models/municipio.dart';
 import '../../../models/visita.dart';
+import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
+    show CepInputFormatter, cepSoDigitos, formatCepDisplayFromDigits;
 import '../../auth/providers/auth_provider.dart';
 import '../../votantes/providers/votantes_provider.dart';
+import '../../mapa/data/mt_municipios_coords.dart' show getCoordsMunicipioMT;
 import '../providers/agenda_provider.dart';
+import 'agenda_map_picker_sheet.dart';
+import 'agenda_municipio_picker_sheet.dart';
 
 class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
@@ -19,6 +31,58 @@ class AgendaScreen extends ConsumerStatefulWidget {
 class _AgendaScreenState extends ConsumerState<AgendaScreen> {
   DateTime _mesSelecionado = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime? _diaSelecionado;
+  final Set<String> _presencaIgnorados = {};
+  bool _presencaDialogEmExibicao = false;
+
+  Future<void> _mostrarDialogPresenca(Visita v) async {
+    if (!mounted || _presencaDialogEmExibicao) return;
+    if (_presencaIgnorados.contains(v.id)) return;
+    _presencaDialogEmExibicao = true;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar presença'),
+        content: Text(
+          'Confirma presença na visita "${v.titulo}" (${v.dataHoraFormatada})'
+          '${v.municipioNome != null ? ' em ${v.municipioNome}.' : '.'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _presencaIgnorados.add(v.id);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Agora não'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              try {
+                await supabase.rpc('registrar_presenca_visita', params: {'p_reuniao_id': v.id});
+                if (ctx.mounted) Navigator.pop(ctx);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Presença registrada. Obrigado!')),
+                  );
+                }
+                ref.invalidate(visitaPendenteConfirmacaoProvider);
+                ref.invalidate(visitasProvider);
+                ref.invalidate(proximaVisitaMinhaCidadeProvider);
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Não foi possível confirmar: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirmar presença'),
+          ),
+        ],
+      ),
+    );
+    _presencaDialogEmExibicao = false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +90,15 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     final profile = ref.watch(profileProvider).valueOrNull;
     final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
     final isApoiador = profile?.role == 'apoiador';
+    final isAssessor = profile?.role == 'assessor';
+
+    ref.listen<AsyncValue<Visita?>>(visitaPendenteConfirmacaoProvider, (prev, next) {
+      next.whenData((v) {
+        if (v == null) return;
+        if (_presencaIgnorados.contains(v.id)) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _mostrarDialogPresenca(v));
+      });
+    });
 
     final visitasAsync = podeEditar
         ? ref.watch(todasVisitasProvider)
@@ -38,6 +111,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
         ref.invalidate(visitasProvider);
         ref.invalidate(todasVisitasProvider);
         ref.invalidate(proximaVisitaMinhaCidadeProvider);
+        ref.invalidate(visitaPendenteConfirmacaoProvider);
         await Future.any([
           ref.read(visitasProvider.future).then((_) {}).onError((_, __) {}),
           ref.read(todasVisitasProvider.future).then((_) {}).onError((_, __) {}),
@@ -161,6 +235,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 itemBuilder: (_, i) => _VisitaCard(
                   visita: filtradas[i],
                   podeEditar: podeEditar,
+                  mostrarRotas: isApoiador || isAssessor,
                   onEdit: () => _abrirFormulario(context, existente: filtradas[i]),
                   onDelete: () => _confirmarExcluir(context, filtradas[i]),
                   onNotificar: () => _notificar(filtradas[i]),
@@ -229,6 +304,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     if (ok != true || !mounted) return;
 
     try {
+      await supabase.auth.refreshSession();
       final r = await supabase.functions.invoke('send-push', body: {
         'title': '📅 Visita: ${v.municipioNome ?? v.titulo}',
         'body':
@@ -418,6 +494,7 @@ class _VisitaCard extends StatelessWidget {
   const _VisitaCard({
     required this.visita,
     required this.podeEditar,
+    required this.mostrarRotas,
     required this.onEdit,
     required this.onDelete,
     required this.onNotificar,
@@ -425,6 +502,7 @@ class _VisitaCard extends StatelessWidget {
 
   final Visita visita;
   final bool podeEditar;
+  final bool mostrarRotas;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onNotificar;
@@ -514,13 +592,13 @@ class _VisitaCard extends StatelessWidget {
                           ],
                         ),
                       ],
-                      if (visita.hora != null && visita.hora!.isNotEmpty) ...[
+                      if (visita.horaExibicao.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Row(
                           children: [
                             Icon(Icons.access_time_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
                             const SizedBox(width: 4),
-                            Text(visita.hora!, style: theme.textTheme.bodySmall),
+                            Text(visita.horaExibicao, style: theme.textTheme.bodySmall),
                           ],
                         ),
                       ],
@@ -554,6 +632,10 @@ class _VisitaCard extends StatelessWidget {
                             style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                           ),
                         ),
+                      if (mostrarRotas) ...[
+                        const SizedBox(height: 10),
+                        _RotasVisitaBar(visita: visita),
+                      ],
                     ],
                   ),
                 ),
@@ -575,6 +657,79 @@ class _VisitaCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RotasVisitaBar extends StatelessWidget {
+  const _RotasVisitaBar({required this.visita});
+  final Visita visita;
+
+  Future<void> _abrirGoogle(BuildContext context) async {
+    if (visita.localLat != null && visita.localLng != null) {
+      final ok = await openGoogleMapsDestination(
+        lat: visita.localLat!,
+        lng: visita.localLng!,
+      );
+      if (!context.mounted || ok) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível abrir o Google Maps.')),
+      );
+      return;
+    }
+    final partes = <String>[
+      if (visita.localTexto != null && visita.localTexto!.trim().isNotEmpty) visita.localTexto!.trim(),
+      if (visita.municipioNome != null && visita.municipioNome!.trim().isNotEmpty) visita.municipioNome!.trim(),
+      'MT',
+    ];
+    if (partes.length <= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sem endereço ou coordenadas para abrir o mapa.')),
+      );
+      return;
+    }
+    final ok = await openGoogleMapsSearchQuery(partes.join(', '));
+    if (!context.mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Não foi possível abrir o Google Maps.')),
+    );
+  }
+
+  Future<void> _abrirWaze(BuildContext context) async {
+    if (visita.localLat == null || visita.localLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Waze precisa das coordenadas do ponto. Peça ao candidato para marcar o local no mapa ao agendar a visita.',
+          ),
+        ),
+      );
+      return;
+    }
+    final ok = await openWazeDestination(lat: visita.localLat!, lng: visita.localLng!);
+    if (!context.mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Não foi possível abrir o Waze.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => _abrirGoogle(context),
+          icon: const Icon(Icons.map_outlined, size: 18),
+          label: const Text('Google Maps'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _abrirWaze(context),
+          icon: const Icon(Icons.navigation_outlined, size: 18),
+          label: const Text('Waze'),
+        ),
+      ],
     );
   }
 }
@@ -633,6 +788,8 @@ class _ProximaVisitaBanner extends StatelessWidget {
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onPrimaryContainer),
                   ),
                 ],
+                const SizedBox(height: 12),
+                _RotasVisitaBar(visita: visita),
               ],
             ),
           ),
@@ -652,36 +809,116 @@ class _VisitaFormDialog extends ConsumerStatefulWidget {
   ConsumerState<_VisitaFormDialog> createState() => _VisitaFormDialogState();
 }
 
+TimeOfDay? _parseHoraVisita(String? s) {
+  if (s == null || s.trim().isEmpty) return null;
+  final parts = s.trim().split(':');
+  final h = int.tryParse(parts[0].trim());
+  if (h == null) return null;
+  final m = parts.length > 1 ? int.tryParse(parts[1].trim()) ?? 0 : 0;
+  return TimeOfDay(hour: h.clamp(0, 23), minute: m.clamp(0, 59));
+}
+
+String? _horaVisitaParaSalvar(TimeOfDay? t) {
+  if (t == null) return null;
+  final h = t.hour.toString().padLeft(2, '0');
+  final m = t.minute.toString().padLeft(2, '0');
+  return '$h:$m';
+}
+
 class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titulo;
   late final TextEditingController _local;
   late final TextEditingController _descricao;
-  late final TextEditingController _hora;
+  final _localFocus = FocusNode();
   DateTime? _data;
+  TimeOfDay? _horaTd;
   String? _municipioIdSelecionado;
+  double? _localLat;
+  double? _localLng;
   bool _visivelApoiadores = true;
   bool _loading = false;
+  Timer? _placesDebounce;
+  List<PlacePrediction> _sugestoesPlaces = [];
+  bool _placesCarregando = false;
+  late final String _placesSessionToken;
+
+  void _onLocalFocusChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void initState() {
     super.initState();
+    _localFocus.addListener(_onLocalFocusChanged);
+    _placesSessionToken =
+        '${DateTime.now().microsecondsSinceEpoch}_${identityHashCode(this)}';
     final v = widget.existente;
     _titulo = TextEditingController(text: v?.titulo ?? '');
     _local = TextEditingController(text: v?.localTexto ?? '');
     _descricao = TextEditingController(text: v?.descricao ?? '');
-    _hora = TextEditingController(text: v?.hora ?? '');
+    _horaTd = _parseHoraVisita(v?.hora);
     _data = v?.dataReuniao;
     _municipioIdSelecionado = v?.municipioId;
     _visivelApoiadores = v?.visivelApoiadores ?? true;
+    _localLat = v?.localLat;
+    _localLng = v?.localLng;
+    _local.addListener(_onLocalTextChanged);
+  }
+
+  void _onLocalTextChanged() {
+    _placesDebounce?.cancel();
+    final text = _local.text.trim();
+    if (text.length < 3) {
+      if (_sugestoesPlaces.isNotEmpty) setState(() => _sugestoesPlaces = []);
+      return;
+    }
+    if (EnvConfig.googleMapsApiKey.trim().isEmpty) return;
+    _placesDebounce = Timer(const Duration(milliseconds: 420), () async {
+      if (!mounted) return;
+      setState(() => _placesCarregando = true);
+      GooglePlacesMunicipioContext? ctx;
+      final mid = _municipioIdSelecionado;
+      if (mid != null) {
+        final munList = ref.read(municipiosMTListProvider).valueOrNull;
+        if (munList != null) {
+          for (final m in munList) {
+            if (m.id == mid) {
+              final c = getCoordsMunicipioMT(m.nome);
+              if (c != null) {
+                ctx = GooglePlacesMunicipioContext(
+                  centerLat: c.latitude,
+                  centerLng: c.longitude,
+                  municipioNome: m.nome,
+                );
+              }
+              break;
+            }
+          }
+        }
+      }
+      final list = await fetchGooglePlacePredictions(
+        text,
+        sessionToken: _placesSessionToken,
+        municipioContext: ctx,
+      );
+      if (!mounted) return;
+      setState(() {
+        _placesCarregando = false;
+        _sugestoesPlaces = list.take(8).toList();
+      });
+    });
   }
 
   @override
   void dispose() {
+    _placesDebounce?.cancel();
+    _local.removeListener(_onLocalTextChanged);
+    _localFocus.removeListener(_onLocalFocusChanged);
     _titulo.dispose();
     _local.dispose();
     _descricao.dispose();
-    _hora.dispose();
+    _localFocus.dispose();
     super.dispose();
   }
 
@@ -696,8 +933,10 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
       final params = NovaVisitaParams(
         titulo: _titulo.text.trim(),
         dataReuniao: _data!,
-        hora: _hora.text.trim().isEmpty ? null : _hora.text.trim(),
+        hora: _horaVisitaParaSalvar(_horaTd),
         localTexto: _local.text.trim().isEmpty ? null : _local.text.trim(),
+        localLat: _localLat,
+        localLng: _localLng,
         descricao: _descricao.text.trim().isEmpty ? null : _descricao.text.trim(),
         municipioId: _municipioIdSelecionado,
         visivelApoiadores: _visivelApoiadores,
@@ -732,72 +971,378 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     if (picked != null) setState(() => _data = picked);
   }
 
+  Future<void> _selecionarHora() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _horaTd ?? const TimeOfDay(hour: 9, minute: 0),
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) setState(() => _horaTd = picked);
+  }
+
+  String _rotuloCidade(List<Municipio> municipios) {
+    if (_municipioIdSelecionado == null) return 'Sem cidade específica';
+    for (final m in municipios) {
+      if (m.id == _municipioIdSelecionado) return m.nome;
+    }
+    return 'Município selecionado';
+  }
+
+  Future<void> _abrirPickerCidade(List<Municipio> municipios) async {
+    final res = await showAgendaMunicipioPickerSheet(
+      context,
+      municipios: municipios,
+      municipioIdSelecionado: _municipioIdSelecionado,
+    );
+    if (!mounted || res == null) return;
+    setState(() => _municipioIdSelecionado = res.municipioId);
+    if (!res.openMapPicker || res.municipioId == null) return;
+
+    Municipio? mun;
+    for (final m in municipios) {
+      if (m.id == res.municipioId) {
+        mun = m;
+        break;
+      }
+    }
+    if (mun == null || !mounted) return;
+
+    final coords = getCoordsMunicipioMT(mun.nome);
+    final center = coords != null
+        ? app_geo.LatLng(coords.latitude, coords.longitude)
+        : const app_geo.LatLng(-15.6014, -56.0979);
+
+    final mapRes = await showAgendaMapPickerSheet(
+      context,
+      initialCenter: center,
+      municipioNome: mun.nome,
+      searchBiasSuffix: ', ${mun.nome}, MT, Brasil',
+      initialSearchText: _local.text.trim().isEmpty ? null : _local.text.trim(),
+    );
+    if (mounted && mapRes != null && mapRes.addressLabel.trim().isNotEmpty) {
+      setState(() {
+        _local.text = mapRes.addressLabel.trim();
+        _localLat = mapRes.lat;
+        _localLng = mapRes.lng;
+      });
+    }
+  }
+
+  Future<void> _buscarPorCep() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Buscar endereço por CEP'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            labelText: 'CEP',
+            hintText: '00000-000',
+          ),
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          inputFormatters: [CepInputFormatter()],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Buscar')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final d = cepSoDigitos(ctrl.text);
+    ctrl.dispose();
+    if (d.length != 8) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CEP inválido.')));
+      return;
+    }
+    final r = await fetchCepBr(d);
+    if (!mounted) return;
+    if (r == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('CEP não encontrado.')));
+      return;
+    }
+    final linha = [
+      if (r.logradouro.isNotEmpty) r.logradouro,
+      if (r.bairro != null && r.bairro!.isNotEmpty) r.bairro,
+      '${r.localidade} — ${r.uf}',
+      if (formatCepDisplayFromDigits(r.cep).isNotEmpty) 'CEP ${formatCepDisplayFromDigits(r.cep)}',
+    ].join(', ');
+    setState(() {
+      _local.text = linha;
+      _sugestoesPlaces = [];
+      _localLat = null;
+      _localLng = null;
+    });
+    FocusScope.of(context).unfocus();
+  }
+
+  Future<void> _aplicarSugestaoPlace(PlacePrediction p) async {
+    setState(() => _placesCarregando = true);
+    final d = await fetchGooglePlaceDetailsLatLng(p.placeId);
+    if (!mounted) return;
+    setState(() {
+      _placesCarregando = false;
+      _local.text = (d != null ? d.primaryLabel : p.description).trim();
+      _localLat = d?.lat;
+      _localLng = d?.lng;
+      _sugestoesPlaces = [];
+    });
+    _localFocus.unfocus();
+  }
+
+  Future<void> _abrirMapaSelecionarLocal(List<Municipio> municipios) async {
+    var center = const app_geo.LatLng(-15.6014, -56.0979);
+    var nomeContexto = 'Mato Grosso';
+    var bias = ', Mato Grosso, Brasil';
+    if (_municipioIdSelecionado != null) {
+      for (final m in municipios) {
+        if (m.id == _municipioIdSelecionado) {
+          nomeContexto = m.nome;
+          final c = getCoordsMunicipioMT(m.nome);
+          if (c != null) center = app_geo.LatLng(c.latitude, c.longitude);
+          bias = ', ${m.nome}, MT, Brasil';
+          break;
+        }
+      }
+    }
+    final res = await showAgendaMapPickerSheet(
+      context,
+      initialCenter: center,
+      municipioNome: nomeContexto,
+      searchBiasSuffix: bias,
+      initialSearchText: _local.text.trim().isEmpty ? null : _local.text.trim(),
+    );
+    if (mounted && res != null && res.addressLabel.trim().isNotEmpty) {
+      setState(() {
+        _local.text = res.addressLabel.trim();
+        _localLat = res.lat;
+        _localLng = res.lng;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final munAsync = ref.watch(municipiosMTListProvider);
+    final temPlacesKey = EnvConfig.googleMapsApiKey.trim().isNotEmpty;
 
     return AlertDialog(
-      title: Text(widget.existente != null ? 'Editar Visita' : 'Nova Visita'),
+      title: Row(
+        children: [
+          Icon(Icons.event_available_outlined, color: theme.colorScheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(widget.existente != null ? 'Editar visita' : 'Nova visita'),
+          ),
+        ],
+      ),
       content: SizedBox(
-        width: 440,
+        width: 480,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 TextFormField(
                   controller: _titulo,
-                  decoration: const InputDecoration(labelText: 'Título *'),
+                  decoration: const InputDecoration(
+                    labelText: 'Título *',
+                    border: OutlineInputBorder(),
+                  ),
                   textCapitalization: TextCapitalization.sentences,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,
                 ),
-                const SizedBox(height: 12),
-                // Data
-                InkWell(
-                  onTap: _selecionarData,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Data *',
-                      suffixIcon: Icon(Icons.calendar_today_outlined),
+                const SizedBox(height: 16),
+                Text('Data e horário', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Material(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          onTap: _selecionarData,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Data *',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              suffixIcon: Icon(Icons.calendar_today_outlined),
+                            ),
+                            child: Text(
+                              _data != null ? DateFormat('dd/MM/yyyy').format(_data!) : 'Selecionar',
+                              style: theme.textTheme.bodyLarge,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                    child: Text(
-                      _data != null ? DateFormat('dd/MM/yyyy').format(_data!) : 'Selecione a data',
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Material(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          onTap: _selecionarHora,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Horário',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              suffixIcon: Icon(Icons.schedule_outlined),
+                            ),
+                            child: Text(
+                              _horaTd != null
+                                  ? '${_horaTd!.hour.toString().padLeft(2, '0')}:${_horaTd!.minute.toString().padLeft(2, '0')}'
+                                  : 'Selecionar',
+                              style: theme.textTheme.bodyLarge,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, left: 4),
+                  child: Text(
+                    'Horário opcional • seletor em formato 24 horas.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
+                if (_horaTd != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => setState(() => _horaTd = null),
+                      child: const Text('Remover horário'),
+                    ),
+                  ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _hora,
-                  decoration: const InputDecoration(labelText: 'Horário (ex.: 09:00)', prefixIcon: Icon(Icons.access_time_outlined)),
-                  keyboardType: TextInputType.datetime,
-                ),
-                const SizedBox(height: 12),
-                // Município
+                Text('Cidade', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
                 munAsync.when(
-                  data: (municipios) => DropdownButtonFormField<String?>(
-                    value: _municipioIdSelecionado,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Cidade', prefixIcon: Icon(Icons.location_city_outlined)),
-                    items: [
-                      const DropdownMenuItem(value: null, child: Text('Sem cidade específica')),
-                      ...municipios.map((m) => DropdownMenuItem(value: m.id, child: Text(m.nome, overflow: TextOverflow.ellipsis))),
-                    ],
-                    onChanged: (v) => setState(() => _municipioIdSelecionado = v),
-                  ),
+                  data: (municipios) {
+                    final ordenados = List<Municipio>.from(municipios)
+                      ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+                    return Material(
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        leading: const Icon(Icons.location_city_outlined),
+                        title: Text(_rotuloCidade(ordenados)),
+                        subtitle: const Text('Toque para buscar na lista A–Z'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _abrirPickerCidade(ordenados),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    );
+                  },
                   loading: () => const LinearProgressIndicator(),
-                  error: (_, __) => const SizedBox.shrink(),
+                  error: (_, __) => const Text('Erro ao carregar municípios'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+                Text('Local do encontro', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(
+                  temPlacesKey
+                      ? 'Digite no campo ou use «Escolher no mapa» para buscar o lugar e marcar o ponto.'
+                      : 'Sem chave Google, a busca no mapa usa OpenStreetMap. CEP continua disponível.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _local,
-                  decoration: const InputDecoration(labelText: 'Local (rua, endereço, nome do estabelecimento)', prefixIcon: Icon(Icons.place_outlined)),
+                  focusNode: _localFocus,
+                  decoration: InputDecoration(
+                    labelText: 'Endereço, ponto de referência ou estabelecimento',
+                    hintText: 'Ex.: Rua Principal ou nome do comércio',
+                    prefixIcon: const Icon(Icons.place_outlined),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _placesCarregando
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
+                  ),
+                  minLines: 1,
+                  maxLines: 3,
                   textCapitalization: TextCapitalization.sentences,
                 ),
-                const SizedBox(height: 12),
+                if (_sugestoesPlaces.isNotEmpty && _localFocus.hasFocus)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Material(
+                      elevation: 3,
+                      borderRadius: BorderRadius.circular(10),
+                      clipBehavior: Clip.antiAlias,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _sugestoesPlaces.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, i) {
+                            final p = _sugestoesPlaces[i];
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(Icons.location_searching, size: 20, color: theme.colorScheme.primary),
+                              title: Text(p.description, maxLines: 2, overflow: TextOverflow.ellipsis),
+                              onTap: () => _aplicarSugestaoPlace(p),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _buscarPorCep,
+                      icon: const Icon(Icons.pin_outlined, size: 18),
+                      label: const Text('Buscar por CEP'),
+                    ),
+                    munAsync.maybeWhen(
+                      data: (municipios) => OutlinedButton.icon(
+                        onPressed: () => _abrirMapaSelecionarLocal(municipios),
+                        icon: const Icon(Icons.map_outlined, size: 18),
+                        label: const Text('Escolher no mapa'),
+                      ),
+                      orElse: () => const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _descricao,
-                  decoration: const InputDecoration(labelText: 'Agenda / Detalhes', hintText: 'O que será discutido, programação...'),
+                  decoration: const InputDecoration(
+                    labelText: 'Agenda / detalhes',
+                    hintText: 'O que será discutido, programação…',
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                  ),
                   maxLines: 3,
                   textCapitalization: TextCapitalization.sentences,
                 ),
@@ -826,4 +1371,3 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     );
   }
 }
-

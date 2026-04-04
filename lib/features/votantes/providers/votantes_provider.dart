@@ -61,6 +61,7 @@ class NovoVotanteParams {
     this.logradouro,
     this.numero,
     this.complemento,
+    this.votosPrometidosUltimaEleicao,
   });
   final String nome;
   final String? telefone;
@@ -74,6 +75,7 @@ class NovoVotanteParams {
   final String? logradouro;
   final String? numero;
   final String? complemento;
+  final int? votosPrometidosUltimaEleicao;
 }
 
 final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>((ref) {
@@ -141,6 +143,8 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       'logradouro': params.logradouro?.trim().isEmpty == true ? null : params.logradouro?.trim(),
       'numero': params.numero?.trim().isEmpty == true ? null : params.numero?.trim(),
       'complemento': params.complemento?.trim().isEmpty == true ? null : params.complemento?.trim(),
+      if (params.votosPrometidosUltimaEleicao != null)
+        'votos_prometidos_ultima_eleicao': params.votosPrometidosUltimaEleicao,
     };
 
     await client.from('votantes').insert(insert);
@@ -161,6 +165,8 @@ class AtualizarVotanteParams {
     this.logradouro,
     this.numero,
     this.complemento,
+    this.votosPrometidosUltimaEleicao,
+    this.atualizarLegado = false,
   });
   final String? nome;
   final String? telefone;
@@ -173,6 +179,8 @@ class AtualizarVotanteParams {
   final String? logradouro;
   final String? numero;
   final String? complemento;
+  final int? votosPrometidosUltimaEleicao;
+  final bool atualizarLegado;
 }
 
 final atualizarVotanteProvider = Provider<Future<void> Function(String id, AtualizarVotanteParams)>((ref) {
@@ -190,6 +198,7 @@ final atualizarVotanteProvider = Provider<Future<void> Function(String id, Atual
     if (p.logradouro != null) row['logradouro'] = p.logradouro!.trim().isEmpty ? null : p.logradouro!.trim();
     if (p.numero != null) row['numero'] = p.numero!.trim().isEmpty ? null : p.numero!.trim();
     if (p.complemento != null) row['complemento'] = p.complemento!.trim().isEmpty ? null : p.complemento!.trim();
+    if (p.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = p.votosPrometidosUltimaEleicao;
     if (row.isEmpty) return;
     await client.from('votantes').update(row).eq('id', id);
     ref.invalidate(votantesListProvider);

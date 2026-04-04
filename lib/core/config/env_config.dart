@@ -16,10 +16,15 @@ class EnvConfig {
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qbXFhZHBxY2F0d2dza3l3aXNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNDI4NDMsImV4cCI6MjA4NzgxODg0M30.0YTch1mkk0Ik_GVvE5oPKMxdYb6zRzBPcLnj_O-Uv2M',
   );
 
-  /// Chave da API Google Maps (Web: configurar também no web/index.html).
+  /// Chave de API Google (tipicamente criada para **Places API** no Cloud Console).
+  /// O app usa a **mesma** chave no Dart para: Places (Autocomplete, Details, Text Search) e
+  /// **Geocoding API** (endereço ↔ coordenadas). Ative essas APIs no mesmo projeto/credencial.
+  /// O `web/index.html` usa esta chave no script do **Maps JavaScript API**.
+  /// Default alinhado ao HTML para `flutter run` web sem `--dart-define`.
+  /// Produção: `--dart-define=GOOGLE_MAPS_API_KEY=...` (ex.: variável na Vercel).
   static const String googleMapsApiKey = String.fromEnvironment(
     'GOOGLE_MAPS_API_KEY',
-    defaultValue: '',
+    defaultValue: 'AIzaSyDgeOvier1TIBJJd3o0ElQoMiugqrnOrCI',
   );
 
   /// Chave ArcGIS (Location / basemap). Obrigatória no Android/iOS para o mapa nativo não falhar.

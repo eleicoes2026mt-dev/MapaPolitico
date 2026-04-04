@@ -7,6 +7,8 @@ class Visita {
     required this.dataReuniao,
     this.hora,
     this.localTexto,
+    this.localLat,
+    this.localLng,
     this.descricao,
     this.municipioId,
     this.municipioNome,
@@ -20,6 +22,8 @@ class Visita {
   final DateTime dataReuniao;
   final String? hora; // "HH:MM"
   final String? localTexto;
+  final double? localLat;
+  final double? localLng;
   final String? descricao;
   final String? municipioId;
   final String? municipioNome;
@@ -37,8 +41,23 @@ class Visita {
 
   String get dataFormatada => DateFormat('dd/MM/yyyy').format(dataReuniao);
   String get horaFormatada => hora ?? '';
+
+  /// Exibe hora em HH:mm (remove segundos vindos do banco, ex.: 09:00:00).
+  String get horaExibicao {
+    if (hora == null || hora!.trim().isEmpty) return '';
+    final p = hora!.trim().split(':');
+    if (p.length >= 2) {
+      final h = int.tryParse(p[0].trim());
+      final m = int.tryParse(p[1].trim());
+      if (h != null && m != null) {
+        return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+      }
+    }
+    return hora!.trim();
+  }
+
   String get dataHoraFormatada =>
-      hora != null && hora!.isNotEmpty ? '$dataFormatada às $hora' : dataFormatada;
+      horaExibicao.isNotEmpty ? '$dataFormatada às $horaExibicao' : dataFormatada;
 
   factory Visita.fromJson(Map<String, dynamic> json) {
     final mun = json['municipios'];
@@ -49,6 +68,8 @@ class Visita {
       dataReuniao: DateTime.parse(json['data_reuniao'] as String),
       hora: json['hora'] as String?,
       localTexto: json['local_texto'] as String?,
+      localLat: (json['local_lat'] as num?)?.toDouble(),
+      localLng: (json['local_lng'] as num?)?.toDouble(),
       descricao: json['descricao'] as String?,
       municipioId: json['municipio_id'] as String?,
       municipioNome: munNome,
@@ -65,6 +86,8 @@ class Visita {
         'data_reuniao': dataReuniao.toIso8601String().split('T').first,
         if (hora != null && hora!.isNotEmpty) 'hora': hora,
         if (localTexto != null && localTexto!.isNotEmpty) 'local_texto': localTexto,
+        if (localLat != null) 'local_lat': localLat,
+        if (localLng != null) 'local_lng': localLng,
         if (descricao != null && descricao!.isNotEmpty) 'descricao': descricao,
         if (municipioId != null) 'municipio_id': municipioId,
         'visivel_apoiadores': visivelApoiadores,

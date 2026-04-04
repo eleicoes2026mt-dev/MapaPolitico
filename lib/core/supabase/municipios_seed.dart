@@ -6,24 +6,89 @@ import '../../features/mapa/data/mt_municipios_coords.dart';
 /// Tenta, em ordem:
 ///   1. RPC `seed_municipios_mt_if_empty` (se a migration foi aplicada).
 ///   2. Insert direto client-side com os dados locais de [mt_municipios_coords.dart].
-/// Sem efeito se já houver linhas; silencioso em caso de falha de permissão.
+/// Em qualquer caso, ao final chama [syncMissingMunicipiosMtFromAppList] para alinhar
+/// à lista IBGE atual (142 municípios), corrigir nomes antigos e inserir faltantes.
 Future<void> ensureMunicipiosMtSeeded(SupabaseClient client) async {
   try {
     final probe = await client.from('municipios').select('id').limit(1);
-    if ((probe as List).isNotEmpty) return;
+    if ((probe as List).isEmpty) {
+      try {
+        await client.rpc('seed_municipios_mt_if_empty');
+      } catch (_) {}
+      final check = await client.from('municipios').select('id').limit(1);
+      if ((check as List).isEmpty) {
+        await _seedClientSide(client);
+      }
+    }
   } catch (_) {
     return;
   }
 
-  // Tentativa 1: RPC (migration aplicada no banco)
-  try {
-    await client.rpc('seed_municipios_mt_if_empty');
-    final check = await client.from('municipios').select('id').limit(1);
-    if ((check as List).isNotEmpty) return;
-  } catch (_) {}
+  await syncMissingMunicipiosMtFromAppList(client);
+}
 
-  // Tentativa 2: insert client-side (requer migration 20250329140000)
-  await _seedClientSide(client);
+/// Corrige registro legado e insere municípios que existem em [listCidadesMTNomesNormalizados]
+/// mas ainda não estão na tabela (ex.: base antiga com 138 linhas).
+Future<void> syncMissingMunicipiosMtFromAppList(SupabaseClient client) async {
+  try {
+    try {
+      await client.from('municipios').update({
+        'nome': 'Araguainha',
+        'nome_normalizado': 'araguainha',
+      }).eq('nome_normalizado', 'araguanta');
+    } catch (_) {}
+
+    final polosRes = await client.from('polos_regioes').select('id, nome');
+    final poloIdPorNome = <String, String>{};
+    for (final raw in polosRes as List<dynamic>) {
+      final r = raw as Map<String, dynamic>;
+      final nome = r['nome'] as String?;
+      final id = r['id'] as String?;
+      if (nome != null && id != null) poloIdPorNome[nome] = id;
+    }
+    final poloPadrao = poloIdPorNome['Sinop'];
+    if (poloPadrao == null) return;
+
+    final munRes = await client.from('municipios').select('nome_normalizado');
+    final existentes = <String>{
+      for (final raw in munRes as List<dynamic>)
+        ((raw as Map<String, dynamic>)['nome_normalizado'] as String?)?.toLowerCase() ?? '',
+    }..remove('');
+
+    String poloIdParaChave(String keyUpper) {
+      switch (keyUpper) {
+        case 'BOA ESPERANCA DO NORTE':
+          return poloIdPorNome['Sinop'] ?? poloPadrao;
+        case 'PONTAL DO ARAGUAIA':
+        case 'PONTE BRANCA':
+          return poloIdPorNome['Barra do Garças'] ?? poloPadrao;
+        case 'VILA BELA DA SANTISSIMA TRINDADE':
+          return poloIdPorNome['Cáceres'] ?? poloPadrao;
+        default:
+          return poloPadrao;
+      }
+    }
+
+    final novos = <Map<String, dynamic>>[];
+    for (final key in listCidadesMTNomesNormalizados) {
+      final nn = key.toLowerCase();
+      if (existentes.contains(nn)) continue;
+      novos.add({
+        'nome': displayNomeCidadeMT(key),
+        'nome_normalizado': nn,
+        'polo_id': poloIdParaChave(key),
+      });
+    }
+
+    if (novos.isEmpty) return;
+
+    await client.from('municipios').upsert(
+      novos,
+      onConflict: 'nome_normalizado',
+    );
+  } catch (_) {
+    // Sem permissão de INSERT/UPDATE ou rede — lista do app segue limitada ao banco.
+  }
 }
 
 Future<void> _seedClientSide(SupabaseClient client) async {

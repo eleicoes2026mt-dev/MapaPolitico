@@ -1,7 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/services/cep_br_service.dart';
+import '../../../../core/utils/municipio_resolver.dart';
+import '../../../../core/widgets/municipio_mt_picker_sheet.dart';
 import '../../data/brasil_api_cnpj.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
 import '../../providers/apoiadores_provider.dart'
@@ -51,9 +57,13 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
   String? _cidadeFromApi;
   final List<_BenfeitoriaForm> _benfeitorias = [];
   final ScrollController _scrollController = ScrollController();
+  String? _cidadeErro;
+  Timer? _cepDebounce;
+  bool _cepLoading = false;
 
   @override
   void dispose() {
+    _cepDebounce?.cancel();
     _scrollController.dispose();
     _nomeController.dispose();
     _telefoneController.dispose();
@@ -105,7 +115,16 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
         _situacaoCnpj = dados.situacaoCadastral;
         _endereco = dados.enderecoCompleto;
         _cidadeFromApi = dados.municipio;
-        _cidadeNome = dados.municipio.isNotEmpty ? dados.municipio : _cidadeNome;
+        if (dados.municipio.isNotEmpty) {
+          final porUf = chaveMunicipioMtApartirCepLocalidade(dados.municipio, 'MT');
+          final k = normalizarNomeMunicipioMT(dados.municipio);
+          final porNome = listCidadesMTNomesNormalizados.contains(k) ? k : null;
+          final nova = porUf ?? porNome;
+          if (nova != null) {
+            _cidadeNome = nova;
+            _cidadeErro = null;
+          }
+        }
         _cnpjCarregado = true;
         _loading = false;
         _error = null;
@@ -120,9 +139,51 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
     }
   }
 
+  void _onCepChanged(String _) {
+    _cepDebounce?.cancel();
+    final d = cepSoDigitos(_cepController.text);
+    if (d.length != 8) return;
+    _cepDebounce = Timer(const Duration(milliseconds: 450), _buscarCep);
+  }
+
+  Future<void> _buscarCep() async {
+    if (!mounted) return;
+    final d = cepSoDigitos(_cepController.text);
+    if (d.length != 8) return;
+    setState(() => _cepLoading = true);
+    try {
+      final r = await fetchCepBr(d);
+      if (!mounted || r == null) return;
+      setState(() {
+        if (r.logradouro.trim().isNotEmpty) {
+          _logradouroController.text = r.logradouro.trim();
+        }
+        final comp = r.complemento?.trim();
+        final bairro = r.bairro?.trim();
+        if (_complementoController.text.trim().isEmpty) {
+          if (comp != null && comp.isNotEmpty) {
+            _complementoController.text = comp;
+          } else if (bairro != null && bairro.isNotEmpty) {
+            _complementoController.text = bairro;
+          }
+        }
+        final chave = chaveMunicipioMtApartirCepLocalidade(r.localidade, r.uf);
+        if (chave != null) {
+          _cidadeNome = chave;
+          _cidadeErro = null;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _cepLoading = false);
+    }
+  }
+
   Future<void> _salvar() async {
     if (_cidadeNome == null || _cidadeNome!.trim().isEmpty) {
-      setState(() => _error = 'Selecione a cidade.');
+      setState(() {
+        _error = 'Selecione a cidade.';
+        _cidadeErro = 'Selecione a cidade.';
+      });
       return;
     }
     if (!(_formKey.currentState?.validate() ?? false)) {
@@ -236,8 +297,6 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cidades = listCidadesMTNomesNormalizados.toList();
-    if (_cidadeNome != null && _cidadeNome!.isNotEmpty && !cidades.contains(_cidadeNome)) cidades.add(_cidadeNome!);
 
     return AlertDialog(
       title: const Text('Novo Apoiador'),
@@ -252,13 +311,13 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DropdownButtonFormField<String>(
-                  value: _cidadeNome,
-                  decoration: const InputDecoration(labelText: 'Cidade *'),
-                  hint: const Text('Selecione a cidade'),
-                  items: cidades.map((c) => DropdownMenuItem(value: c, child: Text(displayNomeCidadeMT(c)))).toList(),
-                  onChanged: (v) => setState(() => _cidadeNome = v),
-                  validator: (v) => (v == null || v.isEmpty) ? 'Selecione a cidade' : null,
+                MunicipioMtFormRow(
+                  selectedNormalizedKey: _cidadeNome,
+                  errorText: _cidadeErro,
+                  onSelected: (k) => setState(() {
+                    _cidadeNome = k;
+                    _cidadeErro = null;
+                  }),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -288,8 +347,24 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _cepController,
-                  decoration: const InputDecoration(labelText: 'CEP'),
+                  decoration: InputDecoration(
+                    labelText: 'CEP',
+                    hintText: '00000-000',
+                    suffixIcon: _cepLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
+                    helperText: 'Preenche endereço e cidade (MT) ao concluir os 8 dígitos.',
+                  ),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [CepInputFormatter()],
+                  onChanged: _onCepChanged,
                 ),
                 const SizedBox(height: 8),
                 TextFormField(

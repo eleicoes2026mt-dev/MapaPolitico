@@ -20,12 +20,13 @@ import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
 import '../../features/configuracoes/presentation/configuracoes_screen.dart';
 import '../../layout/main_scaffold.dart';
+import '../../models/profile.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import 'navigation_keys.dart';
 import 'profile_role_cache.dart';
 import 'role_home.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
-final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Notifica o GoRouter quando o stream de auth emite (login/logout).
 class GoRouterRefreshStream extends ChangeNotifier {
@@ -113,9 +114,11 @@ GoRouter createAppRouter({String? initialLocation}) {
         builder: (_, __) => const CompletarCadastroScreen(isPasswordRecovery: true),
       ),
       ShellRoute(
-        navigatorKey: _shellNavigatorKey,
-        builder: (context, state, child) =>
-            _RoleShellWrapper(location: state.uri.path, child: child),
+        navigatorKey: shellNavigatorKey,
+        builder: (context, state, child) => _RoleShellWrapper(
+              location: state.uri.path,
+              child: child,
+            ),
         routes: [
           GoRoute(
             path: '/',
@@ -172,12 +175,17 @@ GoRouter createAppRouter({String? initialLocation}) {
 }
 
 /// Restrições por papel + redirecionamento do painel do apoiador.
-class _RoleShellWrapper extends ConsumerWidget {
+class _RoleShellWrapper extends ConsumerStatefulWidget {
   const _RoleShellWrapper({required this.location, required this.child});
 
   final String location;
   final Widget child;
 
+  @override
+  ConsumerState<_RoleShellWrapper> createState() => _RoleShellWrapperState();
+}
+
+class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
   static const _forbiddenApoiador = {
     '/assessores',
     '/apoiadores',
@@ -188,31 +196,41 @@ class _RoleShellWrapper extends ConsumerWidget {
   };
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<Profile?>>(profileProvider, (_, next) {
+      final p = next.valueOrNull;
+      if (p != null && !p.ativo) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await ref.read(authNotifierProvider.notifier).signOut();
+          if (context.mounted) context.go('/login');
+        });
+      }
+    });
+
     final profile = ref.watch(profileProvider).valueOrNull;
     final role = profile?.role;
 
-    if (role == 'apoiador' && _forbiddenApoiador.contains(location)) {
+    if (role == 'apoiador' && _forbiddenApoiador.contains(widget.location)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go('/votantes');
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (role == 'assessor' && location == '/assessores') {
+    if (role == 'assessor' && widget.location == '/assessores') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go('/apoiadores');
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (role != 'candidato' && location == '/configuracoes') {
+    if (role != 'candidato' && widget.location == '/configuracoes') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go('/');
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return MainScaffold(child: child);
+    return MainScaffold(child: widget.child);
   }
 }

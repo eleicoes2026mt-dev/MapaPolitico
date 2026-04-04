@@ -39,6 +39,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
   Future<void> _loadProfile(String uid) async {
     try {
       final data = await _client.from('profiles').select().eq('id', uid).maybeSingle();
+      if (data != null) {
+        final ativo = data['ativo'] as bool? ?? true;
+        if (!ativo) {
+          await _client.auth.signOut();
+          state = const AsyncValue.data(null);
+          return;
+        }
+      }
       state = AsyncValue.data(data != null ? Profile.fromJson(data) : null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -49,7 +57,16 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
     clearProfileRoleCache();
     await _client.auth.signInWithPassword(email: email, password: password);
     final user = _client.auth.currentUser;
-    if (user != null) await _loadProfile(user.id);
+    if (user != null) {
+      final data = await _client.from('profiles').select().eq('id', user.id).maybeSingle();
+      final ativo = data?['ativo'] as bool? ?? true;
+      if (!ativo) {
+        await _client.auth.signOut();
+        state = const AsyncValue.data(null);
+        throw Exception('Sua conta foi desativada. Procure o candidato da campanha.');
+      }
+      state = AsyncValue.data(data != null ? Profile.fromJson(data) : null);
+    }
   }
 
   Future<void> signUp(String email, String password, {String? fullName}) async {

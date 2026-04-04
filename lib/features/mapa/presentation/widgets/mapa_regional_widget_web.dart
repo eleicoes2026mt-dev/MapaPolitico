@@ -10,6 +10,7 @@ import '../../data/geo_loader.dart';
 import '../../data/mt_municipios_coords.dart';
 import '../../data/tse_votos_escala.dart';
 import '../../models/mapa_marcador_cidade.dart';
+import '../../providers/benfeitorias_mapa_provider.dart';
 import 'bandeira_marcador_widget.dart';
 
 /// Mapa para **web**: OpenStreetMap + regiões de MT (flutter_map).
@@ -37,6 +38,9 @@ class MapaRegionalWidget extends StatefulWidget {
     this.mostrarTSE = false,
     this.mostrarMarcadores = false,
     this.onComparativoColors,
+    this.benfeitoriasRanking,
+    this.onBenfeitoriasMapa,
+    this.onPainelRankingModoChanged,
   });
 
   final double height;
@@ -60,6 +64,12 @@ class MapaRegionalWidget extends StatefulWidget {
   final bool mostrarTSE;
   final bool mostrarMarcadores;
   final void Function(Map<String, String>?)? onComparativoColors;
+  /// Quando não nulo, o painel de ranking pode ativar a camada “Benfeitorias” no mapa.
+  final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
+  /// Igual a [onComparativoColors], para a camada de benfeitorias (só web).
+  final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
+  /// Só web: `nenhum` | `tse` | `rede` | `comparativo` | `benfeitorias` — para legenda no painel pai.
+  final ValueChanged<String>? onPainelRankingModoChanged;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetWebState();
@@ -71,6 +81,9 @@ final _brasilBounds = LatLngBounds(
   ll.LatLng(-33.75, -73.99),  // sudoeste Brasil
   ll.LatLng(5.27, -34.79),    // nordeste Brasil
 );
+
+/// Destaque da camada Benfeitorias (âmbar: legível em fundo escuro; evita roxo baixo contraste).
+const kBenfeitoriasMapaAccent = Color(0xFFFFB300);
 
 /// Cores padrão por cdRgint (hex).
 const _coresPadrao = <String, String>{
@@ -94,11 +107,16 @@ Color _colorForRegiao(
   Map<String, String>? coresCustomizadas, {
   String? partKey,
   Map<String, String>? comparativoColors,
+  Map<String, String>? benfeitoriasColors,
 }) {
   // Modo comparativo: cor de atingimento sobrescreve tudo
   if (comparativoColors != null) {
     final cComp = comparativoColors[id] ?? comparativoColors[cdRgint ?? id];
     if (cComp != null) return _colorFromHex(cComp);
+  }
+  if (benfeitoriasColors != null) {
+    final cB = benfeitoriasColors[id] ?? benfeitoriasColors[cdRgint ?? id];
+    if (cB != null) return _colorFromHex(cB);
   }
   if (partKey != null) {
     final customPart = coresCustomizadas?[partKey];
@@ -146,6 +164,47 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   Map<String, String>? _comparativoColors;
   /// Ratio de atingimento por região (estimativa/TSE). Para exibir % no mapa.
   Map<String, double>? _comparativoRatios;
+  Map<String, String>? _benfeitoriasColors;
+  Map<String, double>? _benfeitoriasRatios;
+  Map<String, double>? _benfeitoriasValores;
+
+  void _onComparativoCoresFromPanel(Map<String, String>? cores) {
+    setState(() {
+      _comparativoColors = cores;
+      if (cores != null) {
+        _benfeitoriasColors = null;
+        _benfeitoriasRatios = null;
+        _benfeitoriasValores = null;
+      }
+      if (cores == null) {
+        _comparativoRatios = null;
+      } else {
+        final r = _rankingRegioes();
+        final ratioMap = <String, double>{};
+        for (final reg in r) {
+          if (reg.total > 0) ratioMap[reg.id] = reg.totalEstimativa / reg.total;
+        }
+        _comparativoRatios = ratioMap.isEmpty ? null : ratioMap;
+      }
+    });
+  }
+
+  void _onBenfeitoriasFromPanel(BenfeitoriasMapaPayload? p) {
+    setState(() {
+      if (p == null) {
+        _benfeitoriasColors = null;
+        _benfeitoriasRatios = null;
+        _benfeitoriasValores = null;
+      } else {
+        _comparativoColors = null;
+        _comparativoRatios = null;
+        _benfeitoriasColors = p.cores;
+        _benfeitoriasRatios = p.ratios;
+        _benfeitoriasValores = p.valores;
+      }
+    });
+    widget.onBenfeitoriasMapa?.call(p);
+  }
 
   RegiaoIntermediariaMT? get _regiaoDrillDown {
     final id = _regiaoDrillDownId;
@@ -340,18 +399,27 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     if (mtList != null) {
       const neutralBorder = Color(0xFF757575);
       final inComparativo = _comparativoColors != null && _comparativoColors!.isNotEmpty;
+      final inBenfeitorias = _benfeitoriasColors != null && _benfeitoriasColors!.isNotEmpty;
       for (final regiao in mtList) {
         var polygonIndex = 0;
         for (final geo in regiao.polygons) {
           final isEditing = regiao.id == _editingRegionId && polygonIndex == _editingPolygonIndex;
           final partKey = '${regiao.id}#$polygonIndex';
-          final color = _colorForRegiao(regiao.cdRgint, regiao.id, widget.coresCustomizadas, partKey: partKey, comparativoColors: _comparativoColors);
+          final color = _colorForRegiao(
+            regiao.cdRgint,
+            regiao.id,
+            widget.coresCustomizadas,
+            partKey: partKey,
+            comparativoColors: _comparativoColors,
+            benfeitoriasColors: _benfeitoriasColors,
+          );
           final points = geo.points.map((p) => ll.LatLng(p.latitude, p.longitude)).toList();
           final holes = geo.holes
               .map((hole) => hole.map((p) => ll.LatLng(p.latitude, p.longitude)).toList())
               .toList();
           final isFocused = _regiaoDrillDownId != null && regiao.id == _regiaoDrillDownId;
           final hasComparativoFill = inComparativo && _comparativoColors!.containsKey(regiao.id);
+          final hasBenfeitoriasFill = inBenfeitorias && _benfeitoriasColors!.containsKey(regiao.id);
 
           late final Color fillColor;
           late final Color borderColor;
@@ -361,7 +429,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             fillColor = color.withValues(alpha: 0.3);
             borderColor = Colors.white;
             borderStrokeWidth = 5;
-          } else if (hasComparativoFill) {
+          } else if (hasComparativoFill || hasBenfeitoriasFill) {
             fillColor = color.withValues(alpha: 0.72);
             borderColor = isFocused ? Colors.white.withValues(alpha: 0.92) : color.withValues(alpha: 0.9);
             borderStrokeWidth = isFocused ? 3.2 : 2;
@@ -371,7 +439,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             borderStrokeWidth = 2.5;
           } else {
             fillColor = Colors.transparent;
-            borderColor = neutralBorder.withValues(alpha: inComparativo ? 0.45 : 1);
+            borderColor = neutralBorder.withValues(alpha: (inComparativo || inBenfeitorias) ? 0.45 : 1);
             borderStrokeWidth = 1;
           }
 
@@ -453,6 +521,68 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         ),
       ),
     )).toList();
+  }
+
+  /// Rótulos com valor (R$) por região no modo benfeitorias.
+  List<Marker> _buildBenfeitoriasLabels() {
+    final valores = _benfeitoriasValores;
+    final ratios = _benfeitoriasRatios;
+    final cores = _benfeitoriasColors;
+    if (valores == null || valores.isEmpty || _regioesMT == null) return [];
+
+    final fmt = NumberFormat.compactCurrency(locale: 'pt_BR', symbol: r'R$');
+    final candidatos = <({ll.LatLng pos, Color cor, String txt, double ratio})>[];
+    for (final regiao in _regioesMT!) {
+      final v = valores[regiao.id];
+      if (v == null || v <= 0) continue;
+      final ratio = ratios?[regiao.id] ?? 0.5;
+      final hexCor = cores?[regiao.id] ?? '#78909C';
+      final cor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
+      if (regiao.polygons.isEmpty) continue;
+      final geoPoly = regiao.polygons.reduce((a, b) => a.points.length >= b.points.length ? a : b);
+      final pts = geoPoly.points;
+      if (pts.isEmpty) continue;
+      final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
+      final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
+      candidatos.add((pos: ll.LatLng(lat, lng), cor: cor, txt: fmt.format(v), ratio: ratio));
+    }
+
+    candidatos.sort((a, b) => b.ratio.compareTo(a.ratio));
+    const minDist = 1.4;
+    final aceitos = <({ll.LatLng pos, Color cor, String txt})>[];
+    for (final c in candidatos) {
+      final proximo = aceitos.any((a) =>
+          (a.pos.latitude - c.pos.latitude).abs() < minDist &&
+          (a.pos.longitude - c.pos.longitude).abs() < minDist);
+      if (!proximo) aceitos.add((pos: c.pos, cor: c.cor, txt: c.txt));
+    }
+
+    return aceitos.map((c) => Marker(
+          point: c.pos,
+          width: 88,
+          height: 34,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: c.cor,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: Text(
+              c.txt,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                shadows: [Shadow(color: Colors.black38, blurRadius: 2)],
+              ),
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        )).toList();
   }
 
   /// Votos TSE: círculos com degradê (centro → transparente) e cor por faixa (vermelho … verde).
@@ -679,48 +809,58 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     List<Marker> heatMarkers,
     List<Marker> markers,
     List<Marker> comparativoLabels,
+    List<Marker> benfeitoriasLabels,
   ) {
     final drillNome = _regiaoDrillDown?.nome;
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+    // WebKit móvel: useAltRendering:true costuma falhar (mapa “em branco”); simplificar polígonos alivia a GPU.
+    final polySimple = narrow ? 1.8 : 0.5;
+    final useAltPoly = !narrow;
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        MouseRegion(
-          hitTestBehavior: HitTestBehavior.deferToChild,
-          cursor: SystemMouseCursors.click,
-          child: FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCameraFit: CameraFit.bounds(
-                bounds: _brasilBounds,
-                padding: const EdgeInsets.all(32),
-                maxZoom: 9,
+        // Sem Positioned.fill o FlutterMap pode ficar com altura 0 dentro do Stack (Safari / Chrome Android).
+        Positioned.fill(
+          child: MouseRegion(
+            hitTestBehavior: HitTestBehavior.deferToChild,
+            cursor: SystemMouseCursors.click,
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCameraFit: CameraFit.bounds(
+                  bounds: _brasilBounds,
+                  padding: const EdgeInsets.all(32),
+                  maxZoom: 9,
+                  minZoom: 4,
+                ),
                 minZoom: 4,
+                maxZoom: 18,
+                interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+                onTap: (_, __) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) _onMapTap();
+                  });
+                },
               ),
-              minZoom: 4,
-              maxZoom: 18,
-              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
-              onTap: (_, __) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) _onMapTap();
-                });
-              },
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'campanha_mt',
+                ),
+                PolygonLayer<String>(
+                  hitNotifier: _hitNotifier,
+                  polygons: polygons,
+                  polygonCulling: true,
+                  simplificationTolerance: polySimple,
+                  useAltRendering: useAltPoly,
+                ),
+                if (heatMarkers.isNotEmpty) MarkerLayer(markers: heatMarkers),
+                if (markers.isNotEmpty) MarkerLayer(markers: markers),
+                if (comparativoLabels.isNotEmpty) MarkerLayer(markers: comparativoLabels),
+                if (benfeitoriasLabels.isNotEmpty) MarkerLayer(markers: benfeitoriasLabels),
+              ],
             ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'campanha_mt',
-              ),
-              PolygonLayer<String>(
-                hitNotifier: _hitNotifier,
-                polygons: polygons,
-                polygonCulling: true,
-                simplificationTolerance: 0.5,
-                useAltRendering: true,
-              ),
-              if (heatMarkers.isNotEmpty) MarkerLayer(markers: heatMarkers),
-              if (markers.isNotEmpty) MarkerLayer(markers: markers),
-              if (comparativoLabels.isNotEmpty) MarkerLayer(markers: comparativoLabels),
-            ],
           ),
         ),
         if (_regiaoDrillDownId != null && drillNome != null)
@@ -962,6 +1102,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final heatMarkers = _buildHeatMarkers();
     final markers = _buildMarkers();
     final comparativoLabels = _buildComparativoLabels();
+    final benfeitoriasLabels = _buildBenfeitoriasLabels();
     final ranking = _rankingRegioes();
     final totalVotosTseGeral = _totalVotosTseSomados();
     final totalEstimativaGeral = _totalEstimativaSomada();
@@ -973,7 +1114,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         return SizedBox(
           height: widget.height,
           width: double.infinity,
-          child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels),
+          child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
         );
       }
       return SizedBox(
@@ -985,7 +1126,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             // Mapa: 45% — ranking: 55% no modo embutido mobile
             Expanded(
               flex: 9,
-              child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels),
+              child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
             ),
             Expanded(
               flex: 13,
@@ -993,12 +1134,17 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                 ranking: ranking,
                 totalVotosTseGeral: totalVotosTseGeral,
                 totalEstimativaGeral: totalEstimativaGeral,
+                benfeitoriasRanking: widget.benfeitoriasRanking,
                 onCityTap: widget.onCityTap,
                 locaisVotacaoContent: widget.locaisVotacaoContent,
                 selectedMunicipioKey: widget.selectedMunicipioKey,
                 layoutCompact: true,
                 focusedRegiaoId: _regiaoDrillDownId,
-                onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores, onToggleFocusRegiao: (id) {
+                onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores,
+                onComparativoColors: _onComparativoCoresFromPanel,
+                onBenfeitoriasMapa: _onBenfeitoriasFromPanel,
+                onPainelRankingModoChanged: widget.onPainelRankingModoChanged,
+                onToggleFocusRegiao: (id) {
                   if (_regiaoDrillDownId == id) {
                     _setDrillDownRegiao(null);
                   } else {
@@ -1027,6 +1173,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             ranking: ranking,
             totalVotosTseGeral: totalVotosTseGeral,
             totalEstimativaGeral: totalEstimativaGeral,
+            benfeitoriasRanking: widget.benfeitoriasRanking,
             onCityTap: widget.onCityTap,
             locaisVotacaoContent: widget.locaisVotacaoContent,
             selectedMunicipioKey: widget.selectedMunicipioKey,
@@ -1036,21 +1183,9 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             onMostrarMarcadores: widget.onMostrarMarcadores,
             mostrarTSE: widget.mostrarTSE,
             mostrarMarcadores: widget.mostrarMarcadores,
-            onComparativoColors: (cores) => setState(() {
-              _comparativoColors = cores;
-              // Recalcula ratios a partir das cores quando ativando
-              if (cores == null) {
-                _comparativoRatios = null;
-              } else {
-                // Ratios são re-calculados pelo ranking atualizado
-                final r = _rankingRegioes();
-                final ratioMap = <String, double>{};
-                for (final reg in r) {
-                  if (reg.total > 0) ratioMap[reg.id] = reg.totalEstimativa / reg.total;
-                }
-                _comparativoRatios = ratioMap.isEmpty ? null : ratioMap;
-              }
-            }),
+            onComparativoColors: _onComparativoCoresFromPanel,
+            onBenfeitoriasMapa: _onBenfeitoriasFromPanel,
+            onPainelRankingModoChanged: widget.onPainelRankingModoChanged,
             onToggleFocusRegiao: (id) {
               if (_regiaoDrillDownId == id) {
                 _setDrillDownRegiao(null);
@@ -1104,7 +1239,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels),
+                child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
               ),
               // Botão toggle sempre visível (independente de haver dados)
               buildToggleBtn(),
@@ -1138,6 +1273,7 @@ class _RankingPanel extends StatefulWidget {
     required this.ranking,
     required this.totalVotosTseGeral,
     required this.totalEstimativaGeral,
+    this.benfeitoriasRanking,
     this.onCityTap,
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
@@ -1149,11 +1285,14 @@ class _RankingPanel extends StatefulWidget {
     this.mostrarTSE = false,
     this.mostrarMarcadores = false,
     this.onComparativoColors,
+    this.onBenfeitoriasMapa,
+    this.onPainelRankingModoChanged,
   });
 
   final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
   final int totalVotosTseGeral;
   final int totalEstimativaGeral;
+  final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
   final void Function(String nomeMunicipio)? onCityTap;
   final Widget? locaisVotacaoContent;
   final String? selectedMunicipioKey;
@@ -1167,12 +1306,14 @@ class _RankingPanel extends StatefulWidget {
   /// Callback com mapa regionId → cor hex para colorir polígonos no modo Comparativo.
   /// Null = desativar modo comparativo.
   final void Function(Map<String, String>?)? onComparativoColors;
+  final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
+  final ValueChanged<String>? onPainelRankingModoChanged;
 
   @override
   State<_RankingPanel> createState() => _RankingPanelState();
 }
 
-enum _ModoRanking { nenhum, tse, rede, comparativo }
+enum _ModoRanking { nenhum, tse, rede, comparativo, benfeitorias }
 
 // Cores de atingimento: ratio = estimativa / votos_tse
 String _corAtingimento(double ratio) {
@@ -1199,12 +1340,78 @@ String _labelAtingimento(double ratio) {
 
 class _RankingPanelState extends State<_RankingPanel> {
   _ModoRanking _modo = _ModoRanking.tse;
+  String _ultimaAssinaturaBenfeitoriasMapa = '';
 
   @override
   void initState() {
     super.initState();
     // Começa sempre sem nenhuma seleção — usuário escolhe ao clicar
     _modo = _ModoRanking.nenhum;
+  }
+
+  String _assinaturaBenfeitorias(List<BenfeitoriaRegiaoRanking> list) {
+    if (list.isEmpty) return '';
+    return list.map((r) => '${r.id}:${r.valorTotal.toStringAsFixed(2)}').join('|');
+  }
+
+  @override
+  void didUpdateWidget(_RankingPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_modo != _ModoRanking.benfeitorias) return;
+    final list = widget.benfeitoriasRanking ?? [];
+    if (list.isEmpty) {
+      _ultimaAssinaturaBenfeitoriasMapa = '';
+      return;
+    }
+    final sig = _assinaturaBenfeitorias(list);
+    if (sig == _ultimaAssinaturaBenfeitoriasMapa) return;
+    final oldList = oldWidget.benfeitoriasRanking ?? [];
+    if (oldList.isNotEmpty && list.length == oldList.length) {
+      var same = true;
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].id != oldList[i].id || list[i].valorTotal != oldList[i].valorTotal) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return;
+    }
+    _ultimaAssinaturaBenfeitoriasMapa = sig;
+    _aplicarCamadaBenfeitoriasNoMapa(list);
+  }
+
+  void _aplicarCamadaBenfeitoriasNoMapa(List<BenfeitoriaRegiaoRanking> list) {
+    _ultimaAssinaturaBenfeitoriasMapa = _assinaturaBenfeitorias(list);
+    widget.onComparativoColors?.call(null);
+    widget.onMostrarTSE?.call(false);
+    widget.onMostrarMarcadores?.call(false);
+    var maxV = 0.0;
+    for (final r in list) {
+      if (r.valorTotal > maxV) maxV = r.valorTotal;
+    }
+    final cores = <String, String>{};
+    final ratios = <String, double>{};
+    final valores = <String, double>{};
+    for (final r in list) {
+      if (r.valorTotal <= 0) continue;
+      valores[r.id] = r.valorTotal;
+      final t = maxV > 0 ? r.valorTotal / maxV : 0.0;
+      ratios[r.id] = t;
+      cores[r.id] = _corAtingimento(t);
+    }
+    widget.onBenfeitoriasMapa?.call(
+      cores.isEmpty ? null : BenfeitoriasMapaPayload(cores: cores, ratios: ratios, valores: valores),
+    );
+  }
+
+  void _emitPainelModo(_ModoRanking m) {
+    widget.onPainelRankingModoChanged?.call(switch (m) {
+      _ModoRanking.nenhum => 'nenhum',
+      _ModoRanking.tse => 'tse',
+      _ModoRanking.rede => 'rede',
+      _ModoRanking.comparativo => 'comparativo',
+      _ModoRanking.benfeitorias => 'benfeitorias',
+    });
   }
 
   static const _medals = ['🥇', '🥈', '🥉'];
@@ -1248,10 +1455,17 @@ class _RankingPanelState extends State<_RankingPanel> {
       rankingRede.sort((a, b) => b.estimativaTotal.compareTo(a.estimativaTotal));
     }
 
-    final temDadosRede = totalEstimativaGeral > 0;
+    // Abas TSE / Rede / Comparativo: não exigir estimativa > 0 (campanhas só com benfeitorias ou TSE também usam o mapa).
+    final mostrarAbasTseRedeComparativo =
+        widget.onMostrarTSE != null && widget.onMostrarMarcadores != null;
+    // O separador aparece sempre que o mapa suporta a camada (callback interno).
+    // O ranking pode vir null (loading/erro do provider) — a lista trata vazio/loading.
+    final temBenfeitorias = widget.onBenfeitoriasMapa != null;
     final modoRede = _modo == _ModoRanking.rede;
     final modoComparativo = _modo == _ModoRanking.comparativo;
+    final modoBenfeitorias = _modo == _ModoRanking.benfeitorias;
     final modoNenhum = _modo == _ModoRanking.nenhum;
+    final totalValorBenf = widget.benfeitoriasRanking?.fold<double>(0, (s, r) => s + r.valorTotal) ?? 0.0;
 
     return Material(
       elevation: 4,
@@ -1300,116 +1514,166 @@ class _RankingPanelState extends State<_RankingPanel> {
                     const SizedBox(height: 8),
 
                     // ── Tabs: clique ativa; clique duplo limpa o mapa ──
-                    if (temDadosRede) ...[
+                    if (mostrarAbasTseRedeComparativo || temBenfeitorias) ...[
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          _TabBtn(
-                            label: 'Eleição 2022',
-                            icon: Icons.how_to_vote_outlined,
-                            active: _modo == _ModoRanking.tse,
-                            color: const Color(0xFF1565C0),
-                            onTap: () {
-                              if (_modo == _ModoRanking.tse) {
-                                // Clique duplo → limpa
-                                setState(() => _modo = _ModoRanking.nenhum);
-                                widget.onMostrarTSE?.call(false);
-                                widget.onMostrarMarcadores?.call(false);
-                                widget.onComparativoColors?.call(null);
-                              } else {
-                                setState(() => _modo = _ModoRanking.tse);
-                                widget.onMostrarTSE?.call(true);
-                                widget.onMostrarMarcadores?.call(false);
-                                widget.onComparativoColors?.call(null);
-                              }
-                            },
-                          ),
-                          _TabBtn(
-                            label: 'Minha Rede',
-                            icon: Icons.groups_outlined,
-                            active: _modo == _ModoRanking.rede,
-                            color: cs.secondary,
-                            onTap: () {
-                              if (_modo == _ModoRanking.rede) {
-                                setState(() => _modo = _ModoRanking.nenhum);
-                                widget.onMostrarTSE?.call(false);
-                                widget.onMostrarMarcadores?.call(false);
-                                widget.onComparativoColors?.call(null);
-                              } else {
-                                setState(() => _modo = _ModoRanking.rede);
-                                widget.onMostrarTSE?.call(false);
-                                widget.onMostrarMarcadores?.call(true);
-                                widget.onComparativoColors?.call(null);
-                              }
-                            },
-                          ),
-                          _TabBtn(
-                            label: 'Comparativo',
-                            icon: Icons.compare_arrows,
-                            active: _modo == _ModoRanking.comparativo,
-                            color: Colors.teal,
-                            onTap: () {
-                              if (_modo == _ModoRanking.comparativo) {
-                                setState(() => _modo = _ModoRanking.nenhum);
-                                widget.onMostrarTSE?.call(false);
-                                widget.onMostrarMarcadores?.call(false);
-                                widget.onComparativoColors?.call(null); // null limpa os ratios no pai
-                              } else {
-                                final cores = <String, String>{};
-                                final ratios = <String, double>{};
-                                for (final r in ranking) {
-                                  if (r.total > 0) {
-                                    final ratio = r.totalEstimativa / r.total;
-                                    cores[r.id] = _corAtingimento(ratio);
-                                    ratios[r.id] = ratio;
-                                  }
+                          if (mostrarAbasTseRedeComparativo) ...[
+                            _TabBtn(
+                              label: 'Eleição 2022',
+                              icon: Icons.how_to_vote_outlined,
+                              active: _modo == _ModoRanking.tse,
+                              color: const Color(0xFF1565C0),
+                              onTap: () {
+                                if (_modo == _ModoRanking.tse) {
+                                  setState(() => _modo = _ModoRanking.nenhum);
+                                  _emitPainelModo(_ModoRanking.nenhum);
+                                  widget.onMostrarTSE?.call(false);
+                                  widget.onMostrarMarcadores?.call(false);
+                                  widget.onComparativoColors?.call(null);
+                                  widget.onBenfeitoriasMapa?.call(null);
+                                } else {
+                                  setState(() => _modo = _ModoRanking.tse);
+                                  _emitPainelModo(_ModoRanking.tse);
+                                  widget.onMostrarTSE?.call(true);
+                                  widget.onMostrarMarcadores?.call(false);
+                                  widget.onComparativoColors?.call(null);
+                                  widget.onBenfeitoriasMapa?.call(null);
                                 }
-                                setState(() => _modo = _ModoRanking.comparativo);
-                                // Comparativo: só marca regiões, SEM bolhas TSE
-                                widget.onMostrarTSE?.call(false);
-                                widget.onMostrarMarcadores?.call(false);
-                                widget.onComparativoColors?.call(cores.isEmpty ? null : cores);
-                                // Atualiza ratios no widget pai via um canal separado (setState no widget)
-                                // Os ratios ficam em _comparativoRatios no state do widget pai
-                              }
-                            },
-                          ),
+                              },
+                            ),
+                            _TabBtn(
+                              label: 'Minha Rede',
+                              icon: Icons.groups_outlined,
+                              active: _modo == _ModoRanking.rede,
+                              color: cs.secondary,
+                              onTap: () {
+                                if (_modo == _ModoRanking.rede) {
+                                  setState(() => _modo = _ModoRanking.nenhum);
+                                  _emitPainelModo(_ModoRanking.nenhum);
+                                  widget.onMostrarTSE?.call(false);
+                                  widget.onMostrarMarcadores?.call(false);
+                                  widget.onComparativoColors?.call(null);
+                                  widget.onBenfeitoriasMapa?.call(null);
+                                } else {
+                                  setState(() => _modo = _ModoRanking.rede);
+                                  _emitPainelModo(_ModoRanking.rede);
+                                  widget.onMostrarTSE?.call(false);
+                                  widget.onMostrarMarcadores?.call(true);
+                                  widget.onComparativoColors?.call(null);
+                                  widget.onBenfeitoriasMapa?.call(null);
+                                }
+                              },
+                            ),
+                            _TabBtn(
+                              label: 'Comparativo',
+                              icon: Icons.compare_arrows,
+                              active: _modo == _ModoRanking.comparativo,
+                              color: Colors.teal,
+                              onTap: () {
+                                if (_modo == _ModoRanking.comparativo) {
+                                  setState(() => _modo = _ModoRanking.nenhum);
+                                  _emitPainelModo(_ModoRanking.nenhum);
+                                  widget.onMostrarTSE?.call(false);
+                                  widget.onMostrarMarcadores?.call(false);
+                                  widget.onComparativoColors?.call(null);
+                                  widget.onBenfeitoriasMapa?.call(null);
+                                } else {
+                                  final cores = <String, String>{};
+                                  final ratios = <String, double>{};
+                                  for (final r in ranking) {
+                                    if (r.total > 0) {
+                                      final ratio = r.totalEstimativa / r.total;
+                                      cores[r.id] = _corAtingimento(ratio);
+                                      ratios[r.id] = ratio;
+                                    }
+                                  }
+                                  setState(() => _modo = _ModoRanking.comparativo);
+                                  _emitPainelModo(_ModoRanking.comparativo);
+                                  widget.onMostrarTSE?.call(false);
+                                  widget.onMostrarMarcadores?.call(false);
+                                  widget.onBenfeitoriasMapa?.call(null);
+                                  widget.onComparativoColors?.call(cores.isEmpty ? null : cores);
+                                }
+                              },
+                            ),
+                          ],
+                          if (temBenfeitorias)
+                            _TabBtn(
+                              label: 'Benfeitorias',
+                              icon: Icons.volunteer_activism_outlined,
+                              active: modoBenfeitorias,
+                              color: kBenfeitoriasMapaAccent,
+                              onTap: () {
+                                final list = widget.benfeitoriasRanking ?? [];
+                                if (_modo == _ModoRanking.benfeitorias) {
+                                  setState(() => _modo = _ModoRanking.nenhum);
+                                  _emitPainelModo(_ModoRanking.nenhum);
+                                  widget.onMostrarTSE?.call(false);
+                                  widget.onMostrarMarcadores?.call(false);
+                                  widget.onComparativoColors?.call(null);
+                                  widget.onBenfeitoriasMapa?.call(null);
+                                } else {
+                                  setState(() => _modo = _ModoRanking.benfeitorias);
+                                  _emitPainelModo(_ModoRanking.benfeitorias);
+                                  _aplicarCamadaBenfeitoriasNoMapa(list);
+                                }
+                              },
+                            ),
                         ],
                       ),
                       const SizedBox(height: 8),
                     ],
 
                     // KPIs: mostra apenas o que é relevante para o tab ativo
-                    Row(
-                      children: [
-                        if (_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo)
-                          Expanded(child: _KpiChip(
-                            icon: Icons.how_to_vote_outlined,
-                            label: 'TSE 2022',
-                            value: fmt.format(totalVotosTseGeral),
-                            color: const Color(0xFF1565C0),
-                            theme: theme,
-                          )),
-                        if ((_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
-                          const SizedBox(width: 8),
-                        if ((_modo == _ModoRanking.rede || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
-                          Expanded(child: _KpiChip(
-                            icon: Icons.groups_outlined,
-                            label: 'Campanha',
-                            value: fmt.format(totalEstimativaGeral),
-                            color: cs.secondary,
-                            theme: theme,
-                          )),
-                      ],
-                    ),
+                    if (modoBenfeitorias)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _KpiChip(
+                              icon: Icons.volunteer_activism_outlined,
+                              label: 'Benfeitorias (soma)',
+                              value: NumberFormat.currency(locale: 'pt_BR', symbol: r'R$').format(totalValorBenf),
+                              color: kBenfeitoriasMapaAccent,
+                              theme: theme,
+                              readableTextOnDark: true,
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Row(
+                        children: [
+                          if (_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo)
+                            Expanded(child: _KpiChip(
+                              icon: Icons.how_to_vote_outlined,
+                              label: 'TSE 2022',
+                              value: fmt.format(totalVotosTseGeral),
+                              color: const Color(0xFF1565C0),
+                              theme: theme,
+                            )),
+                          if ((_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
+                            const SizedBox(width: 8),
+                          if ((_modo == _ModoRanking.rede || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
+                            Expanded(child: _KpiChip(
+                              icon: Icons.groups_outlined,
+                              label: 'Campanha',
+                              value: fmt.format(totalEstimativaGeral),
+                              color: cs.secondary,
+                              theme: theme,
+                            )),
+                        ],
+                      ),
                     if (widget.onCityTap != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          (modoRede || modoNenhum)
-                              ? 'Toque na região para filtrar o mapa'
-                              : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
+                          modoBenfeitorias
+                              ? 'Toque na região para filtrar o mapa • Valores por município cadastrado nas benfeitorias'
+                              : (modoRede || modoNenhum)
+                                  ? 'Toque na região para filtrar o mapa'
+                                  : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
                           style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ),
@@ -1417,10 +1681,12 @@ class _RankingPanelState extends State<_RankingPanel> {
                 ),
               ),
 
-              // ── Lista: nenhum / TSE / Rede / Comparativo ───────────────
+              // ── Lista: nenhum / TSE / Rede / Comparativo / Benfeitorias ───────────────
               Expanded(
                 child: modoNenhum
                     ? _buildListaNenhum(cs, theme)
+                    : modoBenfeitorias
+                    ? _buildListaBenfeitorias(widget.benfeitoriasRanking ?? const [], cs, theme)
                     : modoComparativo
                     ? _buildListaComparativo(ranking, totalVotosTseGeral, totalEstimativaGeral, fmt, cs, theme)
                     : modoRede
@@ -1709,13 +1975,241 @@ class _RankingPanelState extends State<_RankingPanel> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Toque em "Eleição 2022", "Minha Rede" ou "Comparativo" acima para carregar os dados no mapa.',
+              'Toque em "Eleição 2022", "Minha Rede", "Comparativo" ou "Benfeitorias" (quando disponível) para carregar os dados no mapa.',
               style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // ── Lista benfeitorias (valor por região e cidade) ────────────────────────
+
+  Widget _buildListaBenfeitorias(
+    List<BenfeitoriaRegiaoRanking> rankingBenf,
+    ColorScheme cs,
+    ThemeData theme,
+  ) {
+    final curFmt = NumberFormat.currency(locale: 'pt_BR', symbol: r'R$');
+    if (rankingBenf.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.volunteer_activism_outlined, size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.45)),
+              const SizedBox(height: 12),
+              Text(
+                'Nenhum dado no mapa por município',
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'O mapa usa o município da benfeitoria ou, se estiver vazio, o município do apoiador. Confira se o apoiador tem cidade (MT) e, nas benfeitorias, o município quando for diferente.',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    var maxV = 0.0;
+    for (final r in rankingBenf) {
+      if (r.valorTotal > maxV) maxV = r.valorTotal;
+    }
+
+    return ListView.builder(
+      itemCount: rankingBenf.length,
+      itemBuilder: (context, i) {
+        final r = rankingBenf[i];
+        final isFocused = widget.focusedRegiaoId == r.id;
+        final pct = maxV > 0 ? r.valorTotal / maxV * 100 : 0.0;
+        final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+        final t = maxV > 0 ? r.valorTotal / maxV : 0.0;
+        final hexCor = _corAtingimento(t);
+        final barCor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: isFocused
+                ? Border.all(color: kBenfeitoriasMapaAccent, width: 2)
+                : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+            color: isFocused ? kBenfeitoriasMapaAccent.withValues(alpha: 0.12) : null,
+          ),
+          child: ExpansionTile(
+            shape: const RoundedRectangleBorder(),
+            collapsedShape: const RoundedRectangleBorder(),
+            tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            title: InkWell(
+              onTap: () => widget.onToggleFocusRegiao(r.id),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          medalLabel,
+                          style: TextStyle(
+                            fontSize: i < 3 ? 18 : 13,
+                            fontWeight: FontWeight.bold,
+                            color: i >= 3 ? cs.onSurfaceVariant : null,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _tituloRegiaoRanking(r.nome),
+                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: barCor.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            curFmt.format(r.valorTotal),
+                            style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: barCor),
+                          ),
+                        ),
+                        if (isFocused)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 4),
+                            child: Icon(Icons.map, size: 16, color: kBenfeitoriasMapaAccent),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: pct / 100,
+                        minHeight: 5,
+                        backgroundColor: barCor.withValues(alpha: 0.12),
+                        valueColor: AlwaysStoppedAnimation<Color>(barCor),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        Text(
+                          '${r.qtdTotal} registro(s)',
+                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                        GestureDetector(
+                          onTap: () => widget.onToggleFocusRegiao(r.id),
+                          child: Text(
+                            isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: kBenfeitoriasMapaAccent,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            children: [
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Text(
+                        'Cidade',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      'Valor',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...r.cidades.map((c) {
+                final isSelected = c.key == widget.selectedMunicipioKey;
+                return InkWell(
+                  onTap: () => widget.onCityTap?.call(c.key),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    decoration: isSelected
+                        ? BoxDecoration(
+                            color: cs.primaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: cs.primary, width: 1),
+                          )
+                        : null,
+                    child: Row(
+                      children: [
+                        Icon(
+                          isSelected ? Icons.place : Icons.circle,
+                          size: isSelected ? 14 : 6,
+                          color: isSelected ? cs.primary : barCor.withValues(alpha: 0.6),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.cidade,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: isSelected ? FontWeight.bold : null,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '${c.qtd} reg.',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontSize: 9,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          curFmt.format(c.valor),
+                          style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 4),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -2185,21 +2679,27 @@ class _KpiChip extends StatelessWidget {
     required this.value,
     required this.color,
     required this.theme,
+    this.readableTextOnDark = false,
   });
   final IconData icon;
   final String label;
   final String value;
   final Color color;
   final ThemeData theme;
+  /// Texto do rótulo/valor em [onSurface] para leitura em chips coloridos no tema escuro.
+  final bool readableTextOnDark;
 
   @override
   Widget build(BuildContext context) {
+    final cs = theme.colorScheme;
+    final labelColor = readableTextOnDark ? cs.onSurfaceVariant : color;
+    final valueColor = readableTextOnDark ? cs.onSurface : color;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5),
+        border: Border.all(color: color.withValues(alpha: 0.65), width: 1.5),
       ),
       child: Row(
         children: [
@@ -2212,7 +2712,7 @@ class _KpiChip extends StatelessWidget {
                 Text(
                   label,
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
+                    color: labelColor,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.3,
                   ),
@@ -2221,7 +2721,7 @@ class _KpiChip extends StatelessWidget {
                   value,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: valueColor,
                     height: 1.1,
                   ),
                 ),

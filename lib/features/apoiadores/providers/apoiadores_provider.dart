@@ -9,6 +9,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../../assessores/providers/assessores_provider.dart'
     show promoverACandidato, messageFromException, assessoresListProvider, meuAssessorIdProvider;
 import '../../benfeitorias/providers/benfeitorias_provider.dart';
+import '../../mapa/providers/benfeitorias_agg_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
@@ -18,8 +19,12 @@ final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
   // Apoiador não deve listar outros apoiadores (tela só para candidato/assessor).
   if (profile?.role == 'apoiador') return [];
 
+  // Ocultar soft-deletes: RLS idealmente já não devolve linhas; filtro no cliente cobre DB/RLS antigos.
   final res = await supabase.from('apoiadores').select().order('nome');
-  return (res as List).map((e) => Apoiador.fromJson(e as Map<String, dynamic>)).toList();
+  return (res as List)
+      .map((e) => Apoiador.fromJson(e as Map<String, dynamic>))
+      .where((a) => a.excluidoEm == null)
+      .toList();
 });
 
 /// Linha em `apoiadores` vinculada ao usuário com role `apoiador` (convite por e-mail).
@@ -199,6 +204,7 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
     for (final b in params.benfeitorias) {
       await client.from('benfeitorias').insert({
         'apoiador_id': apoiadorId,
+        'municipio_id': municipioIdFinal,
         'titulo': b.titulo.trim(),
         'descricao': b.descricao?.trim().isEmpty == true ? null : b.descricao?.trim(),
         'valor': b.valor,
@@ -210,6 +216,7 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
 
     ref.invalidate(apoiadoresListProvider);
     ref.invalidate(benfeitoriasListProvider);
+    ref.invalidate(benfeitoriasAggPorMunicipioProvider);
   };
 });
 
@@ -376,6 +383,26 @@ Future<String?> reenviarConviteApoiador({required String apoiadorId}) async {
     }
     return null;
   } on FunctionException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}
+
+/// Candidato: remove o vínculo de login do apoiador (`profile_id` null + perfil inativo). Dados do cadastro permanecem.
+Future<void> revogarAcessoApoiador(String apoiadorId) async {
+  try {
+    await supabase.auth.refreshSession();
+    await supabase.rpc('candidato_revogar_acesso_apoiador', params: {'p_apoiador_id': apoiadorId});
+  } catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}
+
+/// Candidato: exclui o apoiador da campanha (soft delete), desativa o login e regista no histórico para restaurar.
+Future<void> excluirApoiador(String apoiadorId) async {
+  try {
+    await supabase.auth.refreshSession();
+    await supabase.rpc('candidato_excluir_apoiador', params: {'p_apoiador_id': apoiadorId});
+  } catch (e) {
     throw Exception(messageFromException(e));
   }
 }

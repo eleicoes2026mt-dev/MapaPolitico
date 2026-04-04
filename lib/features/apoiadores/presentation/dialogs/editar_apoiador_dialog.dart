@@ -1,12 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/cep_br_service.dart';
+import '../../../../core/supabase/supabase_provider.dart';
 import '../../../../core/utils/municipio_resolver.dart';
+import '../../../../core/widgets/municipio_mt_picker_sheet.dart';
 import '../../../../models/apoiador.dart';
+import '../../../../models/benfeitoria.dart';
+import '../../../../models/municipio.dart';
+import '../../../benfeitorias/providers/benfeitorias_provider.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
-import '../../../votantes/providers/votantes_provider.dart' show refreshMunicipiosMTList;
+import '../../../votantes/providers/votantes_provider.dart' show refreshMunicipiosMTList, municipiosMTListProvider;
 import '../../providers/apoiadores_provider.dart' show atualizarApoiadorProvider, AtualizarApoiadorParams;
 import '../utils/apoiadores_form_utils.dart';
+
+const _statusBenfeitoriaOpcoes = <(String, String)>[
+  ('em_andamento', 'Em andamento'),
+  ('concluida', 'Concluída'),
+  ('planejada', 'Planejada'),
+];
 
 class EditarApoiadorDialog extends ConsumerStatefulWidget {
   const EditarApoiadorDialog({super.key, required this.apoiador, required this.onSaved});
@@ -32,6 +46,12 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
   String? _error;
+  String? _cidadeErro;
+  Timer? _cepDebounce;
+  bool _cepLoading = false;
+
+  List<_BenfEditForm>? _benfForms;
+  bool _benfInited = false;
 
   @override
   void initState() {
@@ -50,8 +70,48 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _cidadeNome = widget.apoiador.cidadeNome;
   }
 
+  void _onCepChanged(String _) {
+    _cepDebounce?.cancel();
+    final d = cepSoDigitos(_cepController.text);
+    if (d.length != 8) return;
+    _cepDebounce = Timer(const Duration(milliseconds: 450), _buscarCep);
+  }
+
+  Future<void> _buscarCep() async {
+    if (!mounted) return;
+    final d = cepSoDigitos(_cepController.text);
+    if (d.length != 8) return;
+    setState(() => _cepLoading = true);
+    try {
+      final r = await fetchCepBr(d);
+      if (!mounted || r == null) return;
+      setState(() {
+        if (r.logradouro.trim().isNotEmpty) {
+          _logradouroController.text = r.logradouro.trim();
+        }
+        final comp = r.complemento?.trim();
+        final bairro = r.bairro?.trim();
+        if (_complementoController.text.trim().isEmpty) {
+          if (comp != null && comp.isNotEmpty) {
+            _complementoController.text = comp;
+          } else if (bairro != null && bairro.isNotEmpty) {
+            _complementoController.text = bairro;
+          }
+        }
+        final chave = chaveMunicipioMtApartirCepLocalidade(r.localidade, r.uf);
+        if (chave != null) {
+          _cidadeNome = chave;
+          _cidadeErro = null;
+        }
+      });
+    } finally {
+      if (mounted) setState(() => _cepLoading = false);
+    }
+  }
+
   @override
   void dispose() {
+    _cepDebounce?.cancel();
     _nomeController.dispose();
     _telefoneController.dispose();
     _emailController.dispose();
@@ -64,8 +124,58 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     super.dispose();
   }
 
+  String? _chaveCidadePadraoBenfeitoria() {
+    final n = widget.apoiador.cidadeNome?.trim();
+    if (n == null || n.isEmpty) return null;
+    return normalizarNomeMunicipioMT(n);
+  }
+
+  void _adicionarBenfeitoria() {
+    setState(() {
+      _benfForms ??= [];
+      _benfForms!.add(_BenfEditForm.nova(cidadePadraoKey: _chaveCidadePadraoBenfeitoria()));
+    });
+  }
+
+  Future<void> _sincronizarBenfeitorias(String apoiadorId, String? municipioPadraoId, List<Municipio> municipios) async {
+    final forms = _benfForms ?? [];
+    final existing = await ref.read(benfeitoriasPorApoiadorProvider(apoiadorId).future);
+    final idsNaLista = forms.map((f) => f.id).whereType<String>().toSet();
+    for (final b in existing) {
+      if (!idsNaLista.contains(b.id)) {
+        await supabase.from('benfeitorias').delete().eq('id', b.id);
+      }
+    }
+    for (final f in forms) {
+      final titulo = f.titulo.trim();
+      if (titulo.isEmpty) continue;
+      final mid = (f.cidadeKey != null && f.cidadeKey!.trim().isNotEmpty)
+          ? municipioIdParaNomeCidade(f.cidadeKey!, municipios)
+          : municipioPadraoId;
+      final row = <String, dynamic>{
+        'apoiador_id': apoiadorId,
+        'titulo': titulo,
+        'tipo': f.tipo,
+        'valor': f.valor,
+        'descricao': f.descricao.trim().isEmpty ? null : f.descricao.trim(),
+        'data_realizacao': f.data?.toIso8601String().split('T').first,
+        'status': f.status,
+        'municipio_id': mid,
+      };
+      if (f.id == null) {
+        await supabase.from('benfeitorias').insert(row);
+      } else {
+        await supabase.from('benfeitorias').update(row).eq('id', f.id!);
+      }
+    }
+  }
+
   Future<void> _salvar() async {
+    if (_cidadeNome == null || _cidadeNome!.trim().isEmpty) {
+      setState(() => _cidadeErro = 'Selecione a cidade.');
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (_cidadeNome == null || _cidadeNome!.trim().isEmpty) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -92,6 +202,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           complemento: _complementoController.text.trim(),
         ),
       );
+      await _sincronizarBenfeitorias(widget.apoiador.id, mid, municipios);
+      invalidateBenfeitoriasCaches(ref, apoiadorId: widget.apoiador.id);
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -107,14 +219,28 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cidades = listCidadesMTNomesNormalizados.toList();
-    if (_cidadeNome != null && _cidadeNome!.isNotEmpty && !cidades.contains(_cidadeNome)) {
-      cidades.add(_cidadeNome!);
+    final benfAsync = ref.watch(benfeitoriasPorApoiadorProvider(widget.apoiador.id));
+    final munAsync = ref.watch(municipiosMTListProvider);
+
+    if (!_benfInited) {
+      final list = benfAsync.asData?.value;
+      final munList = munAsync.asData?.value;
+      if (list != null && munList != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _benfInited) return;
+          final idToKey = {for (final m in munList) m.id: m.nomeNormalizado};
+          setState(() {
+            _benfForms = list.map((b) => _BenfEditForm.fromBenfeitoria(b, idToKey)).toList();
+            _benfInited = true;
+          });
+        });
+      }
     }
+
     return AlertDialog(
       title: const Text('Editar Apoiador'),
       content: SizedBox(
-        width: 400,
+        width: 480,
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
@@ -129,11 +255,13 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _cidadeNome,
-                  decoration: const InputDecoration(labelText: 'Cidade'),
-                  items: cidades.map((c) => DropdownMenuItem(value: c, child: Text(displayNomeCidadeMT(c)))).toList(),
-                  onChanged: (v) => setState(() => _cidadeNome = v),
+                MunicipioMtFormRow(
+                  selectedNormalizedKey: _cidadeNome,
+                  errorText: _cidadeErro,
+                  onSelected: (k) => setState(() {
+                    _cidadeNome = k;
+                    _cidadeErro = null;
+                  }),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -164,8 +292,24 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _cepController,
-                  decoration: const InputDecoration(labelText: 'CEP'),
+                  decoration: InputDecoration(
+                    labelText: 'CEP',
+                    hintText: '00000-000',
+                    suffixIcon: _cepLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
+                    helperText: 'Preenche endereço e cidade (MT) ao concluir os 8 dígitos.',
+                  ),
                   keyboardType: TextInputType.number,
+                  inputFormatters: [CepInputFormatter()],
+                  onChanged: _onCepChanged,
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -192,6 +336,47 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                   ),
                   keyboardType: TextInputType.number,
                 ),
+                const SizedBox(height: 20),
+                Text('Benfeitorias', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(
+                  'Informe o município de cada benfeitoria para somar no mapa regional. Se não escolher, usa a cidade do apoiador.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
+                if (benfAsync.isLoading || munAsync.isLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else if (benfAsync.hasError)
+                  Text(
+                    'Não foi possível carregar benfeitorias.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                  )
+                else ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: _adicionarBenfeitoria,
+                        icon: const Icon(Icons.add, size: 20),
+                        label: const Text('Adicionar benfeitoria'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...List.generate(_benfForms?.length ?? 0, (i) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _BenfeitoriaEditarTile(
+                        form: _benfForms![i],
+                        onChanged: () => setState(() {}),
+                        onRemove: () => setState(() => _benfForms!.removeAt(i)),
+                      ),
+                    );
+                  }),
+                ],
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
@@ -211,6 +396,186 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           child: _loading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Salvar'),
         ),
       ],
+    );
+  }
+}
+
+class _BenfEditForm {
+  _BenfEditForm({
+    this.id,
+    required this.titulo,
+    required this.tipo,
+    required this.valor,
+    this.data,
+    required this.descricao,
+    required this.status,
+    this.cidadeKey,
+  });
+
+  factory _BenfEditForm.fromBenfeitoria(Benfeitoria b, Map<String, String> municipioIdParaChave) {
+    return _BenfEditForm(
+      id: b.id,
+      titulo: b.titulo,
+      tipo: b.tipo,
+      valor: b.valor,
+      data: b.dataRealizacao,
+      descricao: b.descricao ?? '',
+      status: b.status,
+      cidadeKey: b.municipioId != null ? municipioIdParaChave[b.municipioId] : null,
+    );
+  }
+
+  factory _BenfEditForm.nova({String? cidadePadraoKey}) => _BenfEditForm(
+        titulo: '',
+        tipo: 'Outro',
+        valor: 0,
+        descricao: '',
+        status: 'concluida',
+        cidadeKey: cidadePadraoKey,
+      );
+
+  String? id;
+  String titulo;
+  String tipo;
+  double valor;
+  DateTime? data;
+  String descricao;
+  String status;
+  String? cidadeKey;
+}
+
+class _BenfeitoriaEditarTile extends StatelessWidget {
+  const _BenfeitoriaEditarTile({
+    required this.form,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final _BenfEditForm form;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  String _dataText() {
+    final d = form.data;
+    if (d == null) return '';
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    return '$dd/$mm/${d.year}';
+  }
+
+  String _valorText() {
+    if (form.valor == 0) return '0,00';
+    final s = form.valor.toStringAsFixed(2);
+    final parts = s.split('.');
+    final intP = parts[0];
+    final dec = parts.length > 1 ? parts[1] : '00';
+    final buf = StringBuffer();
+    for (var i = 0; i < intP.length; i++) {
+      if (i > 0 && (intP.length - i) % 3 == 0) buf.write('.');
+      buf.write(intP[i]);
+    }
+    return '$buf,$dec';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: form.titulo,
+                    decoration: const InputDecoration(
+                      labelText: 'O que foi feito *',
+                      hintText: 'Obra, manutenção, ajuda de custo...',
+                    ),
+                    onChanged: (v) {
+                      form.titulo = v;
+                      onChanged();
+                    },
+                  ),
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: onRemove, tooltip: 'Remover'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final k = await showMunicipioMtPicker(context, currentNormalizedKey: form.cidadeKey);
+                if (k != null) {
+                  form.cidadeKey = k;
+                  onChanged();
+                }
+              },
+              icon: const Icon(Icons.place_outlined, size: 18),
+              label: Text(
+                form.cidadeKey == null ? 'Município (usa cidade do apoiador se vazio)' : displayNomeCidadeMT(form.cidadeKey!),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: form.tipo,
+              decoration: const InputDecoration(labelText: 'Tipo'),
+              items: tiposBenfeitoriaLista.map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2))).toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  form.tipo = v;
+                  onChanged();
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _statusBenfeitoriaOpcoes.any((e) => e.$1 == form.status) ? form.status : 'em_andamento',
+              decoration: const InputDecoration(labelText: 'Status'),
+              items: _statusBenfeitoriaOpcoes.map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2))).toList(),
+              onChanged: (v) {
+                if (v != null) {
+                  form.status = v;
+                  onChanged();
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: _valorText(),
+              decoration: const InputDecoration(labelText: 'Valor (R\$)', hintText: '0.000,00'),
+              keyboardType: TextInputType.number,
+              inputFormatters: [ValorRealInputFormatter()],
+              onChanged: (v) {
+                form.valor = parseValorReal(v);
+                onChanged();
+              },
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: _dataText(),
+              decoration: const InputDecoration(labelText: 'Data (DD/MM/AAAA)', hintText: 'DD/MM/AAAA'),
+              inputFormatters: [DataNascimentoInputFormatter()],
+              onChanged: (v) {
+                form.data = parseDataDDMMYYYY(v);
+                onChanged();
+              },
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              initialValue: form.descricao,
+              decoration: const InputDecoration(labelText: 'Descrição (opcional)'),
+              maxLines: 2,
+              onChanged: (v) {
+                form.descricao = v;
+                onChanged();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
-import '../providers/assessores_provider.dart' show assessoresListProvider, convidarAssessor, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException;
+import '../providers/assessores_provider.dart'
+    show assessoresListProvider, convidarAssessor, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException, setAssessorAtivo;
 import '../../configuracoes/providers/menu_access_provider.dart';
 
 /// Link de convite para enviar por WhatsApp se o e-mail do Supabase não chegar.
@@ -374,6 +375,7 @@ class _AssessorCard extends ConsumerStatefulWidget {
 class _AssessorCardState extends ConsumerState<_AssessorCard> {
   bool _reenviando = false;
   bool _removendo = false;
+  bool _toggleAtivo = false;
 
   Future<void> _reenviarConvite() async {
     setState(() => _reenviando = true);
@@ -435,6 +437,45 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
       );
     } finally {
       if (mounted) setState(() => _removendo = false);
+    }
+  }
+
+  Future<void> _alternarAtivo() async {
+    final a = widget.assessor;
+    final desativar = a.ativo;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(desativar ? 'Desativar assessor' : 'Reativar assessor'),
+        content: Text(
+          desativar
+              ? '${a.nome} não poderá mais acessar o app nem ver dados da campanha até ser reativado.'
+              : 'Restaurar acesso de ${a.nome} ao aplicativo?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(desativar ? 'Desativar' : 'Reativar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _toggleAtivo = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await setAssessorAtivo(assessorId: a.id, ativo: !desativar);
+      if (!mounted) return;
+      widget.onRefresh();
+      messenger.showSnackBar(
+        SnackBar(content: Text(!desativar ? 'Assessor reativado.' : 'Assessor desativado.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(messageFromException(e))));
+    } finally {
+      if (mounted) setState(() => _toggleAtivo = false);
     }
   }
 
@@ -536,7 +577,20 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                   alignment: WrapAlignment.end,
                   children: [
                     TextButton.icon(
-                      onPressed: _reenviando ? null : _reenviarConvite,
+                      onPressed: _toggleAtivo ? null : _alternarAtivo,
+                      icon: _toggleAtivo
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(assessor.ativo ? Icons.person_off_outlined : Icons.check_circle_outline, size: 18),
+                      label: Text(assessor.ativo ? 'Desativar' : 'Reativar'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: assessor.ativo ? theme.colorScheme.error : Colors.green.shade700,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: (_reenviando || !assessor.ativo) ? null : _reenviarConvite,
                       icon: _reenviando
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.email_outlined, size: 18),

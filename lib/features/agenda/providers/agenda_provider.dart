@@ -50,6 +50,51 @@ final proximaVisitaMinhaCidadeProvider = FutureProvider<Visita?>((ref) async {
   return Visita.fromJson(res);
 });
 
+/// Primeira visita futura visível ainda sem confirmação de presença (apoiador: só da cidade).
+final visitaPendenteConfirmacaoProvider = FutureProvider<Visita?>((ref) async {
+  final profile = await ref.read(profileProvider.future);
+  if (profile == null) return null;
+  final role = profile.role;
+  if (role != 'apoiador' && role != 'assessor') return null;
+
+  final hoje = DateTime.now().toIso8601String().split('T').first;
+  List<dynamic> rows;
+
+  if (role == 'apoiador') {
+    final apoiador = await ref.watch(meuApoiadorProvider.future);
+    final mid = apoiador?.municipioId;
+    if (mid == null || mid.isEmpty) return null;
+    rows = await supabase
+        .from('reunioes')
+        .select('*, municipios(nome)')
+        .eq('municipio_id', mid)
+        .eq('visivel_apoiadores', true)
+        .gte('data_reuniao', hoje)
+        .order('data_reuniao')
+        .limit(25);
+  } else {
+    rows = await supabase
+        .from('reunioes')
+        .select('*, municipios(nome)')
+        .eq('visivel_apoiadores', true)
+        .gte('data_reuniao', hoje)
+        .order('data_reuniao')
+        .limit(25);
+  }
+
+  if (rows.isEmpty) return null;
+
+  final presRes = await supabase.from('reunioes_presenca').select('reuniao_id').eq('profile_id', profile.id);
+  final confirmed = (presRes as List).map((e) => e['reuniao_id'] as String).toSet();
+
+  for (final r in rows) {
+    final m = Map<String, dynamic>.from(r as Map);
+    final id = m['id'] as String;
+    if (!confirmed.contains(id)) return Visita.fromJson(m);
+  }
+  return null;
+});
+
 // ── CRUD visitas ──────────────────────────────────────────────────────────────
 
 class NovaVisitaParams {
@@ -58,6 +103,8 @@ class NovaVisitaParams {
     required this.dataReuniao,
     this.hora,
     this.localTexto,
+    this.localLat,
+    this.localLng,
     this.descricao,
     this.municipioId,
     this.visivelApoiadores = true,
@@ -67,6 +114,8 @@ class NovaVisitaParams {
   final DateTime dataReuniao;
   final String? hora;
   final String? localTexto;
+  final double? localLat;
+  final double? localLng;
   final String? descricao;
   final String? municipioId;
   final bool visivelApoiadores;
@@ -80,6 +129,8 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
       if (p.hora != null && p.hora!.isNotEmpty) 'hora': p.hora,
       'data_reuniao': p.dataReuniao.toIso8601String().split('T').first,
       if (p.localTexto != null && p.localTexto!.isNotEmpty) 'local_texto': p.localTexto!.trim(),
+      'local_lat': p.localLat,
+      'local_lng': p.localLng,
       if (p.descricao != null && p.descricao!.isNotEmpty) 'descricao': p.descricao!.trim(),
       if (p.municipioId != null) 'municipio_id': p.municipioId,
       'visivel_apoiadores': p.visivelApoiadores,
@@ -89,6 +140,7 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
     // Push automático quando a visita é visível para apoiadores
     if (p.visivelApoiadores && res != null) {
       try {
+        await supabase.auth.refreshSession();
         final titulo = res['titulo'] as String? ?? p.titulo;
         final local = res['local_texto'] as String? ?? p.localTexto ?? '';
         final dataStr = p.dataReuniao.toIso8601String().split('T').first;
@@ -104,6 +156,7 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
     ref.invalidate(visitasProvider);
     ref.invalidate(todasVisitasProvider);
     ref.invalidate(proximaVisitaMinhaCidadeProvider);
+    ref.invalidate(visitaPendenteConfirmacaoProvider);
   };
 });
 
@@ -115,6 +168,8 @@ final atualizarVisitaProvider =
       'hora': p.hora?.isNotEmpty == true ? p.hora : null,
       'data_reuniao': p.dataReuniao.toIso8601String().split('T').first,
       'local_texto': p.localTexto?.trim().isEmpty == true ? null : p.localTexto?.trim(),
+      'local_lat': p.localLat,
+      'local_lng': p.localLng,
       'descricao': p.descricao?.trim().isEmpty == true ? null : p.descricao?.trim(),
       'municipio_id': p.municipioId,
       'visivel_apoiadores': p.visivelApoiadores,
@@ -122,6 +177,7 @@ final atualizarVisitaProvider =
     ref.invalidate(visitasProvider);
     ref.invalidate(todasVisitasProvider);
     ref.invalidate(proximaVisitaMinhaCidadeProvider);
+    ref.invalidate(visitaPendenteConfirmacaoProvider);
   };
 });
 
@@ -130,6 +186,8 @@ final excluirVisitaProvider = Provider<Future<void> Function(String id)>((ref) {
     await supabase.from('reunioes').delete().eq('id', id);
     ref.invalidate(visitasProvider);
     ref.invalidate(todasVisitasProvider);
+    ref.invalidate(proximaVisitaMinhaCidadeProvider);
+    ref.invalidate(visitaPendenteConfirmacaoProvider);
   };
 });
 

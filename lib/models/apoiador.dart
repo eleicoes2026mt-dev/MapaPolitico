@@ -32,6 +32,8 @@ class Apoiador {
   final int votosFamilia;
   final int votosFuncionarios;
   final int? votosPrometidosUltimaEleicao;
+  /// Preenchido quando o candidato exclui o apoiador (soft delete no Postgres).
+  final DateTime? excluidoEm;
   final String? bandeiraIniciais;
   final String? bandeiraCorPrimaria;
   final String? bandeiraCorSecundaria;
@@ -72,6 +74,7 @@ class Apoiador {
     this.votosFamilia = 0,
     this.votosFuncionarios = 0,
     this.votosPrometidosUltimaEleicao,
+    this.excluidoEm,
     this.bandeiraIniciais,
     this.bandeiraCorPrimaria,
     this.bandeiraCorSecundaria,
@@ -83,6 +86,7 @@ class Apoiador {
   factory Apoiador.fromJson(Map<String, dynamic> json) {
     final list = json['cidades_atuacao'];
     final dn = json['data_nascimento'];
+    final ex = json['excluido_em'];
     return Apoiador(
       id: json['id'] as String,
       profileId: json['profile_id'] as String?,
@@ -115,6 +119,7 @@ class Apoiador {
       votosFamilia: (json['votos_familia'] as num?)?.toInt() ?? 0,
       votosFuncionarios: (json['votos_funcionarios'] as num?)?.toInt() ?? 0,
       votosPrometidosUltimaEleicao: (json['votos_prometidos_ultima_eleicao'] as num?)?.toInt(),
+      excluidoEm: ex != null ? DateTime.tryParse(ex.toString()) : null,
       bandeiraIniciais: json['bandeira_iniciais'] as String?,
       bandeiraCorPrimaria: json['bandeira_cor_primaria'] as String?,
       bandeiraCorSecundaria: json['bandeira_cor_secundaria'] as String?,
@@ -158,6 +163,7 @@ class Apoiador {
         'votos_familia': votosFamilia,
         'votos_funcionarios': votosFuncionarios,
         'votos_prometidos_ultima_eleicao': votosPrometidosUltimaEleicao,
+        'excluido_em': excluidoEm?.toUtc().toIso8601String(),
         'bandeira_iniciais': bandeiraIniciais,
         'bandeira_cor_primaria': bandeiraCorPrimaria,
         'bandeira_cor_secundaria': bandeiraCorSecundaria,

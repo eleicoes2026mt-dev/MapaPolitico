@@ -111,8 +111,10 @@ class ConfiguracoesScreen extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Restaurar registro excluído?'),
         content: Text(
-          'Será recriado o registro em «${log.tableLabelPt}» (ID ${log.recordId.substring(0, 8)}…). '
-          'Conflitos ocorrem se já existir um registro com o mesmo ID.',
+          log.tableName == 'apoiadores'
+              ? 'O apoiador volta à lista da campanha. Se havia login vinculado, o perfil será reativado para ele poder entrar de novo (ID ${log.recordId.substring(0, 8)}…).'
+              : 'Será recriado o registro em «${log.tableLabelPt}» (ID ${log.recordId.substring(0, 8)}…). '
+                  'Conflitos ocorrem se já existir um registro com o mesmo ID.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),

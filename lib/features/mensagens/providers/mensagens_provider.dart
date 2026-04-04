@@ -56,6 +56,7 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
 
     // Sempre tenta enviar push (notificação para todos)
     try {
+      await supabase.auth.refreshSession();
       final r = await supabase.functions.invoke('send-push', body: {
         'title': mensagem.titulo,
         'body': mensagem.corpo ?? 'Nova mensagem da campanha.',
@@ -90,6 +91,7 @@ final excluirMensagemProvider = Provider<Future<void> Function(String id)>((ref)
 /// Lança [Exception] com mensagem legível em caso de erro.
 final enviarPushMensagemProvider = Provider<Future<Map<String, dynamic>> Function(Mensagem)>((ref) {
   return (Mensagem m) async {
+    await supabase.auth.refreshSession();
     final res = await supabase.functions.invoke('send-push', body: {
       'title': m.titulo,
       'body': m.corpo ?? 'Nova mensagem da campanha.',

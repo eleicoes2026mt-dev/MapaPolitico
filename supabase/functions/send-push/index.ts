@@ -22,6 +22,8 @@ function json(data: unknown, status = 200): Response {
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  if (req.method !== "POST") return json({ error: "Método não permitido." }, 405);
+
   const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
   const VAPID_PUBLIC  = Deno.env.get("VAPID_PUBLIC_KEY")  ??
     "BBDwFPKAU0cMMay9-WE1DadHmv_lFmGts80CaorhOl2zKW1HTSw4sQLpboixKQkerXexwYwJxSF4PcOK35Qa2DY";
@@ -44,10 +46,53 @@ serve(async (req: Request) => {
 
   if (!title || !msgBody) return json({ error: "title e body são obrigatórios." }, 400);
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return json({ error: "Não autorizado. Faça login novamente." }, 401);
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseAnon = createClient(
+    supabaseUrl,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+
+  let callerId: string | null = null;
+  try {
+    const { data: claimsData, error: claimsError } = await supabaseAnon.auth.getClaims(token);
+    if (!claimsError && claimsData?.claims?.sub) {
+      callerId = claimsData.claims.sub as string;
+    }
+  } catch {
+    // Clientes sem getClaims: segue para getUser
+  }
+  if (!callerId) {
+    const { data: { user } } = await supabaseAnon.auth.getUser(token);
+    callerId = user?.id ?? null;
+  }
+  if (!callerId) {
+    return json({ error: "Sessão inválida ou expirada. Faça logout e login novamente." }, 401);
+  }
+
+  const supabaseAdmin = createClient(
+    supabaseUrl,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+
+  const { data: profileCaller } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", callerId)
+    .single();
+
+  const role = (profileCaller as { role: string } | null)?.role;
+  if (!role || (role !== "candidato" && role !== "assessor")) {
+    return json({ error: "Apenas candidato ou assessor pode enviar notificações push." }, 403);
+  }
+
+  const supabase = supabaseAdmin;
 
   let query = supabase.from("push_subscriptions").select("*");
   if (profileIds?.length) query = query.in("profile_id", profileIds);

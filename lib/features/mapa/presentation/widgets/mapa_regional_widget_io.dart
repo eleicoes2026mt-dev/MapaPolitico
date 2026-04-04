@@ -9,6 +9,7 @@ import '../../data/mt_municipios_coords.dart';
 import '../../data/tse_votos_escala.dart';
 import '../../../../models/bandeira_visual.dart';
 import '../../models/mapa_marcador_cidade.dart';
+import '../../providers/benfeitorias_mapa_provider.dart';
 
 const _prefsKeyRegionNames = 'mapa_regioes_nomes';
 
@@ -60,6 +61,9 @@ class MapaRegionalWidget extends StatefulWidget {
     this.mostrarTSE = false,
     this.mostrarMarcadores = false,
     this.onComparativoColors,
+    this.benfeitoriasRanking,
+    this.onBenfeitoriasMapa,
+    this.onPainelRankingModoChanged,
   });
 
   final double height;
@@ -83,7 +87,11 @@ class MapaRegionalWidget extends StatefulWidget {
   final void Function(bool)? onMostrarMarcadores;
   final bool mostrarTSE;
   final bool mostrarMarcadores;
+  /// Ignorado no ArcGIS — só a versão web usa ranking de benfeitorias.
+  final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
+  final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
   final void Function(Map<String, String>?)? onComparativoColors;
+  final ValueChanged<String>? onPainelRankingModoChanged;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();

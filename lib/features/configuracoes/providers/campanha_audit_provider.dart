@@ -4,6 +4,8 @@ import '../../../models/campanha_audit_log.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../assessores/providers/assessores_provider.dart';
 import '../../benfeitorias/providers/benfeitorias_provider.dart';
+import '../../dashboard/providers/dashboard_provider.dart';
+import '../../mapa/providers/estimativa_por_cidade_provider.dart';
 import '../../votantes/providers/votantes_provider.dart';
 
 /// Histórico de alterações (apenas candidato; RLS no Supabase).
@@ -61,4 +63,6 @@ void _invalidateCampanha(WidgetRef ref) {
   ref.invalidate(assessoresListProvider);
   ref.invalidate(votantesListProvider);
   ref.invalidate(benfeitoriasListProvider);
+  ref.invalidate(dashboardStatsProvider);
+  ref.invalidate(estimativaPorCidadeProvider);
 }

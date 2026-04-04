@@ -4,11 +4,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/cep_br_service.dart';
-import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart';
-import '../../../core/utils/municipio_resolver.dart' show municipioIdParaNomeCidade, municipioIdResolvidoParaApoiador;
+import '../../../core/utils/municipio_resolver.dart'
+    show chaveMunicipioMtApartirCepLocalidade, municipioIdParaNomeCidade, municipioIdResolvidoParaApoiador;
+import '../../../core/widgets/municipio_mt_picker_sheet.dart';
+import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
+    show
+        CepInputFormatter,
+        TelefoneInputFormatter,
+        cepSoDigitos,
+        formatCepDisplayFromDigits,
+        formatTelefoneBrFromDigits,
+        parseLegado,
+        telefoneSoDigitos;
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../../models/profile.dart';
 import '../../../models/votante.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
+import '../../assessores/providers/assessores_provider.dart' show meuAssessorRegistroProvider;
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart';
 import '../providers/votantes_provider.dart';
@@ -322,10 +334,11 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   late final TextEditingController _logradouro;
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
+  late final TextEditingController _legado;
   /// Chave normalizada (lista `listCidadesMTNomesNormalizados`), igual ao cadastro de apoiadores.
   String? _cidadeNomeNormalizado;
+  String? _cidadeErro;
   String _abrangencia = 'Individual';
-  String? _apoiadorOpcionalId;
   bool _loading = false;
   /// Apoiador criando votante: preenche cidade padrão uma vez a partir do cadastro.
   bool _apoiadorPadraoCidadeAplicado = false;
@@ -347,6 +360,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _logradouro = TextEditingController(text: v?.logradouro ?? '');
     _numero = TextEditingController(text: v?.numero ?? '');
     _complemento = TextEditingController(text: v?.complemento ?? '');
+    _legado = TextEditingController(
+      text: v?.votosPrometidosUltimaEleicao != null ? '${v!.votosPrometidosUltimaEleicao}' : '',
+    );
     // Prioridade: nome do join > cidade_nome salvo > vazio
     final cidadeInicial = v?.municipioNome?.trim().isNotEmpty == true
         ? v!.municipioNome!
@@ -355,7 +371,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
       _cidadeNomeNormalizado = normalizarNomeMunicipioMT(cidadeInicial);
     }
     _abrangencia = v?.abrangencia ?? 'Individual';
-    _apoiadorOpcionalId = v?.apoiadorId;
     if (v != null) {
       _apoiadorPadraoCidadeAplicado = true;
     }
@@ -389,6 +404,11 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             _complemento.text = bairro;
           }
         }
+        final chave = chaveMunicipioMtApartirCepLocalidade(r.localidade, r.uf);
+        if (chave != null) {
+          _cidadeNomeNormalizado = chave;
+          _cidadeErro = null;
+        }
       });
     } finally {
       if (mounted) setState(() => _cepLoading = false);
@@ -406,13 +426,16 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _logradouro.dispose();
     _numero.dispose();
     _complemento.dispose();
+    _legado.dispose();
     super.dispose();
   }
 
   Future<void> _salvar() async {
+    if (_cidadeNomeNormalizado == null || _cidadeNomeNormalizado!.trim().isEmpty) {
+      setState(() => _cidadeErro = 'Selecione o município.');
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_cidadeNomeNormalizado == null || _cidadeNomeNormalizado!.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione o município.')));
       return;
     }
 
@@ -428,6 +451,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
       final cidadeTexto = displayNomeCidadeMT(_cidadeNomeNormalizado!);
 
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
+      final legadoVal = parseLegado(_legado.text);
       if (widget.existente != null) {
         await ref.read(atualizarVotanteProvider)(
           widget.existente!.id,
@@ -443,10 +467,11 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+            votosPrometidosUltimaEleicao: legadoVal,
+            atualizarLegado: true,
           ),
         );
       } else {
-        final profile = ref.read(profileProvider).valueOrNull;
         await ref.read(criarVotanteProvider)(
           NovoVotanteParams(
             nome: _nome.text.trim(),
@@ -456,11 +481,13 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             cidadeNome: cidadeTexto,
             abrangencia: _abrangencia,
             qtdVotosFamilia: qtd < 1 ? 1 : qtd,
-            apoiadorId: profile?.role == 'apoiador' ? null : _apoiadorOpcionalId,
+            // Candidato/assessor: sem apoiador na rede; apoiador: preenchido no provider.
+            apoiadorId: null,
             cep: cepSoDigitos(_cep.text).isEmpty ? null : cepSoDigitos(_cep.text),
             logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+            votosPrometidosUltimaEleicao: legadoVal,
           ),
         );
       }
@@ -493,9 +520,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final munAsync = ref.watch(municipiosMTListProvider);
-    final apoiadoresAsync = ref.watch(apoiadoresListProvider);
-    final mostrarApoiadorOpcional = profile?.role == 'candidato' || profile?.role == 'assessor';
-
     return AlertDialog(
       title: Text(widget.existente != null ? 'Editar votante' : 'Novo votante'),
       content: SizedBox(
@@ -562,12 +586,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                 });
               });
             }
-            final cidades = listCidadesMTNomesNormalizados.toList();
-            if (_cidadeNomeNormalizado != null &&
-                _cidadeNomeNormalizado!.isNotEmpty &&
-                !cidades.contains(_cidadeNomeNormalizado)) {
-              cidades.add(_cidadeNomeNormalizado!);
-            }
             return SingleChildScrollView(
               child: Form(
                 key: _formKey,
@@ -598,29 +616,14 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                       keyboardType: TextInputType.emailAddress,
                     ),
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: cidades.contains(_cidadeNomeNormalizado) ? _cidadeNomeNormalizado : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Município (MT) *',
-                        hintText: 'Selecione a cidade',
-                        helperText:
-                            'Mesma lista do cadastro de apoiadores; aparece no mapa regional e na estimativa.',
-                      ),
-                      menuMaxHeight: 380,
-                      items: cidades
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(
-                                displayNomeCidadeMT(c),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => _cidadeNomeNormalizado = v),
-                      validator: (v) => v == null || v.isEmpty ? 'Selecione o município' : null,
+                    MunicipioMtFormRow(
+                      selectedNormalizedKey: _cidadeNomeNormalizado,
+                      errorText: _cidadeErro,
+                      label: 'Município (MT) *',
+                      onSelected: (k) => setState(() {
+                        _cidadeNomeNormalizado = k;
+                        _cidadeErro = null;
+                      }),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -666,29 +669,19 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                         ),
                         child: const Text('1 (individual)', style: TextStyle(color: Colors.grey)),
                       ),
-                    if (mostrarApoiadorOpcional && widget.existente == null) ...[
+                    if (widget.existente == null && profile != null) ...[
                       const SizedBox(height: 12),
-                      apoiadoresAsync.when(
-                        data: (apoiadores) {
-                          final items = <DropdownMenuItem<String?>>[
-                            const DropdownMenuItem(value: null, child: Text('Nenhum (só campanha)')),
-                            ...apoiadores.map(
-                              (a) => DropdownMenuItem(value: a.id, child: Text(a.nome)),
-                            ),
-                          ];
-                          return DropdownButtonFormField<String?>(
-                            value: _apoiadorOpcionalId,
-                            decoration: const InputDecoration(
-                              labelText: 'Vincular a apoiador (opcional)',
-                            ),
-                            items: items,
-                            onChanged: (v) => setState(() => _apoiadorOpcionalId = v),
-                          );
-                        },
-                        loading: () => const LinearProgressIndicator(),
-                        error: (_, __) => const SizedBox.shrink(),
-                      ),
+                      _VinculoCadastroNovoVotante(theme: theme, profile: profile),
                     ],
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _legado,
+                      decoration: const InputDecoration(
+                        labelText: 'Votos prometidos na última eleição',
+                        hintText: 'Opcional — referência histórica',
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Endereço (opcional)',
@@ -710,7 +703,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                                 ),
                               )
                             : null,
-                        helperText: 'Preenche rua e complemento ao concluir o CEP (BrasilAPI / ViaCEP).',
+                        helperText: 'Preenche rua, complemento e cidade (MT) ao concluir o CEP.',
                       ),
                       keyboardType: TextInputType.number,
                       inputFormatters: [CepInputFormatter()],
@@ -758,5 +751,133 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
       ],
     );
   }
+}
+
+class _VinculoCadastroNovoVotante extends ConsumerWidget {
+  const _VinculoCadastroNovoVotante({
+    required this.theme,
+    required this.profile,
+  });
+
+  final ThemeData theme;
+  final Profile profile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    switch (profile.role) {
+      case 'candidato':
+        final nome = profile.fullName?.trim().isNotEmpty == true
+            ? profile.fullName!
+            : (profile.email ?? 'Candidato');
+        return _vinculoCadastroCard(
+          theme: theme,
+          icon: Icons.how_to_vote_outlined,
+          label: 'Cadastro pelo candidato',
+          destaque: nome,
+          subtitulo:
+              'Este votante entra na campanha como cadastro direto do candidato (sem vínculo a apoiador).',
+        );
+      case 'assessor':
+        return ref.watch(meuAssessorRegistroProvider).when(
+              data: (a) {
+                final nome =
+                    a?.nome.trim().isNotEmpty == true ? a!.nome : 'Seu cadastro de assessor';
+                return _vinculoCadastroCard(
+                  theme: theme,
+                  icon: Icons.badge_outlined,
+                  label: 'Vinculado ao assessor',
+                  destaque: nome,
+                  subtitulo:
+                      'O votante fica na rede como cadastro do assessor logado. Não é possível alterar aqui.',
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (_, __) => _vinculoCadastroCard(
+                theme: theme,
+                icon: Icons.badge_outlined,
+                label: 'Vinculado ao assessor',
+                destaque: 'Assessor',
+                subtitulo: 'Cadastro na rede do assessor logado.',
+              ),
+            );
+      case 'apoiador':
+        return ref.watch(meuApoiadorProvider).when(
+              data: (ap) {
+                final nome =
+                    ap?.nome.trim().isNotEmpty == true ? ap!.nome : 'Seu cadastro de apoiador';
+                return _vinculoCadastroCard(
+                  theme: theme,
+                  icon: Icons.volunteer_activism_outlined,
+                  label: 'Vinculado ao seu apoiador',
+                  destaque: nome,
+                  subtitulo:
+                      'O votante será ligado automaticamente ao seu cadastro de apoiador. Não é possível trocar.',
+                );
+              },
+              loading: () => const LinearProgressIndicator(),
+              error: (_, __) => _vinculoCadastroCard(
+                theme: theme,
+                icon: Icons.volunteer_activism_outlined,
+                label: 'Vinculado ao apoiador',
+                destaque: 'Apoiador',
+                subtitulo: 'Vínculo automático ao seu perfil de apoiador.',
+              ),
+            );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+}
+
+Widget _vinculoCadastroCard({
+  required ThemeData theme,
+  required IconData icon,
+  required String label,
+  required String destaque,
+  required String subtitulo,
+}) {
+  return Material(
+    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+    borderRadius: BorderRadius.circular(12),
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: theme.colorScheme.primary, size: 26),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  destaque,
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitulo,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(Icons.lock_outline, size: 18, color: theme.colorScheme.outline),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 

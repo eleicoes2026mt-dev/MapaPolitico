@@ -14,7 +14,7 @@ final meuAssessorIdProvider = FutureProvider<String?>((ref) async {
   return res?['id'] as String?;
 });
 
-/// Extrai mensagem de erro amigável de Exception (incluindo FunctionException).
+/// Extrai mensagem de erro amigável de Exception (incluindo FunctionException e erros PostgREST).
 String messageFromException(Object e) {
   if (e is FunctionException) {
     final d = e.details;
@@ -24,6 +24,15 @@ String messageFromException(Object e) {
     }
     if (d != null) return d.toString();
   }
+  // PostgREST (RPC/tabela): função ausente, RLS, coluna inexistente, etc.
+  try {
+    final dynamic x = e;
+    final m = x.message;
+    if (m is String && m.trim().isNotEmpty) return m.trim();
+    final c = x.code;
+    final details = x.details;
+    if (c != null && details != null) return '$c: $details';
+  } catch (_) {}
   if (e is Exception) return e.toString().replaceFirst('Exception: ', '');
   return e.toString();
 }
@@ -161,6 +170,22 @@ Future<String?> reenviarConviteAssessor(Assessor assessor) async {
 Future<void> removerAssessor(String assessorId) async {
   await supabase.auth.refreshSession();
   await supabase.from('assessores').delete().eq('id', assessorId);
+}
+
+/// Desativar ou reativar assessor convidado (apenas candidato). Atualiza `assessores.ativo` e `profiles.ativo`.
+Future<void> setAssessorAtivo({required String assessorId, required bool ativo}) async {
+  await supabase.auth.refreshSession();
+  try {
+    await supabase.rpc(
+      'candidato_set_assessor_ativo',
+      params: {
+        'p_assessor_id': assessorId,
+        'p_ativo': ativo,
+      },
+    );
+  } on FunctionException catch (e) {
+    throw Exception(messageFromException(e));
+  }
 }
 
 /// Promover o usuário atual a Candidato (Nível 1) se ainda não existir candidato no sistema.

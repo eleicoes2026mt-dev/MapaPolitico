@@ -45,3 +45,8 @@ verify_jwt = false
 verify_jwt = false
 [functions.promover-candidato]
 verify_jwt = false
+# Gateway pode devolver 401 { message: Invalid JWT } com JWT Signing Keys (ES256) antes de correr o Deno.
+# O config.toml só aplica se fizeres deploy pela CLI. Se ainda der 401, usa explicitamente:
+#   supabase functions deploy send-push --no-verify-jwt
+[functions.send-push]
+verify_jwt = false

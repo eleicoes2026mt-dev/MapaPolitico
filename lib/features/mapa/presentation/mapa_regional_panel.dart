@@ -8,6 +8,9 @@ import '../../estrategia/providers/regioes_fundidas_provider.dart';
 import '../data/mt_municipios_coords.dart';
 import '../providers/mapa_camadas_filtradas_provider.dart';
 import '../providers/mapa_filtros_provider.dart';
+import '../providers/benfeitorias_mapa_provider.dart';
+import 'widgets/benfeitorias_municipio_panel.dart';
+import 'widgets/mapa_benfeitorias_legenda.dart';
 import 'widgets/mapa_kpis_regiao_panel.dart';
 import 'widgets/mapa_regional_widget.dart';
 import 'widgets/mapa_tse_legenda.dart';
@@ -184,6 +187,8 @@ class MapaRegionalPanel extends ConsumerStatefulWidget {
 
 class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
   String? _selectedMunicipio;
+  /// Modo do painel de ranking no mapa web: `nenhum` | `tse` | `rede` | `comparativo` | `benfeitorias`.
+  String _painelRankingModo = 'nenhum';
 
   /// Altura do cartão do mapa no Dashboard: prioriza área útil do mapa + espaço para ranking em coluna (mobile).
   static double _embeddedMapHeight(BuildContext context) {
@@ -211,6 +216,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final nomesCustomizados = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
     final coresCustomizadas = ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
     final isAdmin = ref.watch(isAdminProvider);
+    final benfeitoriasRanking = ref.watch(benfeitoriasRankingRegioesProvider).valueOrNull;
 
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < 600 ? 16.0 : 20.0;
@@ -257,14 +263,26 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
           if (v != filtros.mostrarMarcadores) ref.read(mapaFiltrosProvider.notifier).toggleMarcadores();
         },
         onComparativoColors: (_) {}, // Cores tratadas internamente no widget
+        benfeitoriasRanking: benfeitoriasRanking,
+        onPainelRankingModoChanged: (m) => setState(() {
+          final prev = _painelRankingModo;
+          _painelRankingModo = m;
+          // Evita mostrar «Locais de votação» para uma cidade escolhida no modo Benfeitorias.
+          if (prev == 'benfeitorias' && m != 'benfeitorias') _selectedMunicipio = null;
+        }),
         mostrarTSE: filtros.mostrarTSE,
         mostrarMarcadores: filtros.mostrarMarcadores,
         locaisVotacaoContent: _selectedMunicipio != null
-            ? LocaisVotacaoPanel(
-                nomeMunicipio: _selectedMunicipio!,
-                estimativaPorCidade: estimativaPorCidade,
-                onClose: () => setState(() => _selectedMunicipio = null),
-              )
+            ? (_painelRankingModo == 'benfeitorias'
+                ? BenfeitoriasMunicipioPanel(
+                    municipioChaveOuNome: _selectedMunicipio!,
+                    onClose: () => setState(() => _selectedMunicipio = null),
+                  )
+                : LocaisVotacaoPanel(
+                    nomeMunicipio: _selectedMunicipio!,
+                    estimativaPorCidade: estimativaPorCidade,
+                    onClose: () => setState(() => _selectedMunicipio = null),
+                  ))
             : null,
         selectedMunicipioKey: _selectedMunicipio,
         embedRankingBelowMap: embedded && width < 600,
@@ -288,9 +306,13 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         ),
         SizedBox(height: padding * 0.75),
       ],
-      // Legenda TSE sempre visível quando o candidato tem dados TSE
-      if (votosTseRaw.isNotEmpty) ...[
+      // Legenda TSE (oculta no modo benfeitorias) ou legenda em R$ para benfeitorias por região
+      if (votosTseRaw.isNotEmpty && _painelRankingModo != 'benfeitorias') ...[
         MapaTseLegenda(votosPorCidade: votosTseRaw),
+        SizedBox(height: padding * 0.5),
+      ],
+      if (_painelRankingModo == 'benfeitorias') ...[
+        const MapaBenfeitoriasLegenda(),
         SizedBox(height: padding * 0.5),
       ],
       const MapaKpisRegiaoPanel(),
@@ -303,9 +325,13 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         Expanded(child: mapCard),
       const SizedBox(height: 12),
       Text(
-        votosAjustados.isEmpty && marcadores.isEmpty
-            ? 'Mapa interativo MT com regiões e cidades. Selecione seu candidato 2022 em Meu perfil para ver votos por cidade. Cadastre apoiadores e votantes (com município) para marcar cidades no mapa.'
-            : 'Mapa com ${votosAjustados.length} cidade(s) com votos (TSE) e ${marcadores.length} cidade(s) com apoiadores ou votantes. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.',
+        _painelRankingModo == 'benfeitorias'
+            ? (votosAjustados.isEmpty && marcadores.isEmpty
+                ? 'No modo Benfeitorias, toque numa cidade na lista do painel para ver os registos, valores e dados do apoiador vinculado.'
+                : 'Modo Benfeitorias ativo: na lista ao lado, toque na cidade para ver cada benfeitoria e o apoiador do cadastro. Noutros modos, o toque na cidade abre locais de votação (TSE).')
+            : (votosAjustados.isEmpty && marcadores.isEmpty
+                ? 'Mapa interativo MT com regiões e cidades. Selecione seu candidato 2022 em Meu perfil para ver votos por cidade. Cadastre apoiadores e votantes (com município) para marcar cidades no mapa.'
+                : 'Mapa com ${votosAjustados.length} cidade(s) com votos (TSE) e ${marcadores.length} cidade(s) com apoiadores ou votantes. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.'),
         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
       ),
     ];

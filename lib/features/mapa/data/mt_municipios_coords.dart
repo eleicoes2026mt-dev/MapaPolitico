@@ -26,7 +26,7 @@ final _coords = <String, LatLng>{
   'ALTO TAQUARI': LatLng(-17.8242, -53.2792),
   'APIACAS': LatLng(-9.5397, -57.4589),
   'ARAGUAIANA': LatLng(-15.7292, -51.8342),
-  'ARAGUANTA': LatLng(-15.7333, -52.2500),
+  'ARAGUAINHA': LatLng(-15.7296, -52.2011),
   'ARAPUTANGA': LatLng(-15.4692, -58.3419),
   'ARENAPOLIS': LatLng(-14.4342, -56.8422),
   'ARIPUANA': LatLng(-9.1667, -60.6333),
@@ -34,6 +34,7 @@ final _coords = <String, LatLng>{
   'BARRA DO BUGRES': LatLng(-15.0728, -57.1878),
   'BARRA DO GARCAS': LatLng(-15.8900, -52.2569),
   'BOM JESUS DO ARAGUAIA': LatLng(-12.1706, -51.5031),
+  'BOA ESPERANCA DO NORTE': LatLng(-12.2894, -55.6153),
   'BRASNORTE': LatLng(-12.5500, -51.8000),
   'CACERES': LatLng(-16.0714, -57.6819),
   'CAMPINAPOLIS': LatLng(-14.5056, -52.8933),
@@ -110,6 +111,8 @@ final _coords = <String, LatLng>{
   'PEIXOTO DE AZEVEDO': LatLng(-10.2231, -54.9794),
   'PLANALTO DA SERRA': LatLng(-14.6653, -54.7814),
   'POCONE': LatLng(-16.2567, -56.6228),
+  'PONTAL DO ARAGUAIA': LatLng(-16.0139, -52.8378),
+  'PONTE BRANCA': LatLng(-16.8064, -52.8347),
   'PONTES E LACERDA': LatLng(-15.2261, -59.3433),
   'PORTO ALEGRE DO NORTE': LatLng(-10.8761, -51.6356),
   'PORTO DOS GAUCHOS': LatLng(-11.5333, -57.4167),
@@ -154,6 +157,7 @@ final _coords = <String, LatLng>{
   'VARZEA GRANDE': LatLng(-15.6467, -56.1325),
   'VERA': LatLng(-12.3167, -55.3167),
   'VILA RICA': LatLng(-10.0136, -51.1186),
+  'VILA BELA DA SANTISSIMA TRINDADE': LatLng(-15.0089, -59.9508),
 };
 
 LatLng? getCoordsMunicipioMT(String nomeMunicipio) {

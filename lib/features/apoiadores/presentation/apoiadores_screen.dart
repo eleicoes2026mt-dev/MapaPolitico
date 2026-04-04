@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../auth/providers/auth_provider.dart' show profileProvider;
+import '../../benfeitorias/providers/benfeitorias_provider.dart' show invalidateBenfeitoriasCaches;
+import '../../configuracoes/providers/campanha_audit_provider.dart' show campanhaAuditLogProvider;
 import '../../configuracoes/providers/menu_access_provider.dart';
+import '../../dashboard/providers/dashboard_provider.dart' show dashboardStatsProvider;
 import '../providers/apoiadores_provider.dart' show apoiadoresListProvider;
 import '../providers/campanha_kpis_provider.dart';
 import 'dialogs/novo_apoiador_dialog.dart';
@@ -31,11 +34,18 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     });
   }
 
+  void _refreshApoiadoresCampanha() {
+    ref.invalidate(apoiadoresListProvider);
+    ref.invalidate(campanhaAuditLogProvider);
+    ref.invalidate(dashboardStatsProvider);
+    invalidateBenfeitoriasCaches(ref);
+  }
+
   Future<void> _abrirNovoApoiador() async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => NovoApoiadorDialog(
-        onCreate: () => ref.invalidate(apoiadoresListProvider),
+        onCreate: _refreshApoiadoresCampanha,
       ),
     );
   }
@@ -60,7 +70,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        ref.invalidate(apoiadoresListProvider);
+        _refreshApoiadoresCampanha();
         await ref.read(apoiadoresListProvider.future).then((_) {}).onError((_, __) {});
       },
       child: SingleChildScrollView(
@@ -135,6 +145,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
           listAsync.when(
             data: (_) {
               final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
+              final podeRevogarAcesso = profile?.role == 'candidato';
+              final podeExcluirApoiador = profile?.role == 'candidato';
               if (filtered.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 48),
@@ -158,7 +170,9 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                           (a) => ApoiadorCard(
                             apoiador: a,
                             podeEditar: podeEditar,
-                            onRefresh: () => ref.invalidate(apoiadoresListProvider),
+                            podeRevogarAcesso: podeRevogarAcesso,
+                            podeExcluir: podeExcluirApoiador,
+                            onRefresh: _refreshApoiadoresCampanha,
                           ),
                         )
                         .toList(),

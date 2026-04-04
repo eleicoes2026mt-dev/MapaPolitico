@@ -2,6 +2,16 @@ import '../../models/apoiador.dart';
 import '../../models/municipio.dart';
 import '../../features/mapa/data/mt_municipios_coords.dart';
 
+/// Se o CEP for de MT, retorna a chave normalizada do município quando constar na lista oficial.
+String? chaveMunicipioMtApartirCepLocalidade(String? localidade, String? uf) {
+  if (localidade == null || localidade.trim().isEmpty) return null;
+  if ((uf ?? '').trim().toUpperCase() != 'MT') return null;
+  final key = normalizarNomeMunicipioMT(localidade.trim());
+  if (key.isEmpty) return null;
+  if (listCidadesMTNomesNormalizados.contains(key)) return key;
+  return null;
+}
+
 /// Resolve [municipio_id] a partir do nome da cidade (tabela `municipios`).
 String? municipioIdParaNomeCidade(String? cidadeNome, List<Municipio> municipios) {
   if (cidadeNome == null || cidadeNome.trim().isEmpty) return null;

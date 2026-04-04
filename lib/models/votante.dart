@@ -17,6 +17,8 @@ class Votante {
   final String? logradouro;
   final String? numero;
   final String? complemento;
+  /// Referência: votos prometidos na última eleição.
+  final int? votosPrometidosUltimaEleicao;
 
   const Votante({
     required this.id,
@@ -35,6 +37,7 @@ class Votante {
     this.logradouro,
     this.numero,
     this.complemento,
+    this.votosPrometidosUltimaEleicao,
   });
 
   /// Nome de exibição da cidade: join > texto livre > '—'.
@@ -63,6 +66,7 @@ class Votante {
       logradouro: json['logradouro'] as String?,
       numero: json['numero'] as String?,
       complemento: json['complemento'] as String?,
+      votosPrometidosUltimaEleicao: (json['votos_prometidos_ultima_eleicao'] as num?)?.toInt(),
     );
   }
 
@@ -82,5 +86,6 @@ class Votante {
         'logradouro': logradouro,
         'numero': numero,
         'complemento': complemento,
+        'votos_prometidos_ultima_eleicao': votosPrometidosUltimaEleicao,
       };
 }

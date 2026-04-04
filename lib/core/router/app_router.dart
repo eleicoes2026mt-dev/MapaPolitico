@@ -58,6 +58,13 @@ GoRouter createAppRouter({String? initialLocation}) {
         return '/redefinir-senha';
       }
 
+      // Convite assessor/apoiador: amr invite — obrigar tela de criar senha (não dashboard do deputado).
+      if (session != null &&
+          path != '/completar-cadastro' &&
+          accessTokenIndicatesInvite(session.accessToken)) {
+        return '/completar-cadastro';
+      }
+
       final isAuthPage = path == '/login' || path == '/cadastro';
       final isCompletarCadastro = path == '/completar-cadastro';
       final isRedefinirSenha = path == '/redefinir-senha';

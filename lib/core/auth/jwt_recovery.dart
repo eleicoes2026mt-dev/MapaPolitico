@@ -26,14 +26,27 @@ Map<String, dynamic>? decodeJwtPayload(String jwt) {
 
 /// Sessão criada pelo link «esqueci minha senha» (fluxo PKCE ou implícito).
 /// Ver: https://supabase.com/docs/guides/auth/jwt-fields — `amr` pode incluir `method: recovery`.
-bool accessTokenIndicatesPasswordRecovery(String accessToken) {
-  final payload = decodeJwtPayload(accessToken);
-  if (payload == null) return false;
+bool _amrContainsMethod(Map<String, dynamic> payload, String method) {
   final amr = payload['amr'];
   if (amr is! List) return false;
   for (final item in amr) {
-    if (item is Map && item['method'] == 'recovery') return true;
-    if (item == 'recovery') return true;
+    if (item is Map && item['method'] == method) return true;
+    if (item == method) return true;
   }
   return false;
+}
+
+/// Link «esqueci minha senha» (PKCE ou implícito).
+bool accessTokenIndicatesPasswordRecovery(String accessToken) {
+  final payload = decodeJwtPayload(accessToken);
+  if (payload == null) return false;
+  return _amrContainsMethod(payload, 'recovery');
+}
+
+/// Convite por e-mail (`inviteUserByEmail`): o utilizador ainda deve definir senha em [CompletarCadastroScreen].
+/// Ver https://supabase.com/docs/guides/auth/jwt-fields — `amr` com `method: invite`.
+bool accessTokenIndicatesInvite(String accessToken) {
+  final payload = decodeJwtPayload(accessToken);
+  if (payload == null) return false;
+  return _amrContainsMethod(payload, 'invite');
 }

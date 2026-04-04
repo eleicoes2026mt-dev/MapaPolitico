@@ -8,13 +8,26 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
 import 'core/auth/auth_callback_url.dart';
-import 'core/auth/jwt_recovery.dart';
+import 'core/auth/jwt_recovery.dart'
+    show accessTokenIndicatesInvite, accessTokenIndicatesPasswordRecovery;
 import 'core/auth/supabase_auth_fragment.dart';
 import 'core/bootstrap/arcgis_environment.dart';
 import 'core/config/env_config.dart';
 import 'core/router/app_router.dart';
 import 'core/services/pwa_service.dart';
 import 'core/theme/app_theme.dart';
+
+/// Fragmento `#access_token=...` ou `#/login?access_token=...` (hash router).
+Map<String, String> _queryParamsFromHashFragment(String frag) {
+  if (frag.isEmpty) return {};
+  final q = frag.indexOf('?');
+  final query = q >= 0 ? frag.substring(q + 1) : frag;
+  try {
+    return Uri.splitQueryString(query);
+  } catch (_) {
+    return {};
+  }
+}
 
 void main() {
   runZonedGuarded(() {
@@ -44,11 +57,14 @@ Future<void> _mainAsync() async {
       // PKCE (reset de senha): `?code=` é trocado no [Supabase.initialize]. O hash pode
       // continuar `#/apoiadores` (sessão antiga / restauração) — forçar tela de nova senha.
       final sess = Supabase.instance.client.auth.currentSession;
-      if (uri.queryParameters.containsKey('code') &&
-          sess != null &&
-          accessTokenIndicatesPasswordRecovery(sess.accessToken)) {
-        replaceBrowserPath('/redefinir-senha');
-        initialLocation = '/redefinir-senha';
+      if (uri.queryParameters.containsKey('code') && sess != null) {
+        if (accessTokenIndicatesPasswordRecovery(sess.accessToken)) {
+          replaceBrowserPath('/redefinir-senha');
+          initialLocation = '/redefinir-senha';
+        } else if (accessTokenIndicatesInvite(sess.accessToken)) {
+          replaceBrowserPath('/completar-cadastro');
+          initialLocation = '/completar-cadastro';
+        }
       }
 
       final frag = uri.fragment;
@@ -60,15 +76,30 @@ Future<void> _mainAsync() async {
           replaceBrowserPath('/login');
           initialLocation = '/login';
         } else if (frag.contains('access_token') || frag.contains('refresh_token')) {
+          // Sair da sessão anterior (ex.: deputado no mesmo browser) antes de aplicar o convite.
+          try {
+            await Supabase.instance.client.auth.signOut();
+          } catch (_) {}
           await Supabase.instance.client.auth.getSessionFromUrl(uri);
-          final p = Uri.splitQueryString(frag);
-          final isRecovery = p['type'] == 'recovery';
-          if (isRecovery) {
-            replaceBrowserPath('/redefinir-senha');
-            initialLocation = '/redefinir-senha';
-          } else {
-            replaceBrowserPath('/completar-cadastro');
-            initialLocation = '/completar-cadastro';
+          final newSess = Supabase.instance.client.auth.currentSession;
+          if (newSess != null) {
+            if (accessTokenIndicatesPasswordRecovery(newSess.accessToken)) {
+              replaceBrowserPath('/redefinir-senha');
+              initialLocation = '/redefinir-senha';
+            } else if (accessTokenIndicatesInvite(newSess.accessToken)) {
+              replaceBrowserPath('/completar-cadastro');
+              initialLocation = '/completar-cadastro';
+            } else {
+              final p = _queryParamsFromHashFragment(frag);
+              final isRecovery = p['type'] == 'recovery';
+              if (isRecovery) {
+                replaceBrowserPath('/redefinir-senha');
+                initialLocation = '/redefinir-senha';
+              } else {
+                replaceBrowserPath('/completar-cadastro');
+                initialLocation = '/completar-cadastro';
+              }
+            }
           }
         }
       }

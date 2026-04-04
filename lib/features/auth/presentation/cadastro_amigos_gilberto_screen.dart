@@ -103,14 +103,6 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
         throw Exception('Sessão não iniciada após cadastro. Tente entrar com e-mail e senha.');
       }
 
-      await supabase.rpc('ensure_votante_amigos_cadastro');
-      final row = await supabase.from('votantes').select('id').eq('profile_id', user.id).maybeSingle();
-      if (row == null) {
-        throw Exception(
-          'Não foi possível vincular seu cadastro à campanha. Confirme se o candidato está ativo ou tente mais tarde.',
-        );
-      }
-
       final municipios = await refreshMunicipiosMTList(ref);
       var municipioIdResolvido = municipioIdParaNomeCidade(_cidadeNomeNormalizado, municipios);
       municipioIdResolvido ??=
@@ -121,7 +113,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
       }
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
 
-      // RPC no servidor: garante persistência de cidade/município (RLS do UPDATE pelo cliente pode bloquear).
+      // RPC no servidor: ensure + UPDATE em votantes (SECURITY DEFINER; parâmetros com DEFAULT no banco cobrem JSON sem chaves null).
       try {
         await supabase.rpc(
           'finalize_votante_amigos_cadastro',
@@ -142,6 +134,19 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
       } on PostgrestException catch (e) {
         throw Exception(e.message.isNotEmpty ? e.message : 'Não foi possível salvar cidade e dados.');
       }
+
+      final confirmacao = await supabase
+          .from('votantes')
+          .select('cidade_nome')
+          .eq('profile_id', user.id)
+          .maybeSingle();
+      final salvo = (confirmacao?['cidade_nome'] as String?)?.trim();
+      if (salvo == null || salvo.isEmpty) {
+        throw Exception(
+          'A cidade não foi registrada no servidor. Confirme a conexão, tente novamente ou avise o candidato.',
+        );
+      }
+
       ref.invalidate(votantesListProvider);
 
       await ref.read(authNotifierProvider.notifier).signOut();

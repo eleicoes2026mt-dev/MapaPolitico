@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../core/constants/amigos_gilberto.dart';
 import '../core/services/realtime_notifications_service.dart';
+import '../core/widgets/amigos_gilberto_qr_dialog.dart';
 import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/auth/providers/auth_provider.dart';
 import '../models/profile.dart';
@@ -97,6 +99,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
                   : _SidebarCollapsed(
                       onExpand: () => setState(() => _sidebarExpanded = true),
                       onOpenPwaOrientacao: abrirPwa,
+                      profile: profile,
                     ),
             ),
             Expanded(child: widget.child),
@@ -124,6 +127,16 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          if (profile?.role == 'candidato')
+            IconButton(
+              icon: const Icon(Icons.qr_code_2_rounded),
+              tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
+              onPressed: () => showAmigosGilbertoQrDialog(
+                    context,
+                    candidatePhotoUrl: profile?.sidebarBrandImageUrl,
+                    candidateName: profile?.fullName,
+                  ),
+            ),
           if (kIsWeb)
             IconButton(
               icon: const Icon(Icons.add_to_home_screen_outlined),
@@ -207,7 +220,7 @@ String _titleForRoute(String path) {
     '/': 'Dashboard',
     '/assessores': 'Assessores',
     '/apoiadores': 'Apoiadores',
-    '/votantes': 'Votantes',
+    '/votantes': kAmigosGilbertoLabel,
     '/agenda': 'Agenda',
     '/mensagens': 'Mensagens',
     '/estrategia': 'Estratégia',
@@ -235,14 +248,17 @@ class _SidebarCollapsed extends StatelessWidget {
   const _SidebarCollapsed({
     required this.onExpand,
     this.onOpenPwaOrientacao,
+    this.profile,
   });
 
   final VoidCallback onExpand;
   final VoidCallback? onOpenPwaOrientacao;
+  final Profile? profile;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final showQr = profile?.role == 'candidato';
     return Container(
       width: 56,
       color: theme.colorScheme.surfaceContainerHighest,
@@ -261,6 +277,18 @@ class _SidebarCollapsed extends StatelessWidget {
                 icon: const Icon(Icons.add_to_home_screen_outlined),
                 onPressed: onOpenPwaOrientacao,
                 tooltip: 'Instalar app e notificações',
+              ),
+            ],
+            if (showQr) ...[
+              const SizedBox(height: 8),
+              IconButton(
+                icon: const Icon(Icons.qr_code_2_rounded),
+                onPressed: () => showAmigosGilbertoQrDialog(
+                    context,
+                    candidatePhotoUrl: profile?.sidebarBrandImageUrl,
+                    candidateName: profile?.fullName,
+                  ),
+                tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
               ),
             ],
           ],
@@ -290,7 +318,7 @@ class _Sidebar extends StatelessWidget {
     _NavItem('/', 'Dashboard', Icons.dashboard_outlined),
     _NavItem('/assessores', 'Assessores', Icons.people_outline),
     _NavItem('/apoiadores', 'Apoiadores', Icons.person_add_alt_1_outlined),
-    _NavItem('/votantes', 'Votantes', Icons.checklist_outlined),
+    _NavItem('/votantes', kAmigosGilbertoLabel, Icons.checklist_outlined),
     _NavItem('/agenda', 'Agenda', Icons.event_outlined),
     _NavItem('/mensagens', 'Mensagens', Icons.chat_bubble_outline),
     _NavItem('/estrategia', 'Estratégia', Icons.location_on_outlined),
@@ -305,13 +333,14 @@ class _Sidebar extends StatelessWidget {
     '/mapa',
   };
 
-  /// Apoiador: início (home), votantes, agenda, mensagens e perfil.
+  /// Apoiador: início (home), votantes, agenda e perfil. Mensagens só no bloco da tela Início.
   /// Dashboard e itens de gestão ficam ocultos.
   static const _pathsOcultosApoiador = {
-    '/',          // Dashboard do candidato
+    '/', // Dashboard do candidato
     '/assessores',
     '/apoiadores',
     '/configuracoes',
+    '/mensagens',
   };
 
   /// Candidato/assessor: /apoiador-home é exclusivo dos apoiadores.
@@ -402,12 +431,30 @@ class _Sidebar extends StatelessWidget {
                   ),
               ],
             ),
-            if (onOpenPwaOrientacao != null) ...[
+            if (onOpenPwaOrientacao != null || prof?.role == 'candidato') ...[
               const SizedBox(height: 12),
-              IconButton.filledTonal(
-                onPressed: onOpenPwaOrientacao,
-                icon: const Icon(Icons.add_to_home_screen_outlined),
-                tooltip: 'Instalar app e ativar notificações',
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (onOpenPwaOrientacao != null)
+                    IconButton.filledTonal(
+                      onPressed: onOpenPwaOrientacao,
+                      icon: const Icon(Icons.add_to_home_screen_outlined),
+                      tooltip: 'Instalar app e ativar notificações',
+                    ),
+                  if (prof?.role == 'candidato') ...[
+                    if (onOpenPwaOrientacao != null) const SizedBox(width: 4),
+                    IconButton.filledTonal(
+                      onPressed: () => showAmigosGilbertoQrDialog(
+                        context,
+                        candidatePhotoUrl: prof?.sidebarBrandImageUrl,
+                        candidateName: prof?.fullName,
+                      ),
+                      icon: const Icon(Icons.qr_code_2_rounded),
+                      tooltip: 'QR — cadastro $kAmigosGilbertoLabel',
+                    ),
+                  ],
+                ],
               ),
             ],
             const SizedBox(height: 24),

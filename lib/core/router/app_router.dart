@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/jwt_recovery.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/cadastro_amigos_gilberto_screen.dart';
 import '../../features/auth/presentation/cadastro_screen.dart';
 import '../../features/auth/presentation/completar_cadastro_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
@@ -50,6 +51,11 @@ GoRouter createAppRouter({String? initialLocation}) {
       final session = Supabase.instance.client.auth.currentSession;
       final path = state.uri.path;
 
+      // QR / links antigos: cadastro com ?amigos=1 → página dedicada
+      if (path == '/cadastro' && state.uri.queryParameters['amigos'] == '1') {
+        return '/cadastro-amigos';
+      }
+
       // Reset de senha (PKCE): JWT com amr recovery — não mandar para home do assessor.
       if (session != null &&
           path != '/redefinir-senha' &&
@@ -64,7 +70,8 @@ GoRouter createAppRouter({String? initialLocation}) {
         return '/completar-cadastro';
       }
 
-      final isAuthPage = path == '/login' || path == '/cadastro';
+      final isAuthPage =
+          path == '/login' || path == '/cadastro' || path == '/cadastro-amigos';
       final isCompletarCadastro = path == '/completar-cadastro';
       final isRedefinirSenha = path == '/redefinir-senha';
       final isPasswordFlow = isCompletarCadastro || isRedefinirSenha;
@@ -115,6 +122,10 @@ GoRouter createAppRouter({String? initialLocation}) {
       GoRoute(
         path: '/cadastro',
         builder: (_, __) => const CadastroScreen(),
+      ),
+      GoRoute(
+        path: '/cadastro-amigos',
+        builder: (_, __) => const CadastroAmigosGilbertoScreen(),
       ),
       GoRoute(
         path: '/completar-cadastro',
@@ -201,6 +212,11 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
     '/',
   };
 
+  static String _redirectApoiador(String path) {
+    if (path == '/mensagens') return '/apoiador-home';
+    return '/votantes';
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<Profile?>>(profileProvider, (_, next) {
@@ -218,7 +234,7 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
 
     if (role == 'apoiador' && _forbiddenApoiador.contains(widget.location)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) context.go('/votantes');
+        if (context.mounted) context.go(_redirectApoiador(widget.location));
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

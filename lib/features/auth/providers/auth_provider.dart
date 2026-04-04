@@ -50,6 +50,9 @@ Future<Profile?> fetchProfileForUser(User user) async {
     if (metaRole != null && validRoles.contains(metaRole)) {
       payload['role'] = metaRole;
     }
+    if (user.userMetadata?['cadastro_via_qr'] == true) {
+      payload['cadastro_via_qr'] = true;
+    }
     await supabase.from('profiles').upsert(
       payload,
       onConflict: 'id',
@@ -122,12 +125,23 @@ class AuthNotifier extends StateNotifier<AsyncValue<Profile?>> {
     }
   }
 
-  Future<void> signUp(String email, String password, {String? fullName}) async {
+  Future<void> signUp(
+    String email,
+    String password, {
+    String? fullName,
+    bool cadastroAmigosGilberto = false,
+  }) async {
     clearProfileRoleCache();
+    final data = <String, dynamic>{};
+    if (fullName != null && fullName.isNotEmpty) data['full_name'] = fullName;
+    if (cadastroAmigosGilberto) {
+      data['role'] = 'votante';
+      data['cadastro_via_qr'] = true;
+    }
     await _client.auth.signUp(
       email: email,
       password: password,
-      data: fullName != null && fullName.isNotEmpty ? {'full_name': fullName} : null,
+      data: data.isEmpty ? null : data,
     );
     final user = _client.auth.currentUser;
     if (user != null) await _loadProfile(user.id);

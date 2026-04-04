@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/constants/app_constants.dart';
+
 import '../../../core/constants/amigos_gilberto.dart';
 import '../providers/auth_provider.dart';
 
-class CadastroScreen extends ConsumerStatefulWidget {
-  const CadastroScreen({super.key});
+/// Página pública **avulsa** (fora do painel): só formulário para criar conta como
+/// [kAmigosGilbertoLabel]. Após o cadastro, o utilizador é orientado a entrar com e-mail e senha.
+class CadastroAmigosGilbertoScreen extends ConsumerStatefulWidget {
+  const CadastroAmigosGilbertoScreen({super.key});
 
   @override
-  ConsumerState<CadastroScreen> createState() => _CadastroScreenState();
+  ConsumerState<CadastroAmigosGilbertoScreen> createState() =>
+      _CadastroAmigosGilbertoScreenState();
 }
 
-class _CadastroScreenState extends ConsumerState<CadastroScreen> {
+class _CadastroAmigosGilbertoScreenState
+    extends ConsumerState<CadastroAmigosGilbertoScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
@@ -33,25 +37,62 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
   }
 
   Future<void> _submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
     setState(() {
       _error = null;
       _loading = true;
     });
+
+    final email = _emailController.text.trim();
+
     try {
-      final amigosQr =
-          GoRouterState.of(context).uri.queryParameters['amigos'] == '1';
       await ref.read(authNotifierProvider.notifier).signUp(
-            _emailController.text.trim(),
+            email,
             _passwordController.text,
-            fullName: _nomeController.text.trim().isEmpty ? null : _nomeController.text.trim(),
-            cadastroAmigosGilberto: amigosQr,
+            fullName:
+                _nomeController.text.trim().isEmpty ? null : _nomeController.text.trim(),
+            cadastroAmigosGilberto: true,
           );
-      if (mounted) context.go('/');
+
+      // Encerra sessão imediata (signup pode autenticar na hora). O fluxo desejado é:
+      // cadastro nesta página → depois **login** explícito com a senha criada.
+      await ref.read(authNotifierProvider.notifier).signOut();
+
+      if (!mounted) return;
+      setState(() => _loading = false);
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(
+            Icons.check_circle_outline_rounded,
+            color: Theme.of(ctx).colorScheme.primary,
+            size: 48,
+          ),
+          title: const Text('Cadastro concluído'),
+          content: const Text(
+            'Sua conta foi criada. Na próxima tela, entre com o mesmo e-mail e senha para acessar o painel — mensagens, agenda e reuniões da campanha.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Ir para o login'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+      context.go('/login?email=${Uri.encodeComponent(email)}');
     } catch (e) {
-      setState(() {
-        _error = e.toString().replaceFirst('Exception: ', '');
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -60,8 +101,6 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final primary = theme.colorScheme.primary;
-    final amigosQr =
-        GoRouterState.of(context).uri.queryParameters['amigos'] == '1';
 
     return Scaffold(
       body: Container(
@@ -82,18 +121,18 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
+                Colors.black.withValues(alpha: 0.45),
                 Colors.black.withValues(alpha: 0.4),
-                Colors.black.withValues(alpha: 0.35),
-                Colors.black.withValues(alpha: 0.5),
+                Colors.black.withValues(alpha: 0.55),
               ],
             ),
           ),
           child: SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
+                  constraints: const BoxConstraints(maxWidth: 460),
                   child: Card(
                     elevation: isDark ? 8 : 12,
                     shadowColor: isDark ? Colors.black54 : primary.withValues(alpha: 0.15),
@@ -101,53 +140,40 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                       borderRadius: BorderRadius.circular(24),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 36),
                       child: Form(
                         key: _formKey,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: primary.withValues(alpha: 0.12),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.how_to_vote_rounded,
-                                size: 56,
-                                color: primary,
-                              ),
-                            ),
-                            const SizedBox(height: 24),
                             Text(
-                              AppConstants.appName,
+                              'Cadastro',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                                letterSpacing: 1.2,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              kAmigosGilbertoLabel,
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                letterSpacing: -0.5,
+                                letterSpacing: -0.3,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 12),
                             Text(
-                              AppConstants.appSubtitle,
-                              style: theme.textTheme.bodyLarge?.copyWith(
+                              'Preencha os dados para criar sua conta. Depois, use e-mail e senha para entrar no painel — sem passar pelo restante do site até você fazer login.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant,
+                                height: 1.4,
                               ),
                               textAlign: TextAlign.center,
                             ),
-                            if (amigosQr) ...[
-                              const SizedBox(height: 16),
-                              Text(
-                                'Cadastro para $kAmigosGilbertoLabel — use um e-mail válido para acessar mensagens e reuniões.',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                            const SizedBox(height: 36),
+                            const SizedBox(height: 28),
                             TextFormField(
                               controller: _nomeController,
                               decoration: InputDecoration(
@@ -164,9 +190,10 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                               ),
                               textCapitalization: TextCapitalization.words,
                               textInputAction: TextInputAction.next,
-                              validator: (v) => null,
+                              validator: (v) =>
+                                  (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
                             TextFormField(
                               controller: _emailController,
                               decoration: InputDecoration(
@@ -186,11 +213,13 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                               textInputAction: TextInputAction.next,
                               validator: (v) {
                                 if (v == null || v.isEmpty) return 'Informe o e-mail';
-                                if (!v.contains('@') || !v.contains('.')) return 'E-mail inválido';
+                                if (!v.contains('@') || !v.contains('.')) {
+                                  return 'E-mail inválido';
+                                }
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
                             TextFormField(
                               controller: _passwordController,
                               decoration: InputDecoration(
@@ -201,10 +230,13 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                                 ),
                                 suffixIcon: IconButton(
                                   icon: Icon(
-                                    _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                                    _obscurePassword
+                                        ? Icons.visibility_off_rounded
+                                        : Icons.visibility_rounded,
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
-                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  onPressed: () =>
+                                      setState(() => _obscurePassword = !_obscurePassword),
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
@@ -215,11 +247,13 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                               textInputAction: TextInputAction.next,
                               validator: (v) {
                                 if (v == null || v.isEmpty) return 'Informe a senha';
-                                if (v.length < 6) return 'Senha deve ter no mínimo 6 caracteres';
+                                if (v.length < 6) {
+                                  return 'Senha deve ter no mínimo 6 caracteres';
+                                }
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
                             TextFormField(
                               controller: _confirmarPasswordController,
                               decoration: InputDecoration(
@@ -230,10 +264,13 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                                 ),
                                 suffixIcon: IconButton(
                                   icon: Icon(
-                                    _obscureConfirm ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                                    _obscureConfirm
+                                        ? Icons.visibility_off_rounded
+                                        : Icons.visibility_rounded,
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
-                                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                                  onPressed: () =>
+                                      setState(() => _obscureConfirm = !_obscureConfirm),
                                 ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
@@ -246,7 +283,9 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                               },
                               validator: (v) {
                                 if (v == null || v.isEmpty) return 'Confirme a senha';
-                                if (v != _passwordController.text) return 'As senhas não coincidem';
+                                if (v != _passwordController.text) {
+                                  return 'As senhas não coincidem';
+                                }
                                 return null;
                               },
                             ),
@@ -281,12 +320,14 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 28),
+                            const SizedBox(height: 24),
                             FilledButton(
                               onPressed: _loading
                                   ? null
                                   : () {
-                                      if (_formKey.currentState?.validate() ?? false) _submit();
+                                      if (_formKey.currentState?.validate() ?? false) {
+                                        _submit();
+                                      }
                                     },
                               style: FilledButton.styleFrom(
                                 minimumSize: const Size(double.infinity, 52),
@@ -304,9 +345,9 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
                                         color: theme.colorScheme.onPrimary,
                                       ),
                                     )
-                                  : const Text('Cadastrar'),
+                                  : const Text('Criar minha conta'),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
                             TextButton(
                               onPressed: _loading ? null : () => context.go('/login'),
                               child: Text(
@@ -331,4 +372,3 @@ class _CadastroScreenState extends ConsumerState<CadastroScreen> {
     );
   }
 }
-

@@ -19,6 +19,8 @@ class Profile {
   final int? sqCandidatoTse2022;
   final DateTime? lastAccessAssessoresAt;
   final DateTime? lastAccessApoiadoresAt;
+  /// Conta criada pelo link/QR público «Amigos do Gilberto».
+  final bool cadastroViaQr;
 
   const Profile({
     required this.id,
@@ -40,6 +42,7 @@ class Profile {
     this.sqCandidatoTse2022,
     this.lastAccessAssessoresAt,
     this.lastAccessApoiadoresAt,
+    this.cadastroViaQr = false,
   });
 
   /// Normaliza o papel vindo do PostgREST (`app_role` → string).
@@ -90,6 +93,7 @@ class Profile {
       lastAccessApoiadoresAt: json['last_access_apoiadores_at'] != null
           ? DateTime.tryParse(json['last_access_apoiadores_at'].toString())
           : null,
+      cadastroViaQr: json['cadastro_via_qr'] as bool? ?? false,
     );
   }
 

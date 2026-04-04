@@ -15,7 +15,7 @@ import '../../../models/visita.dart';
 import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
     show CepInputFormatter, cepSoDigitos, formatCepDisplayFromDigits;
 import '../../auth/providers/auth_provider.dart';
-import '../../votantes/providers/votantes_provider.dart';
+import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, refreshMunicipiosMTList;
 import '../../mapa/data/mt_municipios_coords.dart' show getCoordsMunicipioMT;
 import '../providers/agenda_provider.dart';
 import 'agenda_map_picker_sheet.dart';
@@ -1239,6 +1239,34 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                   data: (municipios) {
                     final ordenados = List<Municipio>.from(municipios)
                       ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+                    if (ordenados.isEmpty) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Material(
+                            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            child: ListTile(
+                              leading: Icon(Icons.cloud_off_outlined, color: theme.colorScheme.error),
+                              title: const Text('Municípios MT não disponíveis'),
+                              subtitle: Text(
+                                'O catálogo não carregou do servidor. Toque em «Tentar novamente» ou confira no Supabase se a tabela municipios tem linhas e políticas de leitura.',
+                                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          OutlinedButton.icon(
+                            onPressed: () async {
+                              await refreshMunicipiosMTList(ref);
+                              if (context.mounted) setState(() {});
+                            },
+                            icon: const Icon(Icons.sync, size: 18),
+                            label: const Text('Tentar novamente'),
+                          ),
+                        ],
+                      );
+                    }
                     return Material(
                       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(12),
@@ -1253,7 +1281,21 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                     );
                   },
                   loading: () => const LinearProgressIndicator(),
-                  error: (_, __) => const Text('Erro ao carregar municípios'),
+                  error: (_, __) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Erro ao carregar municípios', style: TextStyle(color: theme.colorScheme.error)),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          await refreshMunicipiosMTList(ref);
+                          if (context.mounted) setState(() {});
+                        },
+                        icon: const Icon(Icons.sync, size: 18),
+                        label: const Text('Tentar novamente'),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text('Local do encontro', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),

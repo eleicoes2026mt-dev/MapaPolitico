@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/municipio.dart';
 import '../../../models/votante.dart';
-import '../../../core/supabase/municipios_seed.dart';
+import '../../../core/supabase/municipios_seed.dart' show ensureMunicipiosMtSeeded, forceMunicipiosMtRecovery;
 import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart'
@@ -9,6 +9,24 @@ import '../../apoiadores/providers/apoiadores_provider.dart'
 import '../../mapa/providers/benfeitorias_agg_provider.dart';
 import '../../assessores/providers/assessores_provider.dart'
     show assessoresListProvider, meuAssessorIdProvider;
+
+List<Municipio> _municipiosFromRpc(dynamic raw) {
+  if (raw is! List) return [];
+  return raw.map((e) {
+    final m = e is Map<String, dynamic> ? e : Map<String, dynamic>.from(e as Map);
+    return Municipio.fromJson(m);
+  }).toList();
+}
+
+/// Tenta obter o catálogo via RPC (seed no servidor + linhas na resposta).
+Future<List<Municipio>> _fetchMunicipiosCatalogoRpc() async {
+  try {
+    final raw = await supabase.rpc('municipios_catalogo_para_app');
+    return _municipiosFromRpc(raw);
+  } catch (_) {
+    return [];
+  }
+}
 
 final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
   final profile = await ref.watch(profileProvider.future);
@@ -35,14 +53,30 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
 });
 
 /// Municípios MT — tenta seed automático client-side se a tabela estiver vazia.
+/// Se o SELECT vier vazio, usa RPC [municipios_catalogo_para_app] (seed no servidor + linhas na resposta).
+/// Por último [forceMunicipiosMtRecovery] (upsert em lotes no cliente).
 final municipiosMTListProvider = FutureProvider<List<Municipio>>((ref) async {
   await ensureMunicipiosMtSeeded(supabase);
-  final res = await supabase.from('municipios').select().order('nome');
-  return (res as List).map((e) => Municipio.fromJson(e as Map<String, dynamic>)).toList();
+  var res = await supabase.from('municipios').select().order('nome');
+  var list = (res as List).map((e) => Municipio.fromJson(e as Map<String, dynamic>)).toList();
+  if (list.isEmpty) {
+    list = await _fetchMunicipiosCatalogoRpc();
+  }
+  if (list.isEmpty) {
+    await forceMunicipiosMtRecovery(supabase);
+    res = await supabase.from('municipios').select().order('nome');
+    list = (res as List).map((e) => Municipio.fromJson(e as Map<String, dynamic>)).toList();
+  }
+  if (list.isEmpty) {
+    list = await _fetchMunicipiosCatalogoRpc();
+  }
+  return list;
 });
 
-/// Força re-leitura da tabela [municipios] (evita cache após seed).
+/// Força re-leitura da tabela [municipios] e nova tentativa de preenchimento em lotes.
 Future<List<Municipio>> refreshMunicipiosMTList(WidgetRef ref) async {
+  await _fetchMunicipiosCatalogoRpc();
+  await forceMunicipiosMtRecovery(supabase);
   ref.invalidate(municipiosMTListProvider);
   return ref.read(municipiosMTListProvider.future);
 }

@@ -2,6 +2,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/mapa/data/mt_municipios_coords.dart';
 
+Future<void> _upsertMunicipiosChunks(
+  SupabaseClient client,
+  List<Map<String, dynamic>> rows, {
+  int chunkSize = 32,
+}) async {
+  if (rows.isEmpty) return;
+  for (var i = 0; i < rows.length; i += chunkSize) {
+    final end = i + chunkSize > rows.length ? rows.length : i + chunkSize;
+    await client.from('municipios').upsert(
+          rows.sublist(i, end),
+          onConflict: 'nome_normalizado',
+        );
+  }
+}
+
 /// Garante que [municipios] tenha dados no Supabase.
 /// Tenta, em ordem:
 ///   1. RPC `seed_municipios_mt_if_empty` (se a migration foi aplicada).
@@ -21,7 +36,7 @@ Future<void> ensureMunicipiosMtSeeded(SupabaseClient client) async {
       }
     }
   } catch (_) {
-    return;
+    // Continua para sync (ex.: falha transitória na probe não deve abortar o alinhamento).
   }
 
   await syncMissingMunicipiosMtFromAppList(client);
@@ -37,6 +52,8 @@ Future<void> syncMissingMunicipiosMtFromAppList(SupabaseClient client) async {
         'nome_normalizado': 'araguainha',
       }).eq('nome_normalizado', 'araguanta');
     } catch (_) {}
+
+    await _ensurePolosRegioesMinimos(client);
 
     final polosRes = await client.from('polos_regioes').select('id, nome');
     final poloIdPorNome = <String, String>{};
@@ -82,10 +99,7 @@ Future<void> syncMissingMunicipiosMtFromAppList(SupabaseClient client) async {
 
     if (novos.isEmpty) return;
 
-    await client.from('municipios').upsert(
-      novos,
-      onConflict: 'nome_normalizado',
-    );
+    await _upsertMunicipiosChunks(client, novos);
   } catch (_) {
     // Sem permissão de INSERT/UPDATE ou rede — lista do app segue limitada ao banco.
   }
@@ -93,28 +107,15 @@ Future<void> syncMissingMunicipiosMtFromAppList(SupabaseClient client) async {
 
 Future<void> _seedClientSide(SupabaseClient client) async {
   try {
-    // Upsert os 5 polos de referência
-    await client.from('polos_regioes').upsert(
-      [
-        {'nome': 'Cuiabá', 'cor_hex': '#2196F3', 'ordem': 1, 'descricao': 'Centro-Sul'},
-        {'nome': 'Rondonópolis', 'cor_hex': '#F44336', 'ordem': 2, 'descricao': 'Sudeste'},
-        {'nome': 'Sinop', 'cor_hex': '#4CAF50', 'ordem': 3, 'descricao': 'Norte'},
-        {'nome': 'Barra do Garças', 'cor_hex': '#FF9800', 'ordem': 4, 'descricao': 'Leste'},
-        {'nome': 'Cáceres', 'cor_hex': '#9C27B0', 'ordem': 5, 'descricao': 'Sudoeste/Oeste'},
-      ],
-      onConflict: 'nome',
-    );
-
-    // Busca o ID do polo Sinop (polo padrão para todos os municípios no seed rápido)
-    final sinopRes = await client
-        .from('polos_regioes')
-        .select('id')
-        .eq('nome', 'Sinop')
-        .maybeSingle();
-    final sinopId = sinopRes?['id'] as String?;
+    await _ensurePolosRegioesMinimos(client);
+    var sinopId = await _poloIdSinop(client);
+    if (sinopId == null) {
+      // Polos já existiam sem Sinop (raro) ou insert falhou — tenta upsert (exige UPDATE em conflito).
+      await _seedPolosRegioesReferenciaUpsert(client);
+      sinopId = await _poloIdSinop(client);
+    }
     if (sinopId == null) return;
 
-    // Insere todos os municípios de MT a partir da lista local do app
     final muns = listCidadesMTNomesNormalizados.map((key) {
       return {
         'nome': displayNomeCidadeMT(key),
@@ -123,11 +124,64 @@ Future<void> _seedClientSide(SupabaseClient client) async {
       };
     }).toList();
 
-    await client.from('municipios').upsert(
-      muns,
-      onConflict: 'nome_normalizado',
-    );
+    await _upsertMunicipiosChunks(client, muns);
   } catch (_) {
     // Falha silenciosa (sem policy de INSERT ainda) — app segue com cidade_nome.
   }
+}
+
+/// Segunda tentativa: ignora probe e reenvia o catálogo em lotes (evita timeout em upsert único).
+Future<void> forceMunicipiosMtRecovery(SupabaseClient client) async {
+  try {
+    await _ensurePolosRegioesMinimos(client);
+    var sinopId = await _poloIdSinop(client);
+    if (sinopId == null) {
+      await _seedPolosRegioesReferenciaUpsert(client);
+      sinopId = await _poloIdSinop(client);
+    }
+    if (sinopId == null) return;
+
+    final muns = listCidadesMTNomesNormalizados.map((key) {
+      return {
+        'nome': displayNomeCidadeMT(key),
+        'nome_normalizado': key.toLowerCase(),
+        'polo_id': sinopId,
+      };
+    }).toList();
+    await _upsertMunicipiosChunks(client, muns);
+    await syncMissingMunicipiosMtFromAppList(client);
+  } catch (_) {}
+}
+
+/// Insere os 5 polos só quando a tabela está vazia (INSERT; não depende de UPDATE para upsert).
+Future<void> _ensurePolosRegioesMinimos(SupabaseClient client) async {
+  try {
+    final probe = await client.from('polos_regioes').select('id').limit(1);
+    if ((probe as List).isNotEmpty) return;
+    await client.from('polos_regioes').insert([
+      {'nome': 'Cuiabá', 'cor_hex': '#2196F3', 'ordem': 1, 'descricao': 'Centro-Sul'},
+      {'nome': 'Rondonópolis', 'cor_hex': '#F44336', 'ordem': 2, 'descricao': 'Sudeste'},
+      {'nome': 'Sinop', 'cor_hex': '#4CAF50', 'ordem': 3, 'descricao': 'Norte'},
+      {'nome': 'Barra do Garças', 'cor_hex': '#FF9800', 'ordem': 4, 'descricao': 'Leste'},
+      {'nome': 'Cáceres', 'cor_hex': '#9C27B0', 'ordem': 5, 'descricao': 'Sudoeste/Oeste'},
+    ]);
+  } catch (_) {}
+}
+
+Future<String?> _poloIdSinop(SupabaseClient client) async {
+  final sinopRes = await client.from('polos_regioes').select('id').eq('nome', 'Sinop').maybeSingle();
+  return sinopRes?['id'] as String?;
+}
+
+Future<void> _seedPolosRegioesReferenciaUpsert(SupabaseClient client) async {
+  await client.from('polos_regioes').upsert(
+    [
+      {'nome': 'Cuiabá', 'cor_hex': '#2196F3', 'ordem': 1, 'descricao': 'Centro-Sul'},
+      {'nome': 'Rondonópolis', 'cor_hex': '#F44336', 'ordem': 2, 'descricao': 'Sudeste'},
+      {'nome': 'Sinop', 'cor_hex': '#4CAF50', 'ordem': 3, 'descricao': 'Norte'},
+      {'nome': 'Barra do Garças', 'cor_hex': '#FF9800', 'ordem': 4, 'descricao': 'Leste'},
+      {'nome': 'Cáceres', 'cor_hex': '#9C27B0', 'ordem': 5, 'descricao': 'Sudoeste/Oeste'},
+    ],
+    onConflict: 'nome',
+  );
 }

@@ -67,7 +67,11 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   }
 
   final assessoresRes = await client.from('assessores').select('id');
-  final assessoresCount = assessoresRes.length;
+  var assessoresCount = assessoresRes.length;
+  // O candidato também tem linha em assessores; a métrica é só assessores convidados (nível 2).
+  if (profile.role == 'candidato' && assessoresCount > 0) {
+    assessoresCount -= 1;
+  }
   final apoiadoresRes = await client.from('apoiadores').select('id, estimativa_votos, perfil');
   final apoiadoresCount = apoiadoresRes.length;
   int estimativaVotos = 0;

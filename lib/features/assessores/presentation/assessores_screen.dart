@@ -5,7 +5,7 @@ import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
 import '../providers/assessores_provider.dart'
-    show assessoresListProvider, convidarAssessor, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException, setAssessorAtivo;
+    show assessoresListProvider, convidarAssessor, ConvidarAssessorResult, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException, setAssessorAtivo;
 import '../../configuracoes/providers/menu_access_provider.dart';
 
 /// Link de convite para enviar por WhatsApp se o e-mail do Supabase não chegar.
@@ -257,7 +257,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
       return;
     }
     try {
-      final linkCopia = await convidarAssessor(
+      final ConvidarAssessorResult out = await convidarAssessor(
         nome: _nomeController.text,
         email: _emailController.text,
         telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
@@ -265,15 +265,17 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
       if (!mounted) return;
       Navigator.of(context).pop();
       widget.onSuccess();
-      if (linkCopia != null && linkCopia.isNotEmpty) {
-        await showLinkConviteAssessorDialog(context, linkCopia);
+      if (out.linkCopia != null && out.linkCopia!.isNotEmpty) {
+        await showLinkConviteAssessorDialog(context, out.linkCopia!);
       } else if (mounted) {
+        final text = out.serverMessage ??
+            (out.existingUser
+                ? 'Vínculo atualizado. A lista será atualizada.'
+                : 'Convite enviado por e-mail. Se não chegar, confira spam ou use Reenviar convite e configure SMTP no Supabase (docs).');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Convite enviado por e-mail. Se não chegar, confira spam ou use Reenviar convite e configure SMTP no Supabase (docs).',
-            ),
-            duration: Duration(seconds: 6),
+          SnackBar(
+            content: Text(text),
+            duration: const Duration(seconds: 8),
           ),
         );
       }

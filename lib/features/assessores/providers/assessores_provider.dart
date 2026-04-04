@@ -150,9 +150,22 @@ final assessoresListProvider = FutureProvider<List<Assessor>>((ref) async {
   return list;
 });
 
+/// Resultado de [convidarAssessor] (convite novo ou vínculo de e-mail já cadastrado).
+class ConvidarAssessorResult {
+  const ConvidarAssessorResult({
+    this.linkCopia,
+    this.serverMessage,
+    this.existingUser = false,
+  });
+
+  final String? linkCopia;
+  final String? serverMessage;
+  final bool existingUser;
+}
+
 /// Convidar novo assessor (apenas candidato). A pessoa recebe convite por e-mail para criar senha e acessar o sistema.
-/// Retorna [linkCopia] quando o servidor gera um link alternativo (enviar por WhatsApp se o e-mail não chegar).
-Future<String?> convidarAssessor({
+/// Se o e-mail já existir no Auth, o servidor atualiza `invited_by` e garante a linha em `assessores` (RLS).
+Future<ConvidarAssessorResult> convidarAssessor({
   required String nome,
   required String email,
   String? telefone,
@@ -185,11 +198,21 @@ Future<String?> convidarAssessor({
   if (data is Map && data.containsKey('error')) {
     throw Exception(data['error'] as String? ?? 'Erro ao convidar assessor');
   }
-  if (data is Map && data['link_copia'] is String) {
-    final s = (data['link_copia'] as String).trim();
-    if (s.isNotEmpty) return s;
+  if (data is Map) {
+    String? link;
+    if (data['link_copia'] is String) {
+      final s = (data['link_copia'] as String).trim();
+      if (s.isNotEmpty) link = s;
+    }
+    final msg = data['message'] is String ? (data['message'] as String).trim() : null;
+    final ex = data['existing_user'] == true;
+    return ConvidarAssessorResult(
+      linkCopia: link,
+      serverMessage: msg != null && msg.isNotEmpty ? msg : null,
+      existingUser: ex,
+    );
   }
-  return null;
+  return const ConvidarAssessorResult();
 }
 
 /// Reenviar convite por e-mail para um assessor já cadastrado (apenas candidato).

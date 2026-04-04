@@ -11,6 +11,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/** Localiza usuário Auth por e-mail (lista paginada; projetos pequenos/médios). */
+async function findUserIdByEmail(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  email: string,
+): Promise<string | null> {
+  const needle = email.toLowerCase().trim();
+  let page = 1;
+  const perPage = 1000;
+  for (;;) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    const u = data.users.find((x) => (x.email ?? '').toLowerCase() === needle);
+    if (u) return u.id;
+    if (data.users.length < perPage) return null;
+    page++;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -106,10 +124,103 @@ serve(async (req) => {
     if (inviteError) {
       const msg = inviteError.message || String(inviteError);
       if (msg.includes('already been registered') || msg.includes('already exists')) {
-        return new Response(JSON.stringify({ error: 'Este e-mail já está cadastrado. Use outro ou peça à pessoa para fazer login.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        // E-mail já no Auth: vincula à campanha (invited_by + assessores). Sem invited_by o candidato não vê a linha (RLS).
+        let existingId: string;
+        try {
+          const found = await findUserIdByEmail(supabaseAdmin, email);
+          if (!found) {
+            return new Response(
+              JSON.stringify({
+                error:
+                  'Este e-mail já está cadastrado, mas não foi possível localizar o usuário. Tente de novo ou ajuste invited_by no SQL (profiles).',
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          }
+          existingId = found;
+        } catch (e) {
+          return new Response(JSON.stringify({ error: 'Erro ao buscar usuário existente: ' + String(e) }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        if (existingId === callerId) {
+          return new Response(JSON.stringify({ error: 'Use outro e-mail — este é o seu próprio cadastro de candidato.' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        const { data: existingProfile, error: profFetchErr } = await supabaseAdmin
+          .from('profiles')
+          .select('role')
+          .eq('id', existingId)
+          .maybeSingle();
+        if (profFetchErr) {
+          return new Response(JSON.stringify({ error: 'Falha ao ler perfil: ' + profFetchErr.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        const role = (existingProfile?.role as string | undefined) ?? 'votante';
+        if (role === 'candidato') {
+          return new Response(JSON.stringify({ error: 'Este e-mail pertence a outro candidato; não pode ser assessor.' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        if (role === 'apoiador') {
+          return new Response(
+            JSON.stringify({
+              error:
+                'Este e-mail já está cadastrado como apoiador. Remova ou altere o cadastro de apoiador antes de vincular como assessor.',
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        const { error: profileUpsertError2 } = await supabaseAdmin.from('profiles').upsert(
+          {
+            id: existingId,
+            full_name: nome,
+            email,
+            role: 'assessor',
+            invited_by: callerId,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' },
+        );
+        if (profileUpsertError2) {
+          return new Response(JSON.stringify({ error: 'Falha ao atualizar perfil: ' + profileUpsertError2.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        const { error: assessorUpsertErr } = await supabaseAdmin.from('assessores').upsert(
+          {
+            profile_id: existingId,
+            nome,
+            email: email || null,
+            telefone: telefone || null,
+            municipio_id: municipioId || null,
+            ativo: true,
+          },
+          { onConflict: 'profile_id' },
+        );
+        if (assessorUpsertErr) {
+          return new Response(JSON.stringify({ error: 'Falha ao atualizar assessor: ' + assessorUpsertErr.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            existing_user: true,
+            message:
+              'Este e-mail já tinha cadastro. O vínculo com sua campanha foi atualizado — a assessora deve aparecer na lista após atualizar. Ela pode entrar com o e-mail e senha habituais.',
+            link_copia: null,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
       }
       return new Response(JSON.stringify({ error: 'Falha ao enviar convite: ' + msg }), {
         status: 400,

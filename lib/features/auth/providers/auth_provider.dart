@@ -38,13 +38,20 @@ Future<Profile?> fetchProfileForUser(User user) async {
     final fullName = (metaName != null && metaName.isNotEmpty)
         ? metaName
         : (email.contains('@') ? email.split('@').first : 'Usuário');
+    // Convite (Edge) envia `role` em user_metadata; sem isto o upsert criava só com default votante.
+    final metaRole = user.userMetadata?['role']?.toString().trim().toLowerCase();
+    const validRoles = {'candidato', 'assessor', 'apoiador', 'votante'};
+    final payload = <String, dynamic>{
+      'id': user.id,
+      if (email.isNotEmpty) 'email': email,
+      'full_name': fullName,
+      'ativo': true,
+    };
+    if (metaRole != null && validRoles.contains(metaRole)) {
+      payload['role'] = metaRole;
+    }
     await supabase.from('profiles').upsert(
-      {
-        'id': user.id,
-        if (email.isNotEmpty) 'email': email,
-        'full_name': fullName,
-        'ativo': true,
-      },
+      payload,
       onConflict: 'id',
     );
     final again = await supabase

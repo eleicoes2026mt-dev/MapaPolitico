@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../core/services/cep_br_service.dart';
 import '../../../../core/supabase/supabase_provider.dart';
@@ -44,6 +45,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   late final TextEditingController _logradouroController;
   late final TextEditingController _numeroController;
   late final TextEditingController _complementoController;
+  late final TextEditingController _nascimentoController;
   late String? _cidadeNome;
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
@@ -70,6 +72,11 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _logradouroController = TextEditingController(text: widget.apoiador.logradouro ?? '');
     _numeroController = TextEditingController(text: widget.apoiador.numero ?? '');
     _complementoController = TextEditingController(text: widget.apoiador.complemento ?? '');
+    _nascimentoController = TextEditingController(
+      text: widget.apoiador.dataNascimento != null
+          ? DateFormat('dd/MM/yyyy').format(widget.apoiador.dataNascimento!)
+          : '',
+    );
     _cidadeNome = widget.apoiador.cidadeNome;
     _perfil = widget.apoiador.perfil;
   }
@@ -125,7 +132,25 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _logradouroController.dispose();
     _numeroController.dispose();
     _complementoController.dispose();
+    _nascimentoController.dispose();
     super.dispose();
+  }
+
+  Future<void> _abrirCalendarioNascimento() async {
+    final dataAtual = parseDataDDMMYYYY(_nascimentoController.text) ?? DateTime(1990, 1, 1);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: dataAtual.isBefore(DateTime(1900, 1, 1)) || dataAtual.isAfter(DateTime.now())
+          ? DateTime(1990, 1, 1)
+          : dataAtual,
+      firstDate: DateTime(1900, 1, 1),
+      lastDate: DateTime.now(),
+      locale: const Locale('pt', 'BR'),
+    );
+    if (picked != null && mounted) {
+      _nascimentoController.text = DateFormat('dd/MM/yyyy').format(picked);
+      setState(() {});
+    }
   }
 
   String? _chaveCidadePadraoBenfeitoria() {
@@ -201,6 +226,9 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           atualizarLegado: true,
           perfil: _perfil,
           atualizarPerfil: true,
+          atualizarDataNascimento: widget.apoiador.tipo == 'PF',
+          dataNascimento:
+              widget.apoiador.tipo == 'PF' ? parseDataDDMMYYYY(_nascimentoController.text) : null,
           atualizarEndereco: true,
           cep: _cepController.text.trim(),
           logradouro: _logradouroController.text.trim(),
@@ -295,6 +323,24 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                     return null;
                   },
                 ),
+                if (widget.apoiador.tipo == 'PF') ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _nascimentoController,
+                    inputFormatters: [DataNascimentoInputFormatter()],
+                    decoration: InputDecoration(
+                      labelText: 'Data de nascimento',
+                      hintText: 'DD/MM/AAAA',
+                      helperText: 'Usado para aniversariantes e lembretes da campanha.',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.calendar_today),
+                        onPressed: _abrirCalendarioNascimento,
+                        tooltip: 'Abrir calendário',
+                      ),
+                    ),
+                    keyboardType: TextInputType.datetime,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _estimativaController,

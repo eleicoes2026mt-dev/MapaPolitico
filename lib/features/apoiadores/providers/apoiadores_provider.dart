@@ -246,6 +246,8 @@ class AtualizarApoiadorParams {
     this.numero,
     this.complemento,
     this.atualizarEndereco = false,
+    this.dataNascimento,
+    this.atualizarDataNascimento = false,
   });
   final String? nome;
   final String? cidadeNome;
@@ -275,6 +277,9 @@ class AtualizarApoiadorParams {
   final String? complemento;
   /// Se true, grava CEP/logradouro/número/complemento (permite limpar com string vazia → null).
   final bool atualizarEndereco;
+  /// Data de nascimento (apoiador PF). Use com [atualizarDataNascimento].
+  final DateTime? dataNascimento;
+  final bool atualizarDataNascimento;
 }
 
 final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiadorId, AtualizarApoiadorParams params)>((ref) {
@@ -292,6 +297,9 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     if (params.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = params.votosPrometidosUltimaEleicao;
     if (params.atualizarPerfil) {
       row['perfil'] = params.perfil?.trim().isEmpty == true ? null : params.perfil?.trim();
+    }
+    if (params.atualizarDataNascimento) {
+      row['data_nascimento'] = params.dataNascimento?.toIso8601String().split('T').first;
     }
     if (params.atualizarEndereco) {
       row['cep'] = params.cep?.trim().isEmpty == true ? null : params.cep?.trim();

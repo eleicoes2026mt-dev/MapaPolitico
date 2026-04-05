@@ -151,10 +151,17 @@ class Aniversariante {
     return proximo.difference(DateTime(hoje.year, hoje.month, hoje.day)).inDays;
   }
 
-  String get whatsappUrl {
-    if (telefone == null || telefone!.isEmpty) return '';
+  /// Dígitos com DDI 55 (ex.: 5565999999999), para `wa.me`, `jid` e partilha direta no WhatsApp.
+  String? get telefoneWhatsappDigits {
+    if (telefone == null || telefone!.isEmpty) return null;
     final digits = telefone!.replaceAll(RegExp(r'[^\d]'), '');
-    final ddi = digits.startsWith('55') ? digits : '55$digits';
+    if (digits.isEmpty) return null;
+    return digits.startsWith('55') ? digits : '55$digits';
+  }
+
+  String get whatsappUrl {
+    final ddi = telefoneWhatsappDigits;
+    if (ddi == null) return '';
     final msg = Uri.encodeComponent(
       'Olá $nome! 🎂 Feliz aniversário! Estamos juntos nessa caminhada. Abraços!',
     );

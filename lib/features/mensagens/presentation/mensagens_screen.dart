@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
+import '../../../core/utils/whatsapp_launch.dart';
+import '../../../core/widgets/cartao_parabens_aniversario.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
@@ -685,6 +686,7 @@ class _AniversariantesTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isCandidato = ref.watch(profileProvider).valueOrNull?.isCandidato == true;
     final hojeAsync = ref.watch(aniversariantesHojeProvider);
     final proximosAsync = ref.watch(aniversariantesProximos30Provider);
     final allAsync = ref.watch(aniversariantesProvider);
@@ -721,7 +723,9 @@ class _AniversariantesTab extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Apoiadores e assessores com data informada. Toque no WhatsApp para enviar uma mensagem.',
+                  isCandidato
+                      ? 'Apoiadores e assessores com data informada. Como candidato, na seção Hoje o ícone do cartão ou o WhatsApp verde enviam o cartão de parabéns (imagem + mensagem); o visto indica que você já compartilhou hoje.'
+                      : 'Apoiadores e assessores com data informada. Toque no WhatsApp para enviar uma mensagem.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                     height: 1.35,
@@ -950,16 +954,72 @@ class _AniversariantesEmptyState extends StatelessWidget {
   }
 }
 
-class _AniversarianteCard extends StatelessWidget {
+class _AniversarianteCard extends ConsumerStatefulWidget {
   const _AniversarianteCard({required this.aniversariante, this.destaque = false});
 
   final Aniversariante aniversariante;
   final bool destaque;
 
   @override
+  ConsumerState<_AniversarianteCard> createState() => _AniversarianteCardState();
+}
+
+class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
+  bool _loadingParabens = false;
+  bool? _jaEnviouParabens;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.destaque) {
+      _carregarPrefsParabens();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AniversarianteCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.destaque && !oldWidget.destaque) {
+      _carregarPrefsParabens();
+    }
+  }
+
+  Future<void> _carregarPrefsParabens() async {
+    final v = await ParabensAniversarioPrefs.jaEnviou(widget.aniversariante);
+    if (mounted) setState(() => _jaEnviouParabens = v);
+  }
+
+  Future<void> _compartilharCartaoParabens() async {
+    final profile = ref.read(profileProvider).valueOrNull;
+    if (profile == null || !profile.isCandidato) return;
+    if (_loadingParabens) return;
+    setState(() => _loadingParabens = true);
+    try {
+      final ok = await shareCartaoParabensAniversario(
+        context,
+        aniversariante: widget.aniversariante,
+        deputado: profile,
+      );
+      if (mounted && ok) {
+        setState(() {
+          _jaEnviouParabens = true;
+          _loadingParabens = false;
+        });
+      } else if (mounted) {
+        setState(() => _loadingParabens = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingParabens = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final a = aniversariante;
+    final a = widget.aniversariante;
+    final profile = ref.watch(profileProvider).valueOrNull;
+    final mostrarCartaoParabens =
+        widget.destaque && profile != null && profile.isCandidato;
 
     String tipoLabel;
     Color tipoColor;
@@ -978,7 +1038,7 @@ class _AniversarianteCard extends StatelessWidget {
     }
 
     final dataFmt = DateFormat('dd/MM').format(a.dataNascimento);
-    final linhaDetalhe = destaque
+    final linhaDetalhe = widget.destaque
         ? '${a.idadeAnos} anos — $dataFmt'
         : '${a.diasParaAniversario} ${a.diasParaAniversario == 1 ? 'dia' : 'dias'} até o aniversário · $dataFmt · fará ${a.idadeAnos + 1} anos';
 
@@ -989,7 +1049,7 @@ class _AniversarianteCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: destaque
+          color: widget.destaque
               ? theme.colorScheme.primary.withValues(alpha: 0.45)
               : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
@@ -999,12 +1059,12 @@ class _AniversarianteCard extends StatelessWidget {
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           leading: CircleAvatar(
-            backgroundColor: destaque
+            backgroundColor: widget.destaque
                 ? theme.colorScheme.primary.withValues(alpha: 0.12)
                 : theme.colorScheme.secondaryContainer.withValues(alpha: 0.35),
             child: Icon(
-              destaque ? Icons.cake_outlined : Icons.card_giftcard_outlined,
-              color: destaque ? theme.colorScheme.primary : theme.colorScheme.onSecondaryContainer,
+              widget.destaque ? Icons.cake_outlined : Icons.card_giftcard_outlined,
+              color: widget.destaque ? theme.colorScheme.primary : theme.colorScheme.onSecondaryContainer,
               size: 22,
             ),
           ),
@@ -1040,22 +1100,69 @@ class _AniversarianteCard extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              if (mostrarCartaoParabens) ...[
+                if (_jaEnviouParabens == true) ...[
+                  const SizedBox(width: 2),
+                  Tooltip(
+                    message: 'Cartão de parabéns já compartilhado hoje',
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 2),
+                      child: Icon(
+                        Icons.check_circle_rounded,
+                        color: theme.colorScheme.tertiary,
+                        size: 26,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 2),
+                Tooltip(
+                  message: 'Compartilhar cartão de parabéns (imagem)',
+                  child: _loadingParabens
+                      ? Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        )
+                      : IconButton.filledTonal(
+                          icon: const Icon(Icons.card_giftcard_rounded, size: 22),
+                          style: IconButton.styleFrom(
+                            foregroundColor: theme.colorScheme.primary,
+                            backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+                          ),
+                          onPressed: _compartilharCartaoParabens,
+                        ),
+                ),
+              ],
               if (a.whatsappUrl.isNotEmpty) ...[
                 const SizedBox(width: 4),
                 Tooltip(
-                  message: 'WhatsApp',
+                  message: mostrarCartaoParabens
+                      ? 'Enviar cartão de parabéns no WhatsApp (imagem + mensagem)'
+                      : (shouldOfferWhatsAppWebOrAppChoice()
+                          ? 'WhatsApp (Web ou aplicativo no PC)'
+                          : 'WhatsApp'),
                   child: IconButton.filledTonal(
                     icon: const Icon(Icons.chat, size: 20),
                     style: IconButton.styleFrom(
                       foregroundColor: const Color(0xFF25D366),
                       backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.12),
                     ),
-                    onPressed: () async {
-                      final uri = Uri.parse(a.whatsappUrl);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
-                    },
+                    onPressed: _loadingParabens
+                        ? null
+                        : () async {
+                            if (mostrarCartaoParabens) {
+                              await _compartilharCartaoParabens();
+                            } else {
+                              await openWhatsAppForAniversariante(context, a);
+                            }
+                          },
                   ),
                 ),
               ],

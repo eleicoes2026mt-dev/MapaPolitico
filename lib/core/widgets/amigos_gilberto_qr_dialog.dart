@@ -109,6 +109,7 @@ void showAmigosGilbertoQrDialog(
 }
 
 /// Cartão estático (sem animação no QR) para captura PNG / impressão.
+/// Layout em coluna única, tema claro e contraste alto para leitura no WhatsApp.
 class _ExportCaptureCard extends StatelessWidget {
   const _ExportCaptureCard({
     required this.url,
@@ -122,82 +123,165 @@ class _ExportCaptureCard extends StatelessWidget {
   final String? candidateName;
   final String? inviterSubtitle;
 
-  static const Color _bodyText = Color(0xFF37474F);
+  static const Color _fsBlue = Color(0xFF0D47A1);
+  static const Color _fsBlueMid = Color(0xFF0277BD);
+  static const Color _tagline = Color(0xFF1A1D21);
+  static const Color _footerMuted = Color(0xFF546E7A);
+
+  static ThemeData _lightTheme(BuildContext context) {
+    final base = Theme.of(context);
+    return ThemeData(
+      brightness: Brightness.light,
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xFF1565C0),
+        brightness: Brightness.light,
+      ),
+      fontFamily: base.textTheme.bodyMedium?.fontFamily,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _HeaderBar(
-          onClose: () {},
-          inviterSubtitle: inviterSubtitle,
-          showCloseButton: false,
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 36,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _CandidatePhotoBlock(
+    final theme = _lightTheme(context);
+    final inv = inviterSubtitle?.trim();
+
+    return Theme(
+      data: theme,
+      child: ColoredBox(
+        color: Colors.white,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _HeaderBar(
+              onClose: () {},
+              inviterSubtitle: inviterSubtitle,
+              showCloseButton: false,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 28, 28, 32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (inv != null && inv.isNotEmpty) ...[
+                    Material(
+                      color: const Color(0xFFE8F4FC),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        child: Row(
+                          children: [
+                            Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 24),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Convite de $inv',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 20,
+                                  color: _fsBlue,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+                  Center(
+                    child: _CandidatePhotoBlock(
                       imageUrl: candidatePhotoUrl,
                       name: candidateName,
-                      maxWidth: 360,
-                      nameStyle: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0D47A1),
+                      maxWidth: 300,
+                      nameStyle: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 26,
+                        color: _fsBlue,
+                        height: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: _bodyText,
-                        height: 1.45,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: _tagline,
+                      fontWeight: FontWeight.w600,
+                      height: 1.45,
+                      fontSize: 18,
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    'Ao cadastrar-se com e-mail válido, a pessoa passa a ter acesso a:',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      color: _fsBlue,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const _BenefitTile(
+                    icon: Icons.campaign_outlined,
+                    title: 'Informações da campanha',
+                    subtitle: 'Atualizações e comunicados oficiais.',
+                    forExport: true,
+                  ),
+                  const _BenefitTile(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    title: 'Mensagens da campanha',
+                    subtitle: 'Conteúdos enviados à rede de apoio.',
+                    forExport: true,
+                  ),
+                  const _BenefitTile(
+                    icon: Icons.event_available_outlined,
+                    title: 'Reuniões e encontros',
+                    subtitle: 'Convites e avisos sobre encontros em polos e cidades.',
+                    forExport: true,
+                  ),
+                  const _BenefitTile(
+                    icon: Icons.calendar_month_outlined,
+                    title: 'Agenda e ações',
+                    subtitle: 'Datas e mobilizações para não perder nada.',
+                    forExport: true,
+                  ),
+                  const SizedBox(height: 28),
+                  Text(
+                    'Escaneie o código ou use o link de cadastro',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.1,
+                      fontSize: 16,
+                      color: _fsBlueMid,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Center(child: _QrCardStatic(url: url, size: 340)),
+                  const SizedBox(height: 18),
+                  _LinkBlock(url: url, theme: theme, emphasize: true),
+                  const SizedBox(height: 14),
+                  Text(
+                    'O cadastro exige e-mail para acesso seguro ao painel.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 13.5,
+                      color: _footerMuted,
+                      fontStyle: FontStyle.italic,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 24),
-              Expanded(
-                flex: 64,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Ao cadastrar-se com e-mail válido, a pessoa passa a ter acesso a informações da campanha, mensagens, reuniões e agenda.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: _bodyText,
-                        height: 1.4,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: _QrCardStatic(url: url, size: 300),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    _LinkBlock(url: url, theme: theme, emphasize: true),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -279,6 +363,9 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
   static const Color _bgTop = Color(0xFF0A1628);
   static const Color _bgBottom = Color(0xFF0D3D5C);
 
+  /// Largura do raster de exportação: um pouco menor que o antigo 1100 para o texto não ficar minúsculo ao redimensionar no celular.
+  static const double _exportCaptureWidth = 920;
+
   final GlobalKey _exportKey = GlobalKey();
   bool _exportBusy = false;
 
@@ -293,7 +380,7 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
       builder: (ctx) => Positioned(
         left: 0,
         top: 0,
-        width: 1100,
+        width: _exportCaptureWidth,
         child: IgnorePointer(
           child: Opacity(
             opacity: 0.01,
@@ -302,7 +389,7 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
               child: RepaintBoundary(
                 key: _exportKey,
                 child: SizedBox(
-                  width: 1100,
+                  width: _exportCaptureWidth,
                   child: _ExportCaptureCard(
                     url: widget.url,
                     candidatePhotoUrl: widget.candidatePhotoUrl,
@@ -1481,8 +1568,8 @@ class _LinkBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = emphasize ? 14.0 : 11.0;
-    final iconSize = emphasize ? 22.0 : 18.0;
+    final fontSize = emphasize ? 16.5 : 11.0;
+    final iconSize = emphasize ? 24.0 : 18.0;
 
     return Material(
       color: _linkBg,
@@ -1499,8 +1586,8 @@ class _LinkBlock extends StatelessWidget {
         onTap: () => _open(context),
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: emphasize ? 14 : 12,
-            vertical: emphasize ? 12 : 10,
+            horizontal: emphasize ? 16 : 12,
+            vertical: emphasize ? 14 : 10,
           ),
           child: Row(
             children: [
@@ -1512,13 +1599,13 @@ class _LinkBlock extends StatelessWidget {
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontFamily: 'monospace',
                     fontSize: fontSize,
-                    height: 1.35,
+                    height: 1.3,
                     color: _linkText,
                     fontWeight: emphasize ? FontWeight.w600 : FontWeight.w500,
                     decoration: TextDecoration.underline,
                     decorationColor: _linkAccent.withValues(alpha: 0.75),
                   ),
-                  maxLines: 4,
+                  maxLines: emphasize ? 6 : 4,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1526,7 +1613,7 @@ class _LinkBlock extends StatelessWidget {
                 message: 'Abrir no navegador',
                 child: Icon(
                   Icons.open_in_new_rounded,
-                  size: emphasize ? 20 : 18,
+                  size: emphasize ? 22 : 18,
                   color: _linkAccent,
                 ),
               ),
@@ -1544,10 +1631,12 @@ class _BenefitTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.compact = false,
+    this.forExport = false,
   });
 
   static const Color _titleColor = Color(0xFF0D47A1);
   static const Color _subtitleColor = Color(0xFF37474F);
+  static const Color _subtitleExport = Color(0xFF263238);
   static const Color _iconBg = Color(0xFFE3F2FD);
   static const Color _iconFg = Color(0xFF0277BD);
 
@@ -1555,14 +1644,16 @@ class _BenefitTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool compact;
+  final bool forExport;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final pad = compact ? 8.0 : 8.0;
-    final iconBox = compact ? 38.0 : 44.0;
+    final iconBox = forExport ? 46.0 : (compact ? 38.0 : 44.0);
+    final bottomPad = forExport ? 14.0 : (compact ? 0.0 : 12.0);
     return Padding(
-      padding: EdgeInsets.only(bottom: compact ? 0 : 12),
+      padding: EdgeInsets.only(bottom: bottomPad),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1574,9 +1665,13 @@ class _BenefitTile extends StatelessWidget {
               color: _iconBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, size: compact ? 21 : 24, color: _iconFg),
+            child: Icon(
+              icon,
+              size: forExport ? 26 : (compact ? 21 : 24),
+              color: _iconFg,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1585,7 +1680,7 @@ class _BenefitTile extends StatelessWidget {
                   title,
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    fontSize: compact ? 13 : 15,
+                    fontSize: forExport ? 17 : (compact ? 13 : 15),
                     color: _titleColor,
                     height: 1.25,
                   ),
@@ -1594,9 +1689,9 @@ class _BenefitTile extends StatelessWidget {
                 Text(
                   subtitle,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: _subtitleColor,
-                    height: 1.35,
-                    fontSize: compact ? 11.5 : 13,
+                    color: forExport ? _subtitleExport : _subtitleColor,
+                    height: 1.4,
+                    fontSize: forExport ? 15 : (compact ? 11.5 : 13),
                     fontWeight: FontWeight.w500,
                   ),
                 ),

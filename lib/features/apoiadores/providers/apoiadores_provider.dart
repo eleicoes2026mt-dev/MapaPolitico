@@ -232,6 +232,8 @@ class AtualizarApoiadorParams {
     this.estimativaVotos,
     this.votosPrometidosUltimaEleicao,
     this.atualizarLegado = false,
+    this.perfil,
+    this.atualizarPerfil = false,
     this.bandeiraIniciais,
     this.bandeiraCorPrimaria,
     this.bandeiraCorSecundaria,
@@ -255,6 +257,9 @@ class AtualizarApoiadorParams {
   final int? votosPrometidosUltimaEleicao;
   /// Se true, atualiza votos_prometidos_ultima_eleicao (inclusive para null).
   final bool atualizarLegado;
+  /// Classificação (ex.: Prefeito(a) da Cidade). Use com [atualizarPerfil].
+  final String? perfil;
+  final bool atualizarPerfil;
   final String? bandeiraIniciais;
   final String? bandeiraCorPrimaria;
   final String? bandeiraCorSecundaria;
@@ -285,6 +290,9 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     if (params.email != null) row['email'] = params.email!.trim().isEmpty ? null : params.email!.trim();
     if (params.estimativaVotos != null) row['estimativa_votos'] = params.estimativaVotos!;
     if (params.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = params.votosPrometidosUltimaEleicao;
+    if (params.atualizarPerfil) {
+      row['perfil'] = params.perfil?.trim().isEmpty == true ? null : params.perfil?.trim();
+    }
     if (params.atualizarEndereco) {
       row['cep'] = params.cep?.trim().isEmpty == true ? null : params.cep?.trim();
       row['logradouro'] = params.logradouro?.trim().isEmpty == true ? null : params.logradouro?.trim();

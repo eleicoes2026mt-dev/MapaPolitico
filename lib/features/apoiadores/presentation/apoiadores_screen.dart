@@ -72,6 +72,9 @@ enum _ApoiadoresViewMode { lista, ranking }
 
 const int _kApoiadoresPageSize = 20;
 
+/// Valor do filtro «todas» (classificação).
+const String _kTodasClassificacoes = 'Todas as classificações';
+
 /// Lista de apoiadores com busca, filtro por perfil, KPIs (candidato/assessor) e cadastro/edição.
 class ApoiadoresScreen extends ConsumerStatefulWidget {
   const ApoiadoresScreen({super.key});
@@ -82,7 +85,7 @@ class ApoiadoresScreen extends ConsumerStatefulWidget {
 
 class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
   String _query = '';
-  String _perfilFilter = 'Todos os Perfis';
+  String _perfilFilter = _kTodasClassificacoes;
   _ApoiadoresViewMode _viewMode = _ApoiadoresViewMode.lista;
   String? _cidadeChaveFiltro;
   String? _poloIdFiltro;
@@ -176,14 +179,22 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     final munList = ref.watch(municipiosMTListProvider).valueOrNull ?? [];
     final polos = ref.watch(polosRegioesListProvider).valueOrNull ?? [];
 
-    var filtered = List<Apoiador>.from(listAsync.valueOrNull ?? []);
+    final fullList = listAsync.valueOrNull ?? [];
+    final classificacaoOpcoes = <String>[
+      _kTodasClassificacoes,
+      ...classificacoesSugestoesApoiador(fullList),
+    ];
+    final perfilEfetivo =
+        classificacaoOpcoes.contains(_perfilFilter) ? _perfilFilter : _kTodasClassificacoes;
+
+    var filtered = List<Apoiador>.from(fullList);
     if (_query.isNotEmpty) {
       final q = _query.toLowerCase();
       filtered =
           filtered.where((a) => a.nome.toLowerCase().contains(q)).toList();
     }
-    if (_perfilFilter != 'Todos os Perfis') {
-      filtered = filtered.where((a) => a.perfil == _perfilFilter).toList();
+    if (perfilEfetivo != _kTodasClassificacoes) {
+      filtered = filtered.where((a) => a.perfil == perfilEfetivo).toList();
     }
 
     final aposBuscaPerfil = List<Apoiador>.from(filtered);
@@ -299,12 +310,12 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                 ),
                 const SizedBox(width: 12),
                 DropdownButton<String>(
-                  value: _perfilFilter,
-                  items: ['Todos os Perfis', ...perfisOpcoesApoiador]
+                  value: perfilEfetivo,
+                  items: classificacaoOpcoes
                       .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                       .toList(),
                   onChanged: (v) => setState(() {
-                    _perfilFilter = v ?? 'Todos os Perfis';
+                    _perfilFilter = v ?? _kTodasClassificacoes;
                     _pageIndex = 0;
                   }),
                 ),

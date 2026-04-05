@@ -11,8 +11,13 @@ import '../../../../core/widgets/municipio_mt_picker_sheet.dart';
 import '../../data/brasil_api_cnpj.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
 import '../../providers/apoiadores_provider.dart'
-    show apoiadoresListProvider, criarApoiadorProvider, NovoApoiadorParams, NovaBenfeitoriaItem;
+    show
+        apoiadoresListProvider,
+        criarApoiadorProvider,
+        NovoApoiadorParams,
+        NovaBenfeitoriaItem;
 import '../utils/apoiadores_form_utils.dart';
+import '../widgets/classificacao_apoiador_field.dart';
 
 class NovoApoiadorDialog extends ConsumerStatefulWidget {
   const NovoApoiadorDialog({super.key, required this.onCreate});
@@ -338,6 +343,14 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                   ),
                   textCapitalization: TextCapitalization.words,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+                ),
+                const SizedBox(height: 16),
+                ClassificacaoApoiadorField(
+                  sugestoesExtras: classificacoesSugestoesApoiador(
+                    ref.watch(apoiadoresListProvider).valueOrNull ?? [],
+                  ).where((e) => !kClassificacoesApoiadorPadrao.contains(e)).toList(),
+                  initialPerfil: _perfil,
+                  onChanged: (v) => setState(() => _perfil = v),
                 ),
                 const SizedBox(height: 16),
                 if (_tipo == 'PF') ..._buildCamposPF(theme),

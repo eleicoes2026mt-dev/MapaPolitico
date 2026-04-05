@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/router/navigation_keys.dart';
+import '../../../../core/widgets/confirmar_senha_deputado_dialog.dart';
 import '../../../../core/widgets/convite_link_dialog.dart';
 import '../../../../models/apoiador.dart';
 import '../../../auth/providers/auth_provider.dart';
@@ -51,6 +52,8 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
   Future<void> _confirmarExcluir() async {
     if (!mounted) return;
     final nome = widget.apoiador.nome;
+    final senhaOk = await confirmarSenhaDeputado(_dialogContext);
+    if (!mounted || !senhaOk) return;
     final ok = await showDialog<bool>(
       context: _dialogContext,
       useRootNavigator: false,
@@ -308,12 +311,17 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
-              if (apoiador.perfil != null)
+              if (apoiador.perfil != null && apoiador.perfil!.trim().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
-                  child: Text(
-                    apoiador.perfil!,
-                    style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary),
+                  child: Chip(
+                    label: Text(
+                      apoiador.perfil!.trim(),
+                      style: theme.textTheme.labelSmall,
+                    ),
+                    padding: EdgeInsets.zero,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
                   ),
                 ),
             ],

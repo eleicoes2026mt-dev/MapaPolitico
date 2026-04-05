@@ -13,8 +13,10 @@ import '../../../../models/municipio.dart';
 import '../../../benfeitorias/providers/benfeitorias_provider.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
 import '../../../votantes/providers/votantes_provider.dart' show refreshMunicipiosMTList, municipiosMTListProvider;
-import '../../providers/apoiadores_provider.dart' show atualizarApoiadorProvider, AtualizarApoiadorParams;
+import '../../providers/apoiadores_provider.dart'
+    show apoiadoresListProvider, atualizarApoiadorProvider, AtualizarApoiadorParams;
 import '../utils/apoiadores_form_utils.dart';
+import '../widgets/classificacao_apoiador_field.dart';
 
 const _statusBenfeitoriaOpcoes = <(String, String)>[
   ('em_andamento', 'Em andamento'),
@@ -49,6 +51,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   String? _cidadeErro;
   Timer? _cepDebounce;
   bool _cepLoading = false;
+  String? _perfil;
 
   List<_BenfEditForm>? _benfForms;
   bool _benfInited = false;
@@ -68,6 +71,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _numeroController = TextEditingController(text: widget.apoiador.numero ?? '');
     _complementoController = TextEditingController(text: widget.apoiador.complemento ?? '');
     _cidadeNome = widget.apoiador.cidadeNome;
+    _perfil = widget.apoiador.perfil;
   }
 
   void _onCepChanged(String _) {
@@ -195,6 +199,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           estimativaVotos: int.tryParse(_estimativaController.text) ?? 0,
           votosPrometidosUltimaEleicao: parseLegado(_legadoController.text),
           atualizarLegado: true,
+          perfil: _perfil,
+          atualizarPerfil: true,
           atualizarEndereco: true,
           cep: _cepController.text.trim(),
           logradouro: _logradouroController.text.trim(),
@@ -253,6 +259,14 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                   decoration: const InputDecoration(labelText: 'Nome *'),
                   textCapitalization: TextCapitalization.words,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+                ),
+                const SizedBox(height: 16),
+                ClassificacaoApoiadorField(
+                  sugestoesExtras: classificacoesSugestoesApoiador(
+                    ref.watch(apoiadoresListProvider).valueOrNull ?? [],
+                  ).where((e) => !kClassificacoesApoiadorPadrao.contains(e)).toList(),
+                  initialPerfil: _perfil,
+                  onChanged: (v) => setState(() => _perfil = v),
                 ),
                 const SizedBox(height: 16),
                 MunicipioMtFormRow(

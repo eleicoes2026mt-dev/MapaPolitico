@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/confirmar_senha_deputado_dialog.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
@@ -408,6 +409,8 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
   }
 
   Future<void> _confirmarRemover() async {
+    final senhaOk = await confirmarSenhaDeputado(context);
+    if (!senhaOk || !mounted) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

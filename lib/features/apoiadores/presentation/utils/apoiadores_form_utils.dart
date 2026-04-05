@@ -159,7 +159,28 @@ final emailRegexApoiadores = RegExp(
 
 bool isEmailValido(String? s) => s != null && s.trim().isNotEmpty && emailRegexApoiadores.hasMatch(s.trim());
 
-const perfisOpcoesApoiador = ['Prefeitural', 'Vereador(a)', 'Líder Religional', 'Empresarial'];
+/// Valores pré-definidos (novas campanhas). Classificações antigas continuam nas linhas até editar.
+const kClassificacoesApoiadorPadrao = <String>[
+  'Prefeito(a) da Cidade',
+  'Vereador(a)',
+  'Pastor da Igreja',
+  'Empresário',
+];
+
+/// Marcador interno do dropdown «Outro» (texto livre).
+const kClassificacaoOutroValor = '__classificacao_outro__';
+
+/// Lista para filtros e sugestões: padrão + textos distintos já usados nos cadastros.
+List<String> classificacoesSugestoesApoiador(Iterable<Apoiador> apoiadores) {
+  final s = <String>{...kClassificacoesApoiadorPadrao};
+  for (final a in apoiadores) {
+    final p = a.perfil?.trim();
+    if (p != null && p.isNotEmpty) s.add(p);
+  }
+  final list = s.toList();
+  list.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  return list;
+}
 
 /// E-mail para convite (PF: email; PJ: e-mail do responsável).
 String? emailParaConviteApoiador(Apoiador a) {

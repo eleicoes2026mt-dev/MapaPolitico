@@ -2,13 +2,16 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/utils/candidato_campanha.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../dados_tse/providers/dados_tse_provider.dart';
 import '../../estrategia/providers/regioes_fundidas_provider.dart';
 import '../data/mt_municipios_coords.dart';
 import '../providers/mapa_camadas_filtradas_provider.dart';
 import '../providers/mapa_filtros_provider.dart';
 import '../providers/benfeitorias_mapa_provider.dart';
+import '../providers/metas_regiao_provider.dart';
 import 'widgets/benfeitorias_municipio_panel.dart';
 import 'widgets/mapa_benfeitorias_legenda.dart';
 import 'widgets/mapa_kpis_regiao_panel.dart';
@@ -188,8 +191,16 @@ class MapaRegionalPanel extends ConsumerStatefulWidget {
 
 class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
   String? _selectedMunicipio;
-  /// Modo do painel de ranking no mapa web: `nenhum` | `tse` | `rede` | `comparativo` | `benfeitorias`.
-  String _painelRankingModo = 'nenhum';
+  /// Fonte de verdade **síncrona** do modo (o [MapaRegionalWidget] lê antes do próximo rebuild com a prop antiga).
+  final ValueNotifier<String> _painelModoNv = ValueNotifier('nenhum');
+
+  static const _modosValidos = {'nenhum', 'tse', 'rede', 'comparativo', 'metas', 'benfeitorias'};
+
+  static String _normalizarModoPainel(String raw) {
+    final t = raw.trim().toLowerCase();
+    if (t.isEmpty || !_modosValidos.contains(t)) return 'nenhum';
+    return t;
+  }
 
   /// Altura do cartão do mapa no Dashboard (embutido no scroll).
   /// Em desktop, aproxima um **quadrado** e usa um teto alto no viewport para aproveitar bem o ecrã.
@@ -211,6 +222,12 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
   }
 
   @override
+  void dispose() {
+    _painelModoNv.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final votosAjustados = ref.watch(mapaVotosTseAjustadosProvider);
@@ -225,6 +242,9 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final coresCustomizadas = ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
     final isAdmin = ref.watch(isAdminProvider);
     final benfeitoriasRanking = ref.watch(benfeitoriasRankingRegioesProvider).valueOrNull;
+    final profile = ref.watch(profileProvider).valueOrNull;
+    final metasCampanha = ref.watch(metasRegiaoCampanhaProvider).valueOrNull ?? {};
+    final podeMetasRegiao = candidatoCampanhaProfileId(profile) != null;
 
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < 600 ? 12.0 : 16.0;
@@ -270,18 +290,32 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         onMostrarMarcadores: (v) {
           if (v != filtros.mostrarMarcadores) ref.read(mapaFiltrosProvider.notifier).toggleMarcadores();
         },
-        onComparativoColors: (_) {}, // Cores tratadas internamente no widget
+        onComparativoColors: (_, {Map<String, double>? ratios, bool incluirLabelsZero = false}) {},
         benfeitoriasRanking: benfeitoriasRanking,
-        onPainelRankingModoChanged: (m) => setState(() {
-          final prev = _painelRankingModo;
-          _painelRankingModo = m;
-          // Evita mostrar «Locais de votação» para uma cidade escolhida no modo Benfeitorias.
-          if (prev == 'benfeitorias' && m != 'benfeitorias') _selectedMunicipio = null;
-        }),
+        painelRankingModo: _painelModoNv.value,
+        painelRankingModoNotifier: _painelModoNv,
+        metasPorRegiao: podeMetasRegiao ? metasCampanha : null,
+        onSalvarMetas: podeMetasRegiao
+            ? (m) => ref.read(metasRegiaoCampanhaProvider.notifier).save(m)
+            : null,
+        onPainelRankingModoChanged: (m) {
+          final prev = _painelModoNv.value;
+          final next = _normalizarModoPainel(m);
+          if (prev == next) return;
+          // Modo no notifier tem de ser síncrono com o onTap do painel (senão o mapa aplica Metas e o tab
+          // ainda mostra Comparativo um frame — pisca vermelho/âmbar). O setState do pai só limpa município.
+          _painelModoNv.value = next;
+          Future.microtask(() {
+            if (!mounted) return;
+            setState(() {
+              if (prev == 'benfeitorias' && next != 'benfeitorias') _selectedMunicipio = null;
+            });
+          });
+        },
         mostrarTSE: filtros.mostrarTSE,
         mostrarMarcadores: filtros.mostrarMarcadores,
         locaisVotacaoContent: _selectedMunicipio != null
-            ? (_painelRankingModo == 'benfeitorias'
+            ? (_painelModoNv.value == 'benfeitorias'
                 ? BenfeitoriasMunicipioPanel(
                     municipioChaveOuNome: _selectedMunicipio!,
                     onClose: () => setState(() => _selectedMunicipio = null),
@@ -315,11 +349,11 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         SizedBox(height: padding * 0.5),
       ],
       // Legenda TSE (oculta no modo benfeitorias) ou legenda em R$ para benfeitorias por região
-      if (votosTseRaw.isNotEmpty && _painelRankingModo != 'benfeitorias') ...[
+      if (votosTseRaw.isNotEmpty && _painelModoNv.value != 'benfeitorias') ...[
         MapaTseLegenda(votosPorCidade: votosTseRaw),
         SizedBox(height: padding * 0.5),
       ],
-      if (_painelRankingModo == 'benfeitorias') ...[
+      if (_painelModoNv.value == 'benfeitorias') ...[
         const MapaBenfeitoriasLegenda(),
         SizedBox(height: padding * 0.5),
       ],
@@ -333,10 +367,12 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         Expanded(child: mapCard),
       const SizedBox(height: 8),
       Text(
-        _painelRankingModo == 'benfeitorias'
+        _painelModoNv.value == 'benfeitorias'
             ? (votosAjustados.isEmpty && marcadores.isEmpty
                 ? 'No modo Benfeitorias, toque numa cidade na lista do painel para ver os registos, valores e dados do apoiador vinculado.'
                 : 'Modo Benfeitorias ativo: na lista ao lado, toque na cidade para ver cada benfeitoria e o apoiador do cadastro. Noutros modos, o toque na cidade abre locais de votação (TSE).')
+            : _painelModoNv.value == 'metas'
+                ? 'Modo Metas: defina e acompanhe metas por região na lista ao lado. O mapa mantém-se como nas outras visualizações (sem camada extra de metas).'
             : (votosAjustados.isEmpty && marcadores.isEmpty
                 ? 'Mapa interativo MT com regiões e cidades. Selecione seu candidato 2022 em Meu perfil para ver votos por cidade. Cadastre apoiadores e votantes (com município) para marcar cidades no mapa.'
                 : 'Mapa com ${votosAjustados.length} cidade(s) com votos (TSE) e ${marcadores.length} cidade(s) com apoiadores ou votantes. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.'),

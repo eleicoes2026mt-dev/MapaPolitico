@@ -22,6 +22,7 @@ import '../../votantes/providers/votantes_provider.dart'
     show municipiosMTListProvider;
 import '../providers/apoiadores_provider.dart' show apoiadoresListProvider;
 import '../providers/campanha_kpis_provider.dart';
+import 'dialogs/edicao_lote_apoiadores_dialog.dart';
 import 'dialogs/novo_apoiador_dialog.dart';
 import 'utils/apoiadores_form_utils.dart';
 import 'widgets/apoiador_card.dart';
@@ -68,6 +69,25 @@ String _cidadeLabel(Apoiador a, List<Municipio> munList) {
   return '—';
 }
 
+/// Chave única para filtro de procedência (FK ou nome legado).
+String? _origemChave(Apoiador a) {
+  final id = a.origemLugarId?.trim();
+  if (id != null && id.isNotEmpty) return 'id:$id';
+  final n = a.origemLugarNome?.trim();
+  if (n != null && n.isNotEmpty) return 'nome:${n.toLowerCase()}';
+  return null;
+}
+
+bool _apoiadorMatchOrigemFiltro(Apoiador a, String chave) {
+  if (chave.startsWith('id:')) {
+    return a.origemLugarId?.trim() == chave.substring(3);
+  }
+  if (chave.startsWith('nome:')) {
+    return a.origemLugarNome?.trim().toLowerCase() == chave.substring(5);
+  }
+  return false;
+}
+
 enum _ApoiadoresViewMode { lista, ranking }
 
 const int _kApoiadoresPageSize = 20;
@@ -89,7 +109,13 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
   _ApoiadoresViewMode _viewMode = _ApoiadoresViewMode.lista;
   String? _cidadeChaveFiltro;
   String? _poloIdFiltro;
+  /// Chave estável para filtro de procedência: `id:<uuid>` ou `nome:<normalizado>`.
+  String? _origemChaveFiltro;
   int _pageIndex = 0;
+
+  /// Modo seleção para edição em lote (candidato/assessor).
+  bool _modoSelecao = false;
+  final Set<String> _idsSelecionados = {};
 
   @override
   void initState() {
@@ -111,6 +137,39 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
       context: context,
       builder: (ctx) => NovoApoiadorDialog(
         onCreate: _refreshApoiadoresCampanha,
+      ),
+    );
+  }
+
+  void _limparSelecao() {
+    _idsSelecionados.clear();
+  }
+
+  Future<void> _abrirEdicaoLote(List<String> classificacoesSugestoes) async {
+    if (_idsSelecionados.isEmpty) return;
+    final ids = _idsSelecionados.toList();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => EdicaoLoteApoiadoresDialog(
+        apoiadorIds: ids,
+        classificacoesSugestoes: classificacoesSugestoes,
+        onSaved: () {
+          _refreshApoiadoresCampanha();
+          if (!mounted) return;
+          setState(() {
+            _limparSelecao();
+            _modoSelecao = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                ids.length == 1
+                    ? '1 apoiador atualizado.'
+                    : '${ids.length} apoiadores atualizados.',
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -172,6 +231,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final ehApoiador = profile?.role == 'apoiador';
+    final podeEditarLote =
+        profile?.role == 'candidato' || profile?.role == 'assessor';
     final mostrarKpis =
         profile?.role == 'candidato' || profile?.role == 'assessor';
 
@@ -207,6 +268,18 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     final cidadesSorted = cidadeOpcoes.entries.toList()
       ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
 
+    final origemOpcoes = <String, String>{};
+    for (final a in aposBuscaPerfil) {
+      final ch = _origemChave(a);
+      if (ch != null) {
+        final nome = a.origemLugarNome?.trim();
+        origemOpcoes[ch] =
+            (nome != null && nome.isNotEmpty) ? nome : '—';
+      }
+    }
+    final origensSorted = origemOpcoes.entries.toList()
+      ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
+
     final cidadeDropdownValue = _cidadeChaveFiltro != null &&
             cidadesSorted.any((e) => e.key == _cidadeChaveFiltro)
         ? _cidadeChaveFiltro
@@ -215,6 +288,10 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
         _poloIdFiltro != null && polos.any((p) => p.id == _poloIdFiltro)
             ? _poloIdFiltro
             : null;
+    final origemDropdownValue = _origemChaveFiltro != null &&
+            origensSorted.any((e) => e.key == _origemChaveFiltro)
+        ? _origemChaveFiltro
+        : null;
 
     filtered = aposBuscaPerfil;
     if (cidadeDropdownValue != null) {
@@ -225,6 +302,11 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
     if (poloDropdownValue != null) {
       filtered = filtered
           .where((a) => _poloIdParaApoiador(a, munList) == poloDropdownValue)
+          .toList();
+    }
+    if (origemDropdownValue != null) {
+      filtered = filtered
+          .where((a) => _apoiadorMatchOrigemFiltro(a, origemDropdownValue))
           .toList();
     }
 
@@ -301,11 +383,11 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                       hintText: 'Buscar apoiador...',
                       prefixIcon: Icon(Icons.search),
                     ),
-                    onChanged: (v) =>
-                        setState(() {
-                          _query = v;
-                          _pageIndex = 0;
-                        }),
+                    onChanged: (v) => setState(() {
+                      _query = v;
+                      _pageIndex = 0;
+                      _limparSelecao();
+                    }),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -317,6 +399,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                   onChanged: (v) => setState(() {
                     _perfilFilter = v ?? _kTodasClassificacoes;
                     _pageIndex = 0;
+                    _limparSelecao();
                   }),
                 ),
                 const SizedBox(width: 12),
@@ -353,6 +436,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                     setState(() {
                       _viewMode = next.first;
                       _pageIndex = 0;
+                      _limparSelecao();
                     });
                   },
                 ),
@@ -384,6 +468,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                         onChanged: (v) => setState(() {
                           _cidadeChaveFiltro = v;
                           _pageIndex = 0;
+                          _limparSelecao();
                         }),
                       ),
                     ),
@@ -417,6 +502,41 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                         onChanged: (v) => setState(() {
                           _poloIdFiltro = v;
                           _pageIndex = 0;
+                          _limparSelecao();
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 240,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Procedência',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String?>(
+                        isExpanded: true,
+                        value: origemDropdownValue,
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Todas as procedências'),
+                          ),
+                          ...origensSorted.map(
+                            (e) => DropdownMenuItem<String?>(
+                              value: e.key,
+                              child: Text(e.value,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ],
+                        onChanged: (v) => setState(() {
+                          _origemChaveFiltro = v;
+                          _pageIndex = 0;
+                          _limparSelecao();
                         }),
                       ),
                     ),
@@ -424,6 +544,54 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                 ),
               ],
             ),
+            if (podeEditarLote) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  FilterChip(
+                    avatar: Icon(
+                      _modoSelecao
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
+                      size: 18,
+                    ),
+                    label: const Text('Seleção'),
+                    selected: _modoSelecao,
+                    onSelected: (v) => setState(() {
+                      _modoSelecao = v;
+                      if (!v) _limparSelecao();
+                    }),
+                  ),
+                  if (_modoSelecao) ...[
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _idsSelecionados
+                          ..clear()
+                          ..addAll(filtered.map((a) => a.id));
+                      }),
+                      child: Text('Selecionar todos (${filtered.length})'),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(_limparSelecao),
+                      child: const Text('Limpar seleção'),
+                    ),
+                    if (_idsSelecionados.isNotEmpty)
+                      FilledButton.tonalIcon(
+                        onPressed: () => _abrirEdicaoLote(
+                          classificacoesSugestoesApoiador(fullList),
+                        ),
+                        icon: const Icon(Icons.edit_note_outlined),
+                        label: Text(
+                          'Editar em lote (${_idsSelecionados.length})',
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            ],
             const SizedBox(height: 24),
             listAsync.when(
               data: (_) {
@@ -468,6 +636,21 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              if (podeEditarLote && _modoSelecao)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(top: 4, right: 4),
+                                  child: Checkbox(
+                                    value: _idsSelecionados.contains(a.id),
+                                    onChanged: (v) => setState(() {
+                                      if (v == true) {
+                                        _idsSelecionados.add(a.id);
+                                      } else {
+                                        _idsSelecionados.remove(a.id);
+                                      }
+                                    }),
+                                  ),
+                                ),
                               Padding(
                                 padding: const EdgeInsets.only(top: 4, right: 8),
                                 child: CircleAvatar(
@@ -507,13 +690,34 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     ...pageItems.map(
-                      (a) => ApoiadorCard(
-                        apoiador: a,
-                        compact: true,
-                        podeEditar: podeEditar,
-                        podeRevogarAcesso: podeRevogarAcesso,
-                        podeExcluir: podeExcluirApoiador,
-                        onRefresh: _refreshApoiadoresCampanha,
+                      (a) => Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (podeEditarLote && _modoSelecao)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: Checkbox(
+                                value: _idsSelecionados.contains(a.id),
+                                onChanged: (v) => setState(() {
+                                  if (v == true) {
+                                    _idsSelecionados.add(a.id);
+                                  } else {
+                                    _idsSelecionados.remove(a.id);
+                                  }
+                                }),
+                              ),
+                            ),
+                          Expanded(
+                            child: ApoiadorCard(
+                              apoiador: a,
+                              compact: true,
+                              podeEditar: podeEditar,
+                              podeRevogarAcesso: podeRevogarAcesso,
+                              podeExcluir: podeExcluirApoiador,
+                              onRefresh: _refreshApoiadoresCampanha,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     _buildPaginationBar(theme, total, page, totalPages),

@@ -91,6 +91,18 @@ class RealtimeNotificationsService {
       ch = ch.onPostgresChanges(
         event: ev,
         schema: 'public',
+        table: 'apoiador_origem_lugares',
+        callback: (_) => _ref?.invalidate(apoiadorOrigemLugaresProvider),
+      );
+    }
+    for (final ev in [
+      PostgresChangeEvent.insert,
+      PostgresChangeEvent.update,
+      PostgresChangeEvent.delete,
+    ]) {
+      ch = ch.onPostgresChanges(
+        event: ev,
+        schema: 'public',
         table: 'votantes',
         callback: (_) => _invalidateVotantes(),
       );

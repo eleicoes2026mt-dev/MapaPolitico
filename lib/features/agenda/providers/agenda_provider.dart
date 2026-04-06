@@ -280,12 +280,23 @@ final aniversariantesProvider = FutureProvider<List<Aniversariante>>((ref) async
   try {
     final res = await supabase
         .from('apoiadores')
-        .select('id, nome, data_nascimento, telefone, email')
+        .select(
+          'id, nome, data_nascimento, telefone, email, perfil, cidade_nome, '
+          'origem_lugar:apoiador_origem_lugares!apoiadores_origem_lugar_id_fkey(nome)',
+        )
         .not('data_nascimento', 'is', null);
     for (final e in res as List) {
       final m = e as Map<String, dynamic>;
       final dt = DateTime.tryParse(m['data_nascimento'].toString());
       if (dt == null) continue;
+      final ol = m['origem_lugar'];
+      String? origemNome;
+      if (ol is Map && ol['nome'] != null) {
+        origemNome = (ol['nome'] as String).trim();
+      }
+      final perfilRaw = m['perfil'] as String?;
+      final perfilTrim = perfilRaw?.trim();
+      final cidadeRaw = m['cidade_nome'] as String?;
       lista.add(Aniversariante(
         nome: m['nome'] as String,
         dataNascimento: dt,
@@ -293,6 +304,10 @@ final aniversariantesProvider = FutureProvider<List<Aniversariante>>((ref) async
         email: m['email'] as String?,
         tipo: 'apoiador',
         refId: m['id'] as String,
+        municipioNome:
+            cidadeRaw != null && cidadeRaw.trim().isNotEmpty ? cidadeRaw.trim() : null,
+        origemLugarNome: origemNome,
+        perfil: perfilTrim != null && perfilTrim.isNotEmpty ? perfilTrim : null,
       ));
     }
   } catch (_) {}
@@ -301,19 +316,23 @@ final aniversariantesProvider = FutureProvider<List<Aniversariante>>((ref) async
   try {
     final res = await supabase
         .from('profiles')
-        .select('id, full_name, phone, data_nascimento')
+        .select('id, full_name, phone, data_nascimento, cargo')
         .eq('role', 'assessor')
         .not('data_nascimento', 'is', null);
     for (final e in res as List) {
       final m = e as Map<String, dynamic>;
       final dt = DateTime.tryParse(m['data_nascimento'].toString());
       if (dt == null) continue;
+      final cargoRaw = m['cargo'] as String?;
+      final cargoTrim = cargoRaw?.trim();
       lista.add(Aniversariante(
         nome: m['full_name'] as String? ?? 'Assessor',
         dataNascimento: dt,
         telefone: m['phone'] as String?,
         tipo: 'assessor',
         refId: m['id'] as String,
+        cargoAssessor:
+            cargoTrim != null && cargoTrim.isNotEmpty ? cargoTrim : null,
       ));
     }
   } catch (_) {}

@@ -41,6 +41,10 @@ class Apoiador {
   final String? bandeiraEmoji;
   /// JSON completo do editor visual (coluna `bandeira_visual`).
   final Map<String, dynamic>? bandeiraVisualJson;
+  /// FK opcional para [apoiador_origem_lugares] (procedência / "de onde é").
+  final String? origemLugarId;
+  /// Nome do lugar (join `origem_lugar` ou cache).
+  final String? origemLugarNome;
 
   const Apoiador({
     required this.id,
@@ -81,12 +85,19 @@ class Apoiador {
     this.bandeiraSimbolo,
     this.bandeiraEmoji,
     this.bandeiraVisualJson,
+    this.origemLugarId,
+    this.origemLugarNome,
   });
 
   factory Apoiador.fromJson(Map<String, dynamic> json) {
     final list = json['cidades_atuacao'];
     final dn = json['data_nascimento'];
     final ex = json['excluido_em'];
+    final ol = json['origem_lugar'] ?? json['apoiador_origem_lugares'];
+    String? origemNome;
+    if (ol is Map && ol['nome'] != null) {
+      origemNome = (ol['nome'] as String).trim();
+    }
     return Apoiador(
       id: json['id'] as String,
       profileId: json['profile_id'] as String?,
@@ -128,6 +139,8 @@ class Apoiador {
       bandeiraVisualJson: json['bandeira_visual'] is Map
           ? Map<String, dynamic>.from(json['bandeira_visual'] as Map)
           : null,
+      origemLugarId: json['origem_lugar_id'] as String?,
+      origemLugarNome: origemNome,
     );
   }
 
@@ -170,6 +183,7 @@ class Apoiador {
         'bandeira_simbolo': bandeiraSimbolo,
         'bandeira_emoji': bandeiraEmoji,
         'bandeira_visual': bandeiraVisualJson,
+        'origem_lugar_id': origemLugarId,
       };
 
   /// Configuração da bandeira: JSON novo ou campos legados.

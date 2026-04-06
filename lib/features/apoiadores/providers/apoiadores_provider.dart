@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/apoiador.dart';
+import '../../../models/apoiador_origem_lugar.dart';
 import '../../../models/municipio.dart';
 import '../../../core/utils/municipio_resolver.dart';
 import '../../../core/supabase/municipios_seed.dart';
@@ -12,6 +13,55 @@ import '../../benfeitorias/providers/benfeitorias_provider.dart';
 import '../../mapa/providers/benfeitorias_agg_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Lugares de procedência cadastrados para a campanha (reutilizáveis entre apoiadores).
+final apoiadorOrigemLugaresProvider = FutureProvider<List<ApoiadorOrigemLugar>>((ref) async {
+  final profile = await ref.watch(profileProvider.future);
+  if (profile?.role == 'apoiador' || profile?.role == 'votante') return [];
+  final res = await supabase.from('apoiador_origem_lugares').select().order('nome');
+  return (res as List)
+      .map((e) => ApoiadorOrigemLugar.fromJson(e as Map<String, dynamic>))
+      .toList();
+});
+
+/// Resolve texto para id existente (case-insensitive) ou insere novo lugar no catálogo do assessor.
+Future<String?> resolveOrInsertOrigemLugarId(
+  Ref ref,
+  String assessorId,
+  String? texto,
+) async {
+  final n = texto?.trim();
+  if (n == null || n.isEmpty) return null;
+  final client = supabase;
+  final existing = await client
+      .from('apoiador_origem_lugares')
+      .select('id, nome')
+      .eq('assessor_id', assessorId);
+  for (final row in (existing as List)) {
+    if ((row['nome'] as String).trim().toLowerCase() == n.toLowerCase()) {
+      return row['id'] as String;
+    }
+  }
+  try {
+    final ins = await client.from('apoiador_origem_lugares').insert({
+      'assessor_id': assessorId,
+      'nome': n,
+    }).select('id').single();
+    ref.invalidate(apoiadorOrigemLugaresProvider);
+    return ins['id'] as String;
+  } catch (_) {
+    final again = await client
+        .from('apoiador_origem_lugares')
+        .select('id, nome')
+        .eq('assessor_id', assessorId);
+    for (final row in (again as List)) {
+      if ((row['nome'] as String).trim().toLowerCase() == n.toLowerCase()) {
+        return row['id'] as String;
+      }
+    }
+    rethrow;
+  }
+}
+
 final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
   // Não use select(role) com valueOrNull: em AsyncLoading o role vira null, o provider
   // reinicia em loop e a lista fica eternamente em loading na web.
@@ -20,7 +70,12 @@ final apoiadoresListProvider = FutureProvider<List<Apoiador>>((ref) async {
   if (profile?.role == 'apoiador' || profile?.role == 'votante') return [];
 
   // Ocultar soft-deletes: RLS idealmente já não devolve linhas; filtro no cliente cobre DB/RLS antigos.
-  final res = await supabase.from('apoiadores').select().order('nome');
+  final res = await supabase
+      .from('apoiadores')
+      .select(
+        '*, origem_lugar:apoiador_origem_lugares!apoiadores_origem_lugar_id_fkey(nome)',
+      )
+      .order('nome');
   return (res as List)
       .map((e) => Apoiador.fromJson(e as Map<String, dynamic>))
       .where((a) => a.excluidoEm == null)
@@ -39,7 +94,13 @@ final meuApoiadorIdProvider = FutureProvider<String?>((ref) async {
 final meuApoiadorProvider = FutureProvider<Apoiador?>((ref) async {
   final id = await ref.watch(meuApoiadorIdProvider.future);
   if (id == null) return null;
-  final res = await supabase.from('apoiadores').select().eq('id', id).maybeSingle();
+  final res = await supabase
+      .from('apoiadores')
+      .select(
+        '*, origem_lugar:apoiador_origem_lugares!apoiadores_origem_lugar_id_fkey(nome)',
+      )
+      .eq('id', id)
+      .maybeSingle();
   if (res == null) return null;
   return Apoiador.fromJson(Map<String, dynamic>.from(res));
 });
@@ -90,6 +151,7 @@ class NovoApoiadorParams {
     this.logradouro,
     this.numero,
     this.complemento,
+    this.origemLugarTexto,
   });
   final String nome;
   final String cidadeNome;
@@ -118,6 +180,8 @@ class NovoApoiadorParams {
   final String? logradouro;
   final String? numero;
   final String? complemento;
+  /// Texto livre; o servidor reutiliza lugar já cadastrado ou cria entrada em `apoiador_origem_lugares`.
+  final String? origemLugarTexto;
 }
 
 final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)>((ref) {
@@ -155,6 +219,12 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
           'Não foi possível ativar seu acesso. Vá em Assessores e clique em "Sou o Candidato – Ativar acesso", depois tente cadastrar o apoiador de novo.',
         );
       }
+    }
+
+    String? origemLugarIdResolved;
+    final origemTxt = params.origemLugarTexto?.trim();
+    if (origemTxt != null && origemTxt.isNotEmpty) {
+      origemLugarIdResolved = await resolveOrInsertOrigemLugarId(ref, assessorId, origemTxt);
     }
 
     var municipioIdFinal = params.municipioId;
@@ -195,6 +265,7 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
       'votos_familia': params.votosFamilia,
       'votos_funcionarios': params.votosFuncionarios,
       'votos_prometidos_ultima_eleicao': params.votosPrometidosUltimaEleicao,
+      if (origemLugarIdResolved != null) 'origem_lugar_id': origemLugarIdResolved,
     };
 
     final res = await client.from('apoiadores').insert(row).select('id').maybeSingle();
@@ -248,6 +319,8 @@ class AtualizarApoiadorParams {
     this.atualizarEndereco = false,
     this.dataNascimento,
     this.atualizarDataNascimento = false,
+    this.origemLugarTexto,
+    this.atualizarOrigemLugar = false,
   });
   final String? nome;
   final String? cidadeNome;
@@ -280,6 +353,9 @@ class AtualizarApoiadorParams {
   /// Data de nascimento (apoiador PF). Use com [atualizarDataNascimento].
   final DateTime? dataNascimento;
   final bool atualizarDataNascimento;
+  /// Procedência / lugar (catálogo). Use com [atualizarOrigemLugar].
+  final String? origemLugarTexto;
+  final bool atualizarOrigemLugar;
 }
 
 final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiadorId, AtualizarApoiadorParams params)>((ref) {
@@ -300,6 +376,17 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     }
     if (params.atualizarDataNascimento) {
       row['data_nascimento'] = params.dataNascimento?.toIso8601String().split('T').first;
+    }
+    if (params.atualizarOrigemLugar) {
+      final a = await client.from('apoiadores').select('assessor_id').eq('id', apoiadorId).single();
+      final aid = a['assessor_id'] as String;
+      final txt = params.origemLugarTexto?.trim();
+      if (txt == null || txt.isEmpty) {
+        row['origem_lugar_id'] = null;
+      } else {
+        row['origem_lugar_id'] = await resolveOrInsertOrigemLugarId(ref, aid, txt);
+      }
+      ref.invalidate(apoiadorOrigemLugaresProvider);
     }
     if (params.atualizarEndereco) {
       row['cep'] = params.cep?.trim().isEmpty == true ? null : params.cep?.trim();

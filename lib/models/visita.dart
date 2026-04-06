@@ -119,6 +119,9 @@ class Aniversariante {
     required this.tipo,
     required this.refId,
     this.municipioNome,
+    this.origemLugarNome,
+    this.perfil,
+    this.cargoAssessor,
   });
 
   final String nome;
@@ -127,7 +130,14 @@ class Aniversariante {
   final String? email;
   final String tipo; // 'apoiador' | 'assessor' | 'votante'
   final String refId;
+  /// Cidade (ex.: coluna `cidade_nome` em apoiadores).
   final String? municipioNome;
+  /// Procedência / «de onde é» (`apoiador_origem_lugares`).
+  final String? origemLugarNome;
+  /// Classificação do apoiador (ex.: Prefeita, Empresário).
+  final String? perfil;
+  /// Cargo em `profiles` (assessores / equipe).
+  final String? cargoAssessor;
 
   bool get isHoje {
     final hoje = DateTime.now();

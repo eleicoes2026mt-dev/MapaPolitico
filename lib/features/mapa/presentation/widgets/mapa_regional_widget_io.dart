@@ -64,6 +64,10 @@ class MapaRegionalWidget extends StatefulWidget {
     this.benfeitoriasRanking,
     this.onBenfeitoriasMapa,
     this.onPainelRankingModoChanged,
+    this.metasPorRegiao,
+    this.onSalvarMetas,
+    this.painelRankingModo = 'nenhum',
+    this.painelRankingModoNotifier,
   });
 
   final double height;
@@ -90,8 +94,17 @@ class MapaRegionalWidget extends StatefulWidget {
   /// Ignorado no ArcGIS — só a versão web usa ranking de benfeitorias.
   final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
   final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
-  final void Function(Map<String, String>?)? onComparativoColors;
+  final void Function(
+    Map<String, String>? cores, {
+    Map<String, double>? ratios,
+    bool incluirLabelsZero,
+  })? onComparativoColors;
   final ValueChanged<String>? onPainelRankingModoChanged;
+  final Map<String, int>? metasPorRegiao;
+  final Future<void> Function(Map<String, int> metas)? onSalvarMetas;
+  final String painelRankingModo;
+  /// Só web; ignorado no ArcGIS.
+  final ValueNotifier<String>? painelRankingModoNotifier;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();

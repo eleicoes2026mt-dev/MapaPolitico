@@ -8,24 +8,20 @@ class DashboardStats {
     this.apoiadores = 0,
     this.votantes = 0,
     this.estimativaVotos = 0,
+    this.votosTseEleicao2022 = 0,
+    this.perfilTseVinculado = false,
     this.votosPorCidade = const [],
-    this.apoiadoresPorPerfil = const [],
-    this.totalBenfeitorias = 0,
-    this.benfeitoriasCount = 0,
-    this.aniversariantesHoje = 0,
-    this.mensagensCount = 0,
   });
 
   final int assessores;
   final int apoiadores;
   final int votantes;
   final int estimativaVotos;
+  /// Total de votos oficiais (TSE) na eleição 2022, soma por município (`get_votos_por_municipio`).
+  final int votosTseEleicao2022;
+  /// Se o perfil tem `sq_candidato_tse_2022` (Meu perfil → candidato na lista TSE).
+  final bool perfilTseVinculado;
   final List<MapEntry<String, int>> votosPorCidade;
-  final List<MapEntry<String, int>> apoiadoresPorPerfil;
-  final double totalBenfeitorias;
-  final int benfeitoriasCount;
-  final int aniversariantesHoje;
-  final int mensagensCount;
 }
 
 String _nomeMunicipioFromRow(Map<String, dynamic> r) {
@@ -34,10 +30,36 @@ String _nomeMunicipioFromRow(Map<String, dynamic> r) {
   return '';
 }
 
+/// Soma os votos oficiais do TSE (2022) para o `sq_candidato` do perfil.
+Future<int> _totalVotosTseEleicao2022(
+  dynamic client,
+  int? sqCandidato,
+) async {
+  if (sqCandidato == null) return 0;
+  try {
+    final res = await client.rpc(
+      'get_votos_por_municipio',
+      params: {'p_sq_candidato': sqCandidato},
+    );
+    var total = 0;
+    for (final e in res as List) {
+      final row = e as Map<String, dynamic>;
+      total += (row['qt_votos'] as num?)?.toInt() ?? 0;
+    }
+    return total;
+  } catch (_) {
+    return 0;
+  }
+}
+
 final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   final client = supabase;
   final profile = await ref.watch(profileProvider.future);
   if (profile == null) return const DashboardStats();
+
+  final sqTse = profile.sqCandidatoTse2022;
+  final tseVinculado = sqTse != null;
+  final votosTseTotal = await _totalVotosTseEleicao2022(client, sqTse);
 
   if (profile.role == 'apoiador') {
     final votantesRes = await client
@@ -60,13 +82,10 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
       apoiadores: 1,
       votantes: votantesCount,
       estimativaVotos: votosVotantes,
+      votosTseEleicao2022: votosTseTotal,
+      perfilTseVinculado: tseVinculado,
       votosPorCidade:
           votosPorCidade.map((e) => MapEntry(e.key, e.value)).toList(),
-      apoiadoresPorPerfil: const [],
-      totalBenfeitorias: 0,
-      benfeitoriasCount: 0,
-      aniversariantesHoje: 0,
-      mensagensCount: 0,
     );
   }
 
@@ -77,14 +96,11 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
     assessoresCount -= 1;
   }
   final apoiadoresRes =
-      await client.from('apoiadores').select('id, estimativa_votos, perfil');
+      await client.from('apoiadores').select('id, estimativa_votos');
   final apoiadoresCount = apoiadoresRes.length;
   int estimativaVotos = 0;
-  final perfilCount = <String, int>{};
   for (final r in apoiadoresRes) {
     estimativaVotos += (r['estimativa_votos'] as num?)?.toInt() ?? 0;
-    final p = r['perfil'] as String? ?? 'Outro';
-    perfilCount[p] = (perfilCount[p] ?? 0) + 1;
   }
 
   final votantesRes = await client
@@ -103,42 +119,17 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
 
   estimativaVotos += votosVotantes;
 
-  final benfeitoriasRes = await client.from('benfeitorias').select('valor');
-  double totalBenfeitorias = 0;
-  for (final r in benfeitoriasRes) {
-    totalBenfeitorias += (r['valor'] as num?)?.toDouble() ?? 0;
-  }
-
-  final now = DateTime.now();
-  int aniversariantesHoje = 0;
-  try {
-    final raw = await client.from('aniversariantes').select('data_nascimento');
-    for (final r in raw) {
-      final d = DateTime.tryParse(r['data_nascimento'].toString());
-      if (d != null && d.month == now.month && d.day == now.day)
-        aniversariantesHoje++;
-    }
-  } catch (_) {}
-
-  final mensagensRes = await client.from('mensagens').select('id');
-  final mensagensCount = mensagensRes.length;
-
   final votosPorCidade = cidadeCount.entries.toList()
     ..sort((a, b) => b.value.compareTo(a.value));
-  final apoiadoresPorPerfil = perfilCount.entries.toList();
 
   return DashboardStats(
     assessores: assessoresCount,
     apoiadores: apoiadoresCount,
     votantes: votantesCount,
     estimativaVotos: estimativaVotos,
+    votosTseEleicao2022: votosTseTotal,
+    perfilTseVinculado: tseVinculado,
     votosPorCidade:
         votosPorCidade.map((e) => MapEntry(e.key, e.value)).toList(),
-    apoiadoresPorPerfil:
-        apoiadoresPorPerfil.map((e) => MapEntry(e.key, e.value)).toList(),
-    totalBenfeitorias: totalBenfeitorias,
-    benfeitoriasCount: benfeitoriasRes.length,
-    aniversariantesHoje: aniversariantesHoje,
-    mensagensCount: mensagensCount,
   );
 });

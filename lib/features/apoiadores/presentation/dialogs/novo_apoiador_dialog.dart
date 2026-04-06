@@ -18,6 +18,7 @@ import '../../providers/apoiadores_provider.dart'
         NovaBenfeitoriaItem;
 import '../utils/apoiadores_form_utils.dart';
 import '../widgets/classificacao_apoiador_field.dart';
+import '../widgets/origem_apoiador_field.dart';
 
 class NovoApoiadorDialog extends ConsumerStatefulWidget {
   const NovoApoiadorDialog({super.key, required this.onCreate});
@@ -47,6 +48,7 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
   final _logradouroController = TextEditingController();
   final _numeroController = TextEditingController();
   final _complementoController = TextEditingController();
+  final _origemController = TextEditingController();
 
   String? _cidadeNome;
   String _tipo = 'PF';
@@ -87,6 +89,7 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
     _logradouroController.dispose();
     _numeroController.dispose();
     _complementoController.dispose();
+    _origemController.dispose();
     super.dispose();
   }
 
@@ -271,6 +274,7 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
         logradouro: _logradouroController.text.trim().isEmpty ? null : _logradouroController.text.trim(),
         numero: _numeroController.text.trim().isEmpty ? null : _numeroController.text.trim(),
         complemento: _complementoController.text.trim().isEmpty ? null : _complementoController.text.trim(),
+        origemLugarTexto: _origemController.text.trim().isEmpty ? null : _origemController.text.trim(),
       ));
       if (mounted) {
         widget.onCreate();
@@ -352,6 +356,8 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                   initialPerfil: _perfil,
                   onChanged: (v) => setState(() => _perfil = v),
                 ),
+                const SizedBox(height: 16),
+                OrigemApoiadorField(controller: _origemController),
                 const SizedBox(height: 16),
                 if (_tipo == 'PF') ..._buildCamposPF(theme),
                 if (_tipo == 'PJ') ..._buildCamposPJ(theme),

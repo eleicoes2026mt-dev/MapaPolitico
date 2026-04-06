@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
+import '../../../../core/utils/formato_pt_br.dart';
 import '../../data/mt_municipios_coords.dart';
 import '../../providers/benfeitorias_municipio_mapa_provider.dart';
 
@@ -35,8 +35,6 @@ class BenfeitoriasMunicipioPanel extends ConsumerWidget {
     final theme = Theme.of(context);
     final displayNome = displayNomeCidadeMT(normalizarNomeMunicipioMT(municipioChaveOuNome));
     final async = ref.watch(benfeitoriasPorMunicipioMapaProvider(municipioChaveOuNome));
-    final curFmt = NumberFormat.currency(locale: 'pt_BR', symbol: r'R$');
-    final dataFmt = DateFormat('dd/MM/yyyy');
 
     return Column(
       mainAxisSize: MainAxisSize.max,
@@ -94,7 +92,7 @@ class BenfeitoriasMunicipioPanel extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
                     child: Text(
-                      'Total: ${curFmt.format(soma)} · ${list.length} registo(s)',
+                      'Total: ${formatarMoedaPtBr(soma)} · ${list.length} registo(s)',
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
@@ -132,7 +130,7 @@ class BenfeitoriasMunicipioPanel extends ConsumerWidget {
                                       visualDensity: VisualDensity.compact,
                                     ),
                                     Text(
-                                      curFmt.format(b.valor),
+                                      formatarMoedaPtBr(b.valor),
                                       style: theme.textTheme.titleSmall?.copyWith(
                                         color: theme.colorScheme.primary,
                                         fontWeight: FontWeight.w800,
@@ -149,7 +147,7 @@ class BenfeitoriasMunicipioPanel extends ConsumerWidget {
                                 if (dr != null) ...[
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Data: ${dataFmt.format(dr)}',
+                                    'Data: ${formatarDataPtBr(dr)}',
                                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                                   ),
                                 ],

@@ -2,9 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../../../../core/constants/regioes_fundidas.dart';
+import '../../../../core/router/navigation_keys.dart';
+import '../../../../core/utils/formato_pt_br.dart';
 import '../../../../core/geo/lat_lng.dart';
 import '../../data/geo_loader.dart';
 import '../../data/mt_municipios_coords.dart';
@@ -12,6 +13,11 @@ import '../../data/tse_votos_escala.dart';
 import '../../models/mapa_marcador_cidade.dart';
 import '../../providers/benfeitorias_mapa_provider.dart';
 import 'bandeira_marcador_widget.dart';
+
+/// [ShellRoute] + GoRouter (web): `context` do mapa pode não ser descendente do overlay
+/// correto — usar o [Navigator] do shell evita assert em `InheritedWidget` ao abrir diálogo.
+BuildContext _dialogContextForShell(BuildContext context) =>
+    shellNavigatorKey.currentContext ?? context;
 
 /// Mapa para **web**: OpenStreetMap + regiões de MT (flutter_map).
 /// Mesma funcionalidade de regiões, toque e tooltip que no app mobile.
@@ -41,6 +47,10 @@ class MapaRegionalWidget extends StatefulWidget {
     this.benfeitoriasRanking,
     this.onBenfeitoriasMapa,
     this.onPainelRankingModoChanged,
+    this.metasPorRegiao,
+    this.onSalvarMetas,
+    this.painelRankingModo = 'nenhum',
+    this.painelRankingModoNotifier,
   });
 
   final double height;
@@ -63,13 +73,25 @@ class MapaRegionalWidget extends StatefulWidget {
   final void Function(bool)? onMostrarMarcadores;
   final bool mostrarTSE;
   final bool mostrarMarcadores;
-  final void Function(Map<String, String>?)? onComparativoColors;
+  final void Function(
+    Map<String, String>? cores, {
+    Map<String, double>? ratios,
+    bool incluirLabelsZero,
+  })? onComparativoColors;
   /// Quando não nulo, o painel de ranking pode ativar a camada “Benfeitorias” no mapa.
   final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
   /// Igual a [onComparativoColors], para a camada de benfeitorias (só web).
   final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
-  /// Só web: `nenhum` | `tse` | `rede` | `comparativo` | `benfeitorias` — para legenda no painel pai.
+  /// Só web: `nenhum` | `tse` | `rede` | `comparativo` | `metas` | `benfeitorias` — para legenda no painel pai.
   final ValueChanged<String>? onPainelRankingModoChanged;
+  /// Metas de votos por `cd_rgint` (região intermediária), por campanha.
+  final Map<String, int>? metasPorRegiao;
+  /// Persiste metas; se null, o painel não mostra o modo «Metas».
+  final Future<void> Function(Map<String, int> metas)? onSalvarMetas;
+  /// `nenhum` | `tse` | `rede` | `comparativo` | `metas` | `benfeitorias` — fonte de verdade no [MapaRegionalPanel].
+  final String painelRankingModo;
+  /// Quando não nulo (painel da campanha), o ranking lê o modo aqui para não ficar desfasado da prop num frame.
+  final ValueNotifier<String>? painelRankingModoNotifier;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetWebState();
@@ -162,14 +184,21 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   bool _rankingVisivel = false; // começa fechado — usuário abre quando quiser
   /// Cores de atingimento por região (modo Comparativo). null = desativado.
   Map<String, String>? _comparativoColors;
-  /// Ratio de atingimento por região (estimativa/TSE). Para exibir % no mapa.
+  /// Ratio de atingimento por região (estimativa/TSE ou estimativa/meta). Para exibir % no mapa.
   Map<String, double>? _comparativoRatios;
+  /// Comparativo: mostra rótulo «0%» em regiões sem dados quando [incluirLabelsZero].
+  bool _comparativoLabelsIncluirZero = false;
   Map<String, String>? _benfeitoriasColors;
   Map<String, double>? _benfeitoriasRatios;
   Map<String, double>? _benfeitoriasValores;
 
-  void _onComparativoCoresFromPanel(Map<String, String>? cores) {
+  void _onComparativoCoresFromPanel(
+    Map<String, String>? cores, {
+    Map<String, double>? ratios,
+    bool incluirLabelsZero = false,
+  }) {
     setState(() {
+      _comparativoLabelsIncluirZero = cores == null ? false : incluirLabelsZero;
       _comparativoColors = cores;
       if (cores != null) {
         _benfeitoriasColors = null;
@@ -178,6 +207,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       }
       if (cores == null) {
         _comparativoRatios = null;
+      } else if (ratios != null) {
+        _comparativoRatios = ratios.isEmpty ? null : ratios;
       } else {
         final r = _rankingRegioes();
         final ratioMap = <String, double>{};
@@ -469,10 +500,11 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final candidatos = <({ll.LatLng pos, Color cor, String pct, double ratio})>[];
     for (final regiao in _regioesMT!) {
       final ratio = ratios[regiao.id];
-      if (ratio == null || ratio <= 0.0) continue; // sem dado → sem badge
+      if (ratio == null) continue;
+      if (ratio <= 0.0 && !_comparativoLabelsIncluirZero) continue;
 
       final hexCor = cores?[regiao.id] ?? '#78909C';
-      final cor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
+      final cor = _colorFromHex(hexCor);
       final pct = '${(ratio * 100).toStringAsFixed(1)}%';
 
       if (regiao.polygons.isEmpty) continue;
@@ -530,21 +562,20 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final cores = _benfeitoriasColors;
     if (valores == null || valores.isEmpty || _regioesMT == null) return [];
 
-    final fmt = NumberFormat.compactCurrency(locale: 'pt_BR', symbol: r'R$');
     final candidatos = <({ll.LatLng pos, Color cor, String txt, double ratio})>[];
     for (final regiao in _regioesMT!) {
       final v = valores[regiao.id];
       if (v == null || v <= 0) continue;
       final ratio = ratios?[regiao.id] ?? 0.5;
       final hexCor = cores?[regiao.id] ?? '#78909C';
-      final cor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
+      final cor = _colorFromHex(hexCor);
       if (regiao.polygons.isEmpty) continue;
       final geoPoly = regiao.polygons.reduce((a, b) => a.points.length >= b.points.length ? a : b);
       final pts = geoPoly.points;
       if (pts.isEmpty) continue;
       final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
       final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
-      candidatos.add((pos: ll.LatLng(lat, lng), cor: cor, txt: fmt.format(v), ratio: ratio));
+      candidatos.add((pos: ll.LatLng(lat, lng), cor: cor, txt: formatarMoedaCompactaPtBr(v), ratio: ratio));
     }
 
     candidatos.sort((a, b) => b.ratio.compareTo(a.ratio));
@@ -802,6 +833,111 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     return list;
   }
 
+  /// Agrega votos TSE e estimativa por região (união de municípios), para metas sem depender só do TSE.
+  List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})>
+      _rankingRegioesParaMetas() {
+    final regioes = _regioesMT;
+    if (regioes == null) return [];
+
+    final votos = widget.votosPorMunicipio ?? {};
+    final est = widget.estimativaPorCidade ?? {};
+    final keys = {...votos.keys, ...est.keys};
+    if (keys.isEmpty) {
+      // Lista todas as regiões com zero (para definir metas antes de haver cadastro).
+      return regioes
+          .map(
+            (reg) => (
+              id: reg.id,
+              nome: reg.nome,
+              total: 0,
+              totalEstimativa: 0,
+              pct: 0.0,
+              cidades: <({String cidade, String key, int votos, double pct, int estimativa})>[],
+            ),
+          )
+          .toList();
+    }
+
+    final totalGeralVotos = votos.values.fold<int>(0, (a, b) => a + b);
+    final totalGeral = totalGeralVotos > 0 ? totalGeralVotos : 1;
+
+    final porRegiao = <String, ({String nome, int total, int totalEstimativa, Map<String, ({int votos, int estimativa})> cidades})>{};
+    for (final reg in regioes) {
+      porRegiao[reg.id] = (nome: reg.nome, total: 0, totalEstimativa: 0, cidades: {});
+    }
+    for (final key in keys) {
+      final coords = getCoordsMunicipioMT(key);
+      if (coords == null) continue;
+      final pt = LatLng(coords.latitude, coords.longitude);
+      for (final reg in regioes) {
+        if (pointInRegion(pt, reg.polygons)) {
+          final v = votos[key] ?? 0;
+          final e = _estimativaCidade(key);
+          final cur = porRegiao[reg.id]!;
+          final prev = cur.cidades[key] ?? (votos: 0, estimativa: 0);
+          cur.cidades[key] = (votos: prev.votos + v, estimativa: prev.estimativa + e);
+          porRegiao[reg.id] = (
+            nome: cur.nome,
+            total: cur.total + v,
+            totalEstimativa: cur.totalEstimativa + e,
+            cidades: cur.cidades,
+          );
+          break;
+        }
+      }
+    }
+
+    final list = porRegiao.entries.map((entry) {
+      final id = entry.key;
+      final nome = entry.value.nome;
+      final total = entry.value.total;
+      final totalEstimativa = entry.value.totalEstimativa;
+      final pct = totalGeral > 0 ? (total / totalGeral * 100) : 0.0;
+      final cidades = entry.value.cidades.entries
+          .map((c) => (
+                cidade: displayNomeCidadeMT(c.key),
+                key: c.key,
+                votos: c.value.votos,
+                pct: totalGeral > 0 ? (c.value.votos / totalGeral * 100) : 0.0,
+                estimativa: c.value.estimativa,
+              ))
+          .toList()
+        ..sort((a, b) => b.votos.compareTo(a.votos));
+      return (id: id, nome: nome, total: total, totalEstimativa: totalEstimativa, pct: pct, cidades: cidades);
+    }).toList();
+    list.sort((a, b) => b.totalEstimativa.compareTo(a.totalEstimativa));
+
+    final drillId = _regiaoDrillDownId;
+    if (drillId != null) {
+      final filtrada = list.where((r) => r.id == drillId).toList();
+      if (filtrada.isEmpty) return [];
+      final rr = filtrada.first;
+      final totalReg = rr.total;
+      final cidadesRel = rr.cidades
+          .map(
+            (c) => (
+                  cidade: c.cidade,
+                  key: c.key,
+                  votos: c.votos,
+                  pct: totalReg > 0 ? (c.votos / totalReg * 100) : 0.0,
+                  estimativa: c.estimativa,
+                ),
+          )
+          .toList();
+      return [
+        (
+          id: rr.id,
+          nome: rr.nome,
+          total: rr.total,
+          totalEstimativa: rr.totalEstimativa,
+          pct: rr.pct,
+          cidades: cidadesRel,
+        ),
+      ];
+    }
+    return list;
+  }
+
   /// Mapa + faixa drill-down + tooltip (sem ranking sobreposto).
   Widget _buildMapStackContent(
     BuildContext context,
@@ -968,7 +1104,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     bool aplicarSoNestaRegiao = false;
 
     showDialog<bool?>(
-      context: context,
+      context: _dialogContextForShell(context),
+      useRootNavigator: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx2, setDialogState) => AlertDialog(
           title: const Text('Editar delimitação'),
@@ -1067,6 +1204,63 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     });
   }
 
+  /// Painel de ranking: com [painelRankingModoNotifier] usa [ValueListenableBuilder] para o modo
+  /// ficar sempre alinhado ao toque (evita lista «nenhum» com rodapé em Metas).
+  Widget _rankingPanelWidget({
+    required bool compact,
+    required List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking,
+    required List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> rankingMetas,
+    required Map<String, int> metasMap,
+    required int totalVotosTseGeral,
+    required int totalEstimativaGeral,
+  }) {
+    Widget buildPanel(String modo) {
+      return _RankingPanel(
+        ranking: ranking,
+        rankingMetas: rankingMetas,
+        metasPorRegiao: metasMap,
+        painelRankingModo: modo,
+        onSalvarMetas: widget.onSalvarMetas,
+        totalVotosTseGeral: totalVotosTseGeral,
+        totalEstimativaGeral: totalEstimativaGeral,
+        benfeitoriasRanking: widget.benfeitoriasRanking,
+        onCityTap: widget.onCityTap,
+        locaisVotacaoContent: widget.locaisVotacaoContent,
+        selectedMunicipioKey: widget.selectedMunicipioKey,
+        layoutCompact: compact,
+        focusedRegiaoId: _regiaoDrillDownId,
+        onMostrarTSE: widget.onMostrarTSE,
+        onMostrarMarcadores: widget.onMostrarMarcadores,
+        mostrarTSE: widget.mostrarTSE,
+        mostrarMarcadores: widget.mostrarMarcadores,
+        onComparativoColors: _onComparativoCoresFromPanel,
+        onBenfeitoriasMapa: _onBenfeitoriasFromPanel,
+        onPainelRankingModoChanged: widget.onPainelRankingModoChanged,
+        onToggleFocusRegiao: (id) {
+          final modoNv = widget.painelRankingModoNotifier?.value ?? widget.painelRankingModo;
+          if (_normalizePainelModoStr(modoNv) == 'metas') {
+            return;
+          }
+          if (_regiaoDrillDownId == id) {
+            _setDrillDownRegiao(null);
+          } else {
+            _setDrillDownRegiao(id);
+          }
+        },
+        nomesCustomizados: widget.nomesCustomizados,
+      );
+    }
+
+    final nv = widget.painelRankingModoNotifier;
+    if (nv != null) {
+      return ValueListenableBuilder<String>(
+        valueListenable: nv,
+        builder: (context, modo, _) => buildPanel(modo),
+      );
+    }
+    return buildPanel(widget.painelRankingModo);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -1104,13 +1298,14 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final comparativoLabels = _buildComparativoLabels();
     final benfeitoriasLabels = _buildBenfeitoriasLabels();
     final ranking = _rankingRegioes();
+    final rankingMetas = _rankingRegioesParaMetas();
     final totalVotosTseGeral = _totalVotosTseSomados();
     final totalEstimativaGeral = _totalEstimativaSomada();
-
+    final metasMap = widget.metasPorRegiao ?? const <String, int>{};
 
     // Dashboard/mobile embutido: mapa e ranking em coluna — o mapa deixa de ser tapado pelo painel.
     if (widget.embedRankingBelowMap) {
-      if (ranking.isEmpty) {
+      if (ranking.isEmpty && rankingMetas.isEmpty) {
         return SizedBox(
           height: widget.height,
           width: double.infinity,
@@ -1130,27 +1325,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             ),
             Expanded(
               flex: 16,
-              child: _RankingPanel(
+              child: _rankingPanelWidget(
+                compact: true,
                 ranking: ranking,
+                rankingMetas: rankingMetas,
+                metasMap: metasMap,
                 totalVotosTseGeral: totalVotosTseGeral,
                 totalEstimativaGeral: totalEstimativaGeral,
-                benfeitoriasRanking: widget.benfeitoriasRanking,
-                onCityTap: widget.onCityTap,
-                locaisVotacaoContent: widget.locaisVotacaoContent,
-                selectedMunicipioKey: widget.selectedMunicipioKey,
-                layoutCompact: true,
-                focusedRegiaoId: _regiaoDrillDownId,
-                onMostrarTSE: widget.onMostrarTSE, onMostrarMarcadores: widget.onMostrarMarcadores, mostrarTSE: widget.mostrarTSE, mostrarMarcadores: widget.mostrarMarcadores,
-                onComparativoColors: _onComparativoCoresFromPanel,
-                onBenfeitoriasMapa: _onBenfeitoriasFromPanel,
-                onPainelRankingModoChanged: widget.onPainelRankingModoChanged,
-                onToggleFocusRegiao: (id) {
-                  if (_regiaoDrillDownId == id) {
-                    _setDrillDownRegiao(null);
-                  } else {
-                    _setDrillDownRegiao(id);
-                  }
-                },
               ),
             ),
           ],
@@ -1173,30 +1354,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               constraints.maxHeight * (temLocais ? 0.58 : 0.36),
             ),
           );
-          Widget buildRankingPanel({required bool compact}) => _RankingPanel(
+          Widget buildRankingPanel({required bool compact}) => _rankingPanelWidget(
+            compact: compact,
             ranking: ranking,
+            rankingMetas: rankingMetas,
+            metasMap: metasMap,
             totalVotosTseGeral: totalVotosTseGeral,
             totalEstimativaGeral: totalEstimativaGeral,
-            benfeitoriasRanking: widget.benfeitoriasRanking,
-            onCityTap: widget.onCityTap,
-            locaisVotacaoContent: widget.locaisVotacaoContent,
-            selectedMunicipioKey: widget.selectedMunicipioKey,
-            layoutCompact: compact,
-            focusedRegiaoId: _regiaoDrillDownId,
-            onMostrarTSE: widget.onMostrarTSE,
-            onMostrarMarcadores: widget.onMostrarMarcadores,
-            mostrarTSE: widget.mostrarTSE,
-            mostrarMarcadores: widget.mostrarMarcadores,
-            onComparativoColors: _onComparativoCoresFromPanel,
-            onBenfeitoriasMapa: _onBenfeitoriasFromPanel,
-            onPainelRankingModoChanged: widget.onPainelRankingModoChanged,
-            onToggleFocusRegiao: (id) {
-              if (_regiaoDrillDownId == id) {
-                _setDrillDownRegiao(null);
-              } else {
-                _setDrillDownRegiao(id);
-              }
-            },
           );
 
           // Botão flutuante para mostrar/ocultar o ranking
@@ -1255,13 +1419,25 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                         right: 8,
                         bottom: 8,
                         height: bottomPanelH,
-                        child: buildRankingPanel(compact: true),
+                        child: Material(
+                          elevation: 12,
+                          shadowColor: Colors.black45,
+                          borderRadius: BorderRadius.circular(12),
+                          clipBehavior: Clip.antiAlias,
+                          child: buildRankingPanel(compact: true),
+                        ),
                       )
                     : Positioned(
                         right: 8,
                         top: 44,
                         bottom: 8,
-                        child: buildRankingPanel(compact: false),
+                        child: Material(
+                          elevation: 12,
+                          shadowColor: Colors.black45,
+                          borderRadius: BorderRadius.circular(12),
+                          clipBehavior: Clip.antiAlias,
+                          child: buildRankingPanel(compact: false),
+                        ),
                       ),
             ],
           );
@@ -1275,6 +1451,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
 class _RankingPanel extends StatefulWidget {
   const _RankingPanel({
     required this.ranking,
+    required this.rankingMetas,
+    required this.metasPorRegiao,
+    required this.painelRankingModo,
+    this.onSalvarMetas,
     required this.totalVotosTseGeral,
     required this.totalEstimativaGeral,
     this.benfeitoriasRanking,
@@ -1291,9 +1471,15 @@ class _RankingPanel extends StatefulWidget {
     this.onComparativoColors,
     this.onBenfeitoriasMapa,
     this.onPainelRankingModoChanged,
+    this.nomesCustomizados,
   });
 
   final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
+  final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> rankingMetas;
+  final Map<String, int> metasPorRegiao;
+  /// Sincronizado com [MapaRegionalPanel] — evita dessincronizar após rebuild do pai.
+  final String painelRankingModo;
+  final Future<void> Function(Map<String, int> metas)? onSalvarMetas;
   final int totalVotosTseGeral;
   final int totalEstimativaGeral;
   final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
@@ -1307,17 +1493,45 @@ class _RankingPanel extends StatefulWidget {
   final void Function(bool)? onMostrarMarcadores;
   final bool mostrarTSE;
   final bool mostrarMarcadores;
-  /// Callback com mapa regionId → cor hex para colorir polígonos no modo Comparativo.
-  /// Null = desativar modo comparativo.
-  final void Function(Map<String, String>?)? onComparativoColors;
+  /// Cores no mapa (Comparativo ou Metas). [ratios] opcional: se null, o mapa assume TSE vs estimativa.
+  final void Function(
+    Map<String, String>? cores, {
+    Map<String, double>? ratios,
+    bool incluirLabelsZero,
+  })? onComparativoColors;
   final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
   final ValueChanged<String>? onPainelRankingModoChanged;
+  final Map<String, String>? nomesCustomizados;
 
   @override
   State<_RankingPanel> createState() => _RankingPanelState();
 }
 
-enum _ModoRanking { nenhum, tse, rede, comparativo, benfeitorias }
+enum _ModoRanking { nenhum, tse, rede, comparativo, metas, benfeitorias }
+
+/// Normaliza o modo vindo do [MapaRegionalPanel] (trim, minúsculas).
+String _normalizePainelModoStr(String s) {
+  final t = s.trim().toLowerCase();
+  if (t.isEmpty) return 'nenhum';
+  return t;
+}
+
+_ModoRanking _parsePainelModo(String s) {
+  switch (_normalizePainelModoStr(s)) {
+    case 'tse':
+      return _ModoRanking.tse;
+    case 'rede':
+      return _ModoRanking.rede;
+    case 'comparativo':
+      return _ModoRanking.comparativo;
+    case 'metas':
+      return _ModoRanking.metas;
+    case 'benfeitorias':
+      return _ModoRanking.benfeitorias;
+    default:
+      return _ModoRanking.nenhum;
+  }
+}
 
 // Cores de atingimento: ratio = estimativa / votos_tse
 String _corAtingimento(double ratio) {
@@ -1343,14 +1557,10 @@ String _labelAtingimento(double ratio) {
 }
 
 class _RankingPanelState extends State<_RankingPanel> {
-  _ModoRanking _modo = _ModoRanking.tse;
   String _ultimaAssinaturaBenfeitoriasMapa = '';
 
-  @override
-  void initState() {
-    super.initState();
-    // Começa sempre sem nenhuma seleção — usuário escolhe ao clicar
-    _modo = _ModoRanking.nenhum;
+  void _emitPainelModoStr(String s) {
+    widget.onPainelRankingModoChanged?.call(_normalizePainelModoStr(s));
   }
 
   String _assinaturaBenfeitorias(List<BenfeitoriaRegiaoRanking> list) {
@@ -1361,7 +1571,8 @@ class _RankingPanelState extends State<_RankingPanel> {
   @override
   void didUpdateWidget(_RankingPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_modo != _ModoRanking.benfeitorias) return;
+    final modoPai = _normalizePainelModoStr(widget.painelRankingModo);
+    if (_parsePainelModo(modoPai) != _ModoRanking.benfeitorias) return;
     final list = widget.benfeitoriasRanking ?? [];
     if (list.isEmpty) {
       _ultimaAssinaturaBenfeitoriasMapa = '';
@@ -1408,14 +1619,10 @@ class _RankingPanelState extends State<_RankingPanel> {
     );
   }
 
-  void _emitPainelModo(_ModoRanking m) {
-    widget.onPainelRankingModoChanged?.call(switch (m) {
-      _ModoRanking.nenhum => 'nenhum',
-      _ModoRanking.tse => 'tse',
-      _ModoRanking.rede => 'rede',
-      _ModoRanking.comparativo => 'comparativo',
-      _ModoRanking.benfeitorias => 'benfeitorias',
-    });
+  /// Metas só no painel: remove camadas coloridas (comparativo/benfeitorias), sem alterar TSE/rede.
+  void _limparCoresAnaliticasNoMapa() {
+    widget.onComparativoColors?.call(null);
+    widget.onBenfeitoriasMapa?.call(null);
   }
 
   static const _medals = ['🥇', '🥈', '🥉'];
@@ -1433,7 +1640,6 @@ class _RankingPanelState extends State<_RankingPanel> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final showLocais = widget.locaisVotacaoContent != null;
-    final fmt = NumberFormat('#,##0', 'pt_BR');
     final screenW = MediaQuery.sizeOf(context).width;
     final panelWidth = widget.layoutCompact
         ? double.infinity
@@ -1443,6 +1649,7 @@ class _RankingPanelState extends State<_RankingPanel> {
     final totalVotosTseGeral = widget.totalVotosTseGeral;
     final totalEstimativaGeral = widget.totalEstimativaGeral;
     final focusedRegiaoId = widget.focusedRegiaoId;
+    final modo = _parsePainelModo(_normalizePainelModoStr(widget.painelRankingModo));
 
     // ── Ranking da rede: agrega estimativa por região (flat lista de cidades) ──
     // Ranking da rede: agrega estimativa por região
@@ -1465,11 +1672,21 @@ class _RankingPanelState extends State<_RankingPanel> {
     // O separador aparece sempre que o mapa suporta a camada (callback interno).
     // O ranking pode vir null (loading/erro do provider) — a lista trata vazio/loading.
     final temBenfeitorias = widget.onBenfeitoriasMapa != null;
-    final modoRede = _modo == _ModoRanking.rede;
-    final modoComparativo = _modo == _ModoRanking.comparativo;
-    final modoBenfeitorias = _modo == _ModoRanking.benfeitorias;
-    final modoNenhum = _modo == _ModoRanking.nenhum;
+    final temModoMetas = widget.onSalvarMetas != null;
+    final modoRede = modo == _ModoRanking.rede;
+    final modoComparativo = modo == _ModoRanking.comparativo;
+    final modoMetas = modo == _ModoRanking.metas;
+    final modoBenfeitorias = modo == _ModoRanking.benfeitorias;
+    final modoNenhum = modo == _ModoRanking.nenhum;
     final totalValorBenf = widget.benfeitoriasRanking?.fold<double>(0, (s, r) => s + r.valorTotal) ?? 0.0;
+    var totalMetaSoma = 0;
+    var totalAtingidoSoma = 0;
+    for (final r in widget.rankingMetas) {
+      final m = widget.metasPorRegiao[r.id] ?? 0;
+      if (m <= 0) continue;
+      totalMetaSoma += m;
+      totalAtingidoSoma += r.totalEstimativa;
+    }
 
     return Material(
       elevation: 4,
@@ -1518,7 +1735,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                     const SizedBox(height: 8),
 
                     // ── Tabs: clique ativa; clique duplo limpa o mapa ──
-                    if (mostrarAbasTseRedeComparativo || temBenfeitorias) ...[
+                    if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas) ...[
                       Wrap(
                         spacing: 6,
                         runSpacing: 6,
@@ -1527,19 +1744,17 @@ class _RankingPanelState extends State<_RankingPanel> {
                             _TabBtn(
                               label: 'Eleição 2022',
                               icon: Icons.how_to_vote_outlined,
-                              active: _modo == _ModoRanking.tse,
+                              active: modo == _ModoRanking.tse,
                               color: const Color(0xFF1565C0),
                               onTap: () {
-                                if (_modo == _ModoRanking.tse) {
-                                  setState(() => _modo = _ModoRanking.nenhum);
-                                  _emitPainelModo(_ModoRanking.nenhum);
+                                if (modo == _ModoRanking.tse) {
+                                  _emitPainelModoStr('nenhum');
                                   widget.onMostrarTSE?.call(false);
                                   widget.onMostrarMarcadores?.call(false);
                                   widget.onComparativoColors?.call(null);
                                   widget.onBenfeitoriasMapa?.call(null);
                                 } else {
-                                  setState(() => _modo = _ModoRanking.tse);
-                                  _emitPainelModo(_ModoRanking.tse);
+                                  _emitPainelModoStr('tse');
                                   widget.onMostrarTSE?.call(true);
                                   widget.onMostrarMarcadores?.call(false);
                                   widget.onComparativoColors?.call(null);
@@ -1550,19 +1765,17 @@ class _RankingPanelState extends State<_RankingPanel> {
                             _TabBtn(
                               label: 'Minha Rede',
                               icon: Icons.groups_outlined,
-                              active: _modo == _ModoRanking.rede,
+                              active: modo == _ModoRanking.rede,
                               color: cs.secondary,
                               onTap: () {
-                                if (_modo == _ModoRanking.rede) {
-                                  setState(() => _modo = _ModoRanking.nenhum);
-                                  _emitPainelModo(_ModoRanking.nenhum);
+                                if (modo == _ModoRanking.rede) {
+                                  _emitPainelModoStr('nenhum');
                                   widget.onMostrarTSE?.call(false);
                                   widget.onMostrarMarcadores?.call(false);
                                   widget.onComparativoColors?.call(null);
                                   widget.onBenfeitoriasMapa?.call(null);
                                 } else {
-                                  setState(() => _modo = _ModoRanking.rede);
-                                  _emitPainelModo(_ModoRanking.rede);
+                                  _emitPainelModoStr('rede');
                                   widget.onMostrarTSE?.call(false);
                                   widget.onMostrarMarcadores?.call(true);
                                   widget.onComparativoColors?.call(null);
@@ -1573,28 +1786,24 @@ class _RankingPanelState extends State<_RankingPanel> {
                             _TabBtn(
                               label: 'Comparativo',
                               icon: Icons.compare_arrows,
-                              active: _modo == _ModoRanking.comparativo,
+                              active: modo == _ModoRanking.comparativo,
                               color: Colors.teal,
                               onTap: () {
-                                if (_modo == _ModoRanking.comparativo) {
-                                  setState(() => _modo = _ModoRanking.nenhum);
-                                  _emitPainelModo(_ModoRanking.nenhum);
+                                if (modo == _ModoRanking.comparativo) {
+                                  _emitPainelModoStr('nenhum');
                                   widget.onMostrarTSE?.call(false);
                                   widget.onMostrarMarcadores?.call(false);
                                   widget.onComparativoColors?.call(null);
                                   widget.onBenfeitoriasMapa?.call(null);
                                 } else {
                                   final cores = <String, String>{};
-                                  final ratios = <String, double>{};
                                   for (final r in ranking) {
                                     if (r.total > 0) {
                                       final ratio = r.totalEstimativa / r.total;
                                       cores[r.id] = _corAtingimento(ratio);
-                                      ratios[r.id] = ratio;
                                     }
                                   }
-                                  setState(() => _modo = _ModoRanking.comparativo);
-                                  _emitPainelModo(_ModoRanking.comparativo);
+                                  _emitPainelModoStr('comparativo');
                                   widget.onMostrarTSE?.call(false);
                                   widget.onMostrarMarcadores?.call(false);
                                   widget.onBenfeitoriasMapa?.call(null);
@@ -1603,6 +1812,21 @@ class _RankingPanelState extends State<_RankingPanel> {
                               },
                             ),
                           ],
+                          if (temModoMetas)
+                            _TabBtn(
+                              label: 'Metas',
+                              icon: Icons.flag_outlined,
+                              active: modoMetas,
+                              color: const Color(0xFF7E57C2),
+                              onTap: () {
+                                if (modo == _ModoRanking.metas) {
+                                  _emitPainelModoStr('nenhum');
+                                } else {
+                                  _emitPainelModoStr('metas');
+                                }
+                                _limparCoresAnaliticasNoMapa();
+                              },
+                            ),
                           if (temBenfeitorias)
                             _TabBtn(
                               label: 'Benfeitorias',
@@ -1611,16 +1835,14 @@ class _RankingPanelState extends State<_RankingPanel> {
                               color: kBenfeitoriasMapaAccent,
                               onTap: () {
                                 final list = widget.benfeitoriasRanking ?? [];
-                                if (_modo == _ModoRanking.benfeitorias) {
-                                  setState(() => _modo = _ModoRanking.nenhum);
-                                  _emitPainelModo(_ModoRanking.nenhum);
+                                if (modo == _ModoRanking.benfeitorias) {
+                                  _emitPainelModoStr('nenhum');
                                   widget.onMostrarTSE?.call(false);
                                   widget.onMostrarMarcadores?.call(false);
                                   widget.onComparativoColors?.call(null);
                                   widget.onBenfeitoriasMapa?.call(null);
                                 } else {
-                                  setState(() => _modo = _ModoRanking.benfeitorias);
-                                  _emitPainelModo(_ModoRanking.benfeitorias);
+                                  _emitPainelModoStr('benfeitorias');
                                   _aplicarCamadaBenfeitoriasNoMapa(list);
                                 }
                               },
@@ -1638,7 +1860,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                             child: _KpiChip(
                               icon: Icons.volunteer_activism_outlined,
                               label: 'Benfeitorias (soma)',
-                              value: NumberFormat.currency(locale: 'pt_BR', symbol: r'R$').format(totalValorBenf),
+                              value: formatarMoedaPtBr(totalValorBenf),
                               color: kBenfeitoriasMapaAccent,
                               theme: theme,
                               readableTextOnDark: true,
@@ -1646,24 +1868,48 @@ class _RankingPanelState extends State<_RankingPanel> {
                           ),
                         ],
                       )
+                    else if (modoMetas)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _KpiChip(
+                              icon: Icons.flag_outlined,
+                              label: 'Meta total',
+                              value: formatarInteiroPtBr(totalMetaSoma),
+                              color: const Color(0xFF7E57C2),
+                              theme: theme,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _KpiChip(
+                              icon: Icons.trending_up,
+                              label: 'Atingido (est.)',
+                              value: formatarInteiroPtBr(totalAtingidoSoma),
+                              color: cs.secondary,
+                              theme: theme,
+                            ),
+                          ),
+                        ],
+                      )
                     else
                       Row(
                         children: [
-                          if (_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo)
+                          if (modo == _ModoRanking.tse || modo == _ModoRanking.comparativo)
                             Expanded(child: _KpiChip(
                               icon: Icons.how_to_vote_outlined,
                               label: 'TSE 2022',
-                              value: fmt.format(totalVotosTseGeral),
+                              value: formatarInteiroPtBr(totalVotosTseGeral),
                               color: const Color(0xFF1565C0),
                               theme: theme,
                             )),
-                          if ((_modo == _ModoRanking.tse || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
+                          if ((modo == _ModoRanking.tse || modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
                             const SizedBox(width: 8),
-                          if ((_modo == _ModoRanking.rede || _modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
+                          if ((modo == _ModoRanking.rede || modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
                             Expanded(child: _KpiChip(
                               icon: Icons.groups_outlined,
                               label: 'Campanha',
-                              value: fmt.format(totalEstimativaGeral),
+                              value: formatarInteiroPtBr(totalEstimativaGeral),
                               color: cs.secondary,
                               theme: theme,
                             )),
@@ -1675,6 +1921,8 @@ class _RankingPanelState extends State<_RankingPanel> {
                         child: Text(
                           modoBenfeitorias
                               ? 'Toque na região para filtrar o mapa • Valores por município cadastrado nas benfeitorias'
+                              : modoMetas
+                                  ? 'Toque na região para filtrar o mapa • Cores = estimativa da campanha ÷ meta por região'
                               : (modoRede || modoNenhum)
                                   ? 'Toque na região para filtrar o mapa'
                                   : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
@@ -1685,17 +1933,19 @@ class _RankingPanelState extends State<_RankingPanel> {
                 ),
               ),
 
-              // ── Lista: nenhum / TSE / Rede / Comparativo / Benfeitorias ───────────────
+              // ── Lista: nenhum / TSE / Rede / Comparativo / Metas / Benfeitorias ───────
               Expanded(
                 flex: showLocais ? 2 : 1,
                 child: modoNenhum
                     ? _buildListaNenhum(cs, theme)
                     : modoBenfeitorias
                     ? _buildListaBenfeitorias(widget.benfeitoriasRanking ?? const [], cs, theme)
+                    : modoMetas
+                    ? _buildListaMetas(cs, theme)
                     : modoComparativo
-                    ? _buildListaComparativo(ranking, totalVotosTseGeral, totalEstimativaGeral, fmt, cs, theme)
+                    ? _buildListaComparativo(ranking, totalVotosTseGeral, totalEstimativaGeral, cs, theme)
                     : modoRede
-                    ? _buildListaRede(rankingRede, totalEstimativaGeral, fmt, cs, theme)
+                    ? _buildListaRede(rankingRede, totalEstimativaGeral, cs, theme)
                     : ListView.builder(
                   itemCount: ranking.length,
                   itemBuilder: (context, i) {
@@ -1809,7 +2059,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                                         Icon(Icons.how_to_vote_outlined, size: 12, color: cs.onSurfaceVariant),
                                         const SizedBox(width: 3),
                                         Text(
-                                          fmt.format(r.total),
+                                          formatarInteiroPtBr(r.total),
                                           style: theme.textTheme.labelSmall?.copyWith(
                                             fontWeight: FontWeight.w600,
                                           ),
@@ -1827,7 +2077,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                                           Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
                                           const SizedBox(width: 2),
                                           Text(
-                                            fmt.format(r.totalEstimativa),
+                                            formatarInteiroPtBr(r.totalEstimativa),
                                             style: theme.textTheme.labelSmall?.copyWith(
                                               fontWeight: FontWeight.w600,
                                               color: cs.secondary,
@@ -1920,7 +2170,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                                           ),
                                           if (c.estimativa > 0)
                                             Text(
-                                              '${fmt.format(c.estimativa)} camp.',
+                                              '${formatarInteiroPtBr(c.estimativa)} camp.',
                                               style: theme.textTheme.labelSmall?.copyWith(
                                                 color: cs.secondary,
                                                 fontSize: 9,
@@ -1932,7 +2182,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                                     const SizedBox(width: 8),
                                     // Votos + % em texto compacto sem SizedBox fixo
                                     Text(
-                                      '${fmt.format(c.votos)}  ${c.pct.toStringAsFixed(1)}%',
+                                      '${formatarInteiroPtBr(c.votos)}  ${c.pct.toStringAsFixed(1)}%',
                                       style: theme.textTheme.labelSmall?.copyWith(
                                         fontWeight: isSelected ? FontWeight.w600 : null,
                                         color: cs.onSurfaceVariant,
@@ -1963,6 +2213,293 @@ class _RankingPanelState extends State<_RankingPanel> {
     );
   }
 
+  String _nomeRegiaoExibicao(String id, String nome) {
+    final c = widget.nomesCustomizados;
+    if (c != null) {
+      final n = c[id];
+      if (n != null && n.trim().isNotEmpty) return n.trim();
+    }
+    return nome;
+  }
+
+  /// Salva [metas] completas no servidor.
+  Future<void> _abrirDialogMetas(BuildContext context) async {
+    final ranking = widget.rankingMetas;
+    final salvar = widget.onSalvarMetas;
+    if (salvar == null) return;
+    final controllers = <String, TextEditingController>{};
+    for (final r in ranking) {
+      final v = widget.metasPorRegiao[r.id] ?? 0;
+      controllers[r.id] = TextEditingController(text: v > 0 ? '$v' : '');
+    }
+    try {
+      final ok = await showDialog<bool>(
+        context: _dialogContextForShell(context),
+        useRootNavigator: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Todas as metas por região'),
+          content: SizedBox(
+            width: 420,
+            height: math.min(440, MediaQuery.sizeOf(ctx).height * 0.55),
+            child: ListView(
+              children: [
+                for (final r in ranking)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TextField(
+                      controller: controllers[r.id],
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: _nomeRegiaoExibicao(r.id, r.nome),
+                        border: const OutlineInputBorder(),
+                        helperText: 'Estimativa atual: ${formatarInteiroPtBr(r.totalEstimativa)}',
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salvar')),
+          ],
+        ),
+      );
+      if (ok == true) {
+        final out = <String, int>{};
+        for (final r in ranking) {
+          final raw = controllers[r.id]?.text.trim() ?? '';
+          final digits = raw.replaceAll(RegExp(r'\D'), '');
+          if (digits.isEmpty) continue;
+          final n = int.tryParse(digits);
+          if (n != null && n > 0) out[r.id] = n;
+        }
+        await salvar(out);
+      }
+    } finally {
+      for (final c in controllers.values) {
+        c.dispose();
+      }
+    }
+  }
+
+  Future<void> _abrirDialogMetaUmaRegiao(BuildContext context, {required String regiaoId}) async {
+    final salvar = widget.onSalvarMetas;
+    if (salvar == null) return;
+    final r = widget.rankingMetas.where((e) => e.id == regiaoId).firstOrNull;
+    if (r == null) return;
+    final atual = widget.metasPorRegiao[regiaoId] ?? 0;
+    final controller = TextEditingController(text: atual > 0 ? '$atual' : '');
+    try {
+      await showDialog<void>(
+        context: _dialogContextForShell(context),
+        useRootNavigator: false,
+        builder: (ctx) => AlertDialog(
+          title: Text(_tituloRegiaoRanking(_nomeRegiaoExibicao(r.id, r.nome))),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'Meta de votos',
+              border: const OutlineInputBorder(),
+              helperText: 'Estimativa atual da campanha: ${formatarInteiroPtBr(r.totalEstimativa)}',
+            ),
+          ),
+          actions: [
+            if (atual > 0)
+              TextButton(
+                onPressed: () async {
+                  final merged = Map<String, int>.from(widget.metasPorRegiao);
+                  merged.remove(regiaoId);
+                  Navigator.pop(ctx);
+                  await salvar(merged);
+                },
+                child: const Text('Remover meta'),
+              ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () async {
+                final raw = controller.text.trim();
+                final digits = raw.replaceAll(RegExp(r'\D'), '');
+                final merged = Map<String, int>.from(widget.metasPorRegiao);
+                if (digits.isEmpty) {
+                  merged.remove(regiaoId);
+                  Navigator.pop(ctx);
+                  await salvar(merged);
+                  return;
+                }
+                final n = int.tryParse(digits);
+                if (n == null || n <= 0) return;
+                merged[regiaoId] = n;
+                Navigator.pop(ctx);
+                await salvar(merged);
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  Widget _buildListaMetas(
+    ColorScheme cs,
+    ThemeData theme,
+  ) {
+    final ranking = widget.rankingMetas;
+    final metas = widget.metasPorRegiao;
+    if (ranking.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Carregando regiões…',
+            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+          child: OutlinedButton.icon(
+            onPressed: widget.onSalvarMetas == null ? null : () => _abrirDialogMetas(context),
+            icon: const Icon(Icons.table_rows_outlined, size: 18),
+            label: const Text('Editar todas as metas'),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+          child: Text(
+            'Em cada região use «Adicionar meta» ou «Editar meta». Valores da estimativa vêm da rede cadastrada.',
+            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: ListView.builder(
+            itemCount: ranking.length,
+            itemBuilder: (context, i) {
+              final r = ranking[i];
+              final m = metas[r.id] ?? 0;
+              final ratio = m > 0 ? r.totalEstimativa / m : 0.0;
+              final isFocused = widget.focusedRegiaoId == r.id;
+              final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+              final corBarra = cs.primary;
+
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isFocused ? cs.primary : cs.outlineVariant.withValues(alpha: 0.7),
+                    width: isFocused ? 2 : 1,
+                  ),
+                  color: isFocused ? cs.primaryContainer.withValues(alpha: 0.22) : cs.surfaceContainerHighest.withValues(alpha: 0.4),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(medalLabel, style: TextStyle(fontSize: i < 3 ? 18 : 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _tituloRegiaoRanking(_nomeRegiaoExibicao(r.id, r.nome)),
+                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (m > 0)
+                            Text(
+                              '${(ratio * 100).toStringAsFixed(1)}%',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      if (m > 0)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: (ratio).clamp(0.0, 1.5) / 1.5,
+                            minHeight: 6,
+                            backgroundColor: cs.outlineVariant.withValues(alpha: 0.35),
+                            valueColor: AlwaysStoppedAnimation<Color>(corBarra),
+                          ),
+                        )
+                      else
+                        const SizedBox(height: 6),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.flag_outlined, size: 12, color: cs.onSurfaceVariant),
+                              const SizedBox(width: 4),
+                              Text(
+                                m > 0 ? '${formatarInteiroPtBr(m)} meta' : 'Sem meta',
+                                style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.groups_outlined, size: 12, color: cs.onSurfaceVariant),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${formatarInteiroPtBr(r.totalEstimativa)} est.',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: widget.onSalvarMetas == null
+                                ? null
+                                : () => _abrirDialogMetaUmaRegiao(context, regiaoId: r.id),
+                            icon: Icon(m > 0 ? Icons.edit_outlined : Icons.add_circle_outline, size: 18),
+                            label: Text(m > 0 ? 'Editar meta' : 'Adicionar meta'),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   // ── Estado vazio: nenhuma camada selecionada ──────────────────────────────
 
   Widget _buildListaNenhum(ColorScheme cs, ThemeData theme) {
@@ -1981,7 +2518,7 @@ class _RankingPanelState extends State<_RankingPanel> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Toque em "Eleição 2022", "Minha Rede", "Comparativo" ou "Benfeitorias" (quando disponível) para carregar os dados no mapa.',
+              'Toque em "Eleição 2022", "Minha Rede", "Comparativo", "Metas" ou "Benfeitorias" (quando disponível) para carregar os dados no mapa.',
               style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
@@ -1998,7 +2535,6 @@ class _RankingPanelState extends State<_RankingPanel> {
     ColorScheme cs,
     ThemeData theme,
   ) {
-    final curFmt = NumberFormat.currency(locale: 'pt_BR', symbol: r'R$');
     if (rankingBenf.isEmpty) {
       return Center(
         child: Padding(
@@ -2087,7 +2623,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            curFmt.format(r.valorTotal),
+                            formatarMoedaPtBr(r.valorTotal),
                             style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: barCor),
                           ),
                         ),
@@ -2203,7 +2739,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                           ),
                         ),
                         Text(
-                          curFmt.format(c.valor),
+                          formatarMoedaPtBr(c.valor),
                           style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ],
@@ -2225,7 +2761,6 @@ class _RankingPanelState extends State<_RankingPanel> {
     List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking,
     int totalTse,
     int totalEstimativa,
-    NumberFormat fmt,
     ColorScheme cs,
     ThemeData theme,
   ) {
@@ -2362,14 +2897,14 @@ class _RankingPanelState extends State<_RankingPanel> {
                               Row(mainAxisSize: MainAxisSize.min, children: [
                                 Icon(Icons.how_to_vote_outlined, size: 12, color: cs.onSurfaceVariant),
                                 const SizedBox(width: 2),
-                                Text(fmt.format(r.total), style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                Text(formatarInteiroPtBr(r.total), style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
                                 Text(' TSE', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                               ]),
                               if (r.totalEstimativa > 0)
                                 Row(mainAxisSize: MainAxisSize.min, children: [
                                   Icon(Icons.groups_outlined, size: 12, color: corAtingimento),
                                   const SizedBox(width: 2),
-                                  Text(fmt.format(r.totalEstimativa), style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, color: corAtingimento)),
+                                  Text(formatarInteiroPtBr(r.totalEstimativa), style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, color: corAtingimento)),
                                   Text(' camp.', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                                 ]),
                               Text(_labelAtingimento(ratio), style: theme.textTheme.labelSmall?.copyWith(color: corAtingimento, fontWeight: FontWeight.w600)),
@@ -2395,7 +2930,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                             Expanded(child: Text(c.cidade, style: theme.textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
                             const SizedBox(width: 8),
                             Text(
-                              '${fmt.format(c.votos)} TSE  •  ${c.estimativa > 0 ? fmt.format(c.estimativa) : "—"} camp.',
+                              '${formatarInteiroPtBr(c.votos)} TSE  •  ${c.estimativa > 0 ? formatarInteiroPtBr(c.estimativa) : "—"} camp.',
                               style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                             ),
                           ],
@@ -2418,7 +2953,6 @@ class _RankingPanelState extends State<_RankingPanel> {
   Widget _buildListaRede(
     List<({String id, String nome, int estimativaTotal, List<({String cidade, String key, int estimativa})> cidades})> rankingRede,
     int totalEstimativa,
-    NumberFormat fmt,
     ColorScheme cs,
     ThemeData theme,
   ) {
@@ -2546,7 +3080,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                             Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
                             const SizedBox(width: 3),
                             Text(
-                              fmt.format(r.estimativaTotal),
+                              formatarInteiroPtBr(r.estimativaTotal),
                               style: theme.textTheme.labelSmall?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: cs.secondary,
@@ -2619,7 +3153,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '${fmt.format(c.estimativa)}  ${cpct.toStringAsFixed(1)}%',
+                        '${formatarInteiroPtBr(c.estimativa)}  ${cpct.toStringAsFixed(1)}%',
                         style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                       ),
                     ],

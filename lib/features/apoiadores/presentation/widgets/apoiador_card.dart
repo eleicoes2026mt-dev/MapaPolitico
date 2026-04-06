@@ -266,6 +266,8 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
     final a = widget.apoiador;
     final parts = <String>[
       if (cidadeDisplay != null) cidadeDisplay,
+      if (a.origemLugarNome != null && a.origemLugarNome!.trim().isNotEmpty)
+        'De: ${a.origemLugarNome!.trim()}',
       '~${a.estimativaVotos} votos',
       if (a.telefone != null && a.telefone!.trim().isNotEmpty) a.telefone!.trim(),
     ];
@@ -366,6 +368,11 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
                           ),
                         if (cidadeDisplay != null)
                           Text(cidadeDisplay, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+                        if (apoiador.origemLugarNome != null && apoiador.origemLugarNome!.trim().isNotEmpty)
+                          Text(
+                            'De: ${apoiador.origemLugarNome!.trim()}',
+                            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          ),
                       ],
                     ),
                   ),

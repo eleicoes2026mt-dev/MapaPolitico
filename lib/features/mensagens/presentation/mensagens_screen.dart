@@ -13,6 +13,7 @@ import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
 import '../../agenda/providers/agenda_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
 import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, refreshMunicipiosMTList;
 import '../../../models/municipio.dart';
 import '../providers/mensagens_provider.dart';
@@ -1037,6 +1038,17 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
         tipoColor = theme.colorScheme.tertiary;
     }
 
+    final cidadeStr = a.municipioNome != null && a.municipioNome!.trim().isNotEmpty
+        ? displayNomeCidadeMT(a.municipioNome!.trim())
+        : null;
+    final origemStr = a.origemLugarNome != null && a.origemLugarNome!.trim().isNotEmpty
+        ? 'De: ${a.origemLugarNome!.trim()}'
+        : null;
+    final linhaLocal = <String>[
+      if (cidadeStr != null) cidadeStr,
+      if (origemStr != null) origemStr,
+    ].join(' · ');
+
     final dataFmt = DateFormat('dd/MM').format(a.dataNascimento);
     final linhaDetalhe = widget.destaque
         ? '${a.idadeAnos} anos — $dataFmt'
@@ -1057,7 +1069,9 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          isThreeLine: true,
+          titleAlignment: ListTileTitleAlignment.top,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           leading: CircleAvatar(
             backgroundColor: widget.destaque
                 ? theme.colorScheme.primary.withValues(alpha: 0.12)
@@ -1076,30 +1090,90 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
           ),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              linhaDetalhe,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.25,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (linhaLocal.isNotEmpty) ...[
+                  Text(
+                    linhaLocal,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      height: 1.25,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                ],
+                Text(
+                  linhaDetalhe,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    Chip(
+                      label: Text(tipoLabel),
+                      padding: EdgeInsets.zero,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      backgroundColor: tipoColor.withValues(alpha: 0.12),
+                      side: BorderSide.none,
+                      labelStyle: theme.textTheme.labelSmall?.copyWith(
+                        color: tipoColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (a.tipo == 'apoiador' &&
+                        a.perfil != null &&
+                        a.perfil!.trim().isNotEmpty)
+                      Chip(
+                        label: Text(
+                          a.perfil!.trim(),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        padding: EdgeInsets.zero,
+                        labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                        side: BorderSide.none,
+                        labelStyle: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    if (a.tipo == 'assessor' &&
+                        a.cargoAssessor != null &&
+                        a.cargoAssessor!.trim().isNotEmpty)
+                      Chip(
+                        label: Text(
+                          a.cargoAssessor!.trim(),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        padding: EdgeInsets.zero,
+                        labelPadding: const EdgeInsets.symmetric(horizontal: 8),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                        side: BorderSide.none,
+                        labelStyle: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ),
           ),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Chip(
-                label: Text(tipoLabel),
-                padding: EdgeInsets.zero,
-                labelPadding: const EdgeInsets.symmetric(horizontal: 8),
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                backgroundColor: tipoColor.withValues(alpha: 0.12),
-                side: BorderSide.none,
-                labelStyle: theme.textTheme.labelSmall?.copyWith(
-                  color: tipoColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
               if (mostrarCartaoParabens) ...[
                 if (_jaEnviouParabens == true) ...[
                   const SizedBox(width: 2),

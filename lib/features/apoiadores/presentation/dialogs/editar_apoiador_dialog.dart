@@ -18,6 +18,7 @@ import '../../providers/apoiadores_provider.dart'
     show apoiadoresListProvider, atualizarApoiadorProvider, AtualizarApoiadorParams;
 import '../utils/apoiadores_form_utils.dart';
 import '../widgets/classificacao_apoiador_field.dart';
+import '../widgets/origem_apoiador_field.dart';
 
 const _statusBenfeitoriaOpcoes = <(String, String)>[
   ('em_andamento', 'Em andamento'),
@@ -45,6 +46,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   late final TextEditingController _logradouroController;
   late final TextEditingController _numeroController;
   late final TextEditingController _complementoController;
+  late final TextEditingController _origemController;
   late final TextEditingController _nascimentoController;
   late String? _cidadeNome;
   final _formKey = GlobalKey<FormState>();
@@ -72,6 +74,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _logradouroController = TextEditingController(text: widget.apoiador.logradouro ?? '');
     _numeroController = TextEditingController(text: widget.apoiador.numero ?? '');
     _complementoController = TextEditingController(text: widget.apoiador.complemento ?? '');
+    _origemController = TextEditingController(text: widget.apoiador.origemLugarNome ?? '');
     _nascimentoController = TextEditingController(
       text: widget.apoiador.dataNascimento != null
           ? DateFormat('dd/MM/yyyy').format(widget.apoiador.dataNascimento!)
@@ -132,6 +135,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _logradouroController.dispose();
     _numeroController.dispose();
     _complementoController.dispose();
+    _origemController.dispose();
     _nascimentoController.dispose();
     super.dispose();
   }
@@ -234,6 +238,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           logradouro: _logradouroController.text.trim(),
           numero: _numeroController.text.trim(),
           complemento: _complementoController.text.trim(),
+          origemLugarTexto: _origemController.text,
+          atualizarOrigemLugar: true,
         ),
       );
       await _sincronizarBenfeitorias(widget.apoiador.id, mid, municipios);
@@ -296,6 +302,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                   initialPerfil: _perfil,
                   onChanged: (v) => setState(() => _perfil = v),
                 ),
+                const SizedBox(height: 16),
+                OrigemApoiadorField(controller: _origemController),
                 const SizedBox(height: 16),
                 MunicipioMtFormRow(
                   selectedNormalizedKey: _cidadeNome,

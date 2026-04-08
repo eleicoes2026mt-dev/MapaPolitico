@@ -34,8 +34,6 @@ const polosMT = [
   ('Tangará da Serra', LatLng(-14.6229, -57.4933)),
 ];
 
-const nomeEstadoCandidato = 'Mato Grosso';
-
 /// Widget reutilizável: mapa ArcGIS (Android/iOS) com demarcação Brasil/estados, cidades e votos TSE.
 class MapaRegionalWidget extends StatefulWidget {
   const MapaRegionalWidget({
@@ -68,6 +66,8 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onSalvarMetas,
     this.painelRankingModo = 'nenhum',
     this.painelRankingModoNotifier,
+    this.pontosMapaEscala = 1.0,
+    this.contornoMapaEscala = 1.0,
   });
 
   final double height;
@@ -105,6 +105,12 @@ class MapaRegionalWidget extends StatefulWidget {
   final String painelRankingModo;
   /// Só web; ignorado no ArcGIS.
   final ValueNotifier<String>? painelRankingModoNotifier;
+
+  /// Multiplicador do tamanho dos pontos (TSE, rede, polos). 1.0 = padrão.
+  final double pontosMapaEscala;
+
+  /// Multiplicador da espessura das linhas de contorno (Brasil, MT, regiões). 1.0 = padrão.
+  final double contornoMapaEscala;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();
@@ -148,7 +154,9 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.votosPorMunicipio != widget.votosPorMunicipio ||
         oldWidget.cidadesMarcadoresMapa != widget.cidadesMarcadoresMapa ||
-        oldWidget.coresCustomizadas != widget.coresCustomizadas) {
+        oldWidget.coresCustomizadas != widget.coresCustomizadas ||
+        oldWidget.pontosMapaEscala != widget.pontosMapaEscala ||
+        oldWidget.contornoMapaEscala != widget.contornoMapaEscala) {
       _loadGeo();
     }
   }
@@ -354,58 +362,15 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
   }
 
   Future<void> _loadGeo() async {
-    final brasil = await loadGeoJsonFromAsset('assets/geo/brasil.json');
-    final regioesEstados = await loadDelimitacaoEstadosFromAsset();
     final regioesMT = await loadRegioesImediatasMTFromAsset(kMTRegioesImediatas2024Asset);
 
     if (!mounted) return;
     final theme = Theme.of(context);
     final primary = theme.colorScheme.primary;
-    final outline = theme.colorScheme.outline;
-
-    final overlayBase = GraphicsOverlay();
-    int id = 0;
-
-    for (final region in brasil) {
-      for (final geo in region.polygons) {
-        final g = _geoPolygonToArcGIS(geo);
-        if (g != null) {
-          final sym = SimpleFillSymbol(
-            color: Colors.grey.withValues(alpha: 0.06),
-          );
-          sym.outline = SimpleLineSymbol(color: outline.withValues(alpha: 0.5), width: 1);
-          overlayBase.graphics.add(
-            Graphic(geometry: g, symbol: sym, attributes: {'layer': 'br', 'id': id++}),
-          );
-        }
-      }
-    }
-
-    // Apenas MT: desenha só a delimitação de Mato Grosso (não desenha os outros estados).
-    final overlayEstados = GraphicsOverlay();
-    for (final regiao in regioesEstados) {
-      if (regiao.nome != nomeEstadoCandidato) continue;
-      final strokeColor = primary.withValues(alpha: 0.85);
-      const strokeWidth = 2.0;
-
-      for (final geo in regiao.polygons) {
-        final g = _geoPolygonToArcGIS(geo);
-        if (g != null) {
-          final sym = SimpleFillSymbol(color: Colors.transparent);
-          sym.outline = SimpleLineSymbol(color: strokeColor, width: strokeWidth);
-          overlayEstados.graphics.add(
-            Graphic(
-              geometry: g,
-              symbol: sym,
-              attributes: {'layer': 'est', 'id': id++},
-            ),
-          );
-        }
-      }
-    }
+    final cLinha = widget.contornoMapaEscala.clamp(0.5, 2.0);
+    const neutralBorder = Color(0xFF757575);
 
     final overlayRegioesMT = GraphicsOverlay();
-    const neutralBorder = Color(0xFF757575);
     for (final regiao in regioesMT) {
       final color = _colorForRegiao(regiao.cdRgint ?? regiao.id);
       final regionId = regiao.id;
@@ -423,15 +388,15 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
           if (isEditing) {
             fillColor = color.withValues(alpha: 0.2);
             outlineColor = Colors.white;
-            outlineWidth = 5;
+            outlineWidth = 5 * cLinha;
           } else if (isFocused) {
             fillColor = primary.withValues(alpha: 0.16);
             outlineColor = primary.withValues(alpha: 0.82);
-            outlineWidth = 2.5;
+            outlineWidth = 2.5 * cLinha;
           } else {
             fillColor = Colors.transparent;
             outlineColor = neutralBorder;
-            outlineWidth = 1;
+            outlineWidth = 1 * cLinha;
           }
           final sym = SimpleFillSymbol(color: fillColor);
           sym.outline = SimpleLineSymbol(color: outlineColor, width: outlineWidth);
@@ -451,15 +416,16 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       }
     }
 
+    final s = widget.pontosMapaEscala.clamp(0.5, 2.0);
     final overlayMarkers = GraphicsOverlay();
     for (var i = 0; i < polosMT.length; i++) {
       final p = polosMT[i];
       final markerSym = SimpleMarkerSymbol(
         style: SimpleMarkerSymbolStyle.circle,
         color: Colors.red,
-        size: 12,
+        size: (12 * s).clamp(6.0, 28.0),
       );
-      markerSym.outline = SimpleLineSymbol(color: Colors.white, width: 2);
+      markerSym.outline = SimpleLineSymbol(color: Colors.white, width: (2 * s).clamp(1.0, 4.0));
       overlayMarkers.graphics.add(
         Graphic(
           geometry: ArcGISPoint(x: p.$2.longitude, y: p.$2.latitude, spatialReference: _wgs84),
@@ -480,11 +446,11 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
         final mm = minMaxVotos(votos);
         final minV = mm.minV;
         final maxV = mm.maxV;
-        const sizeMin = 5.0;
-        const sizeMax = 24.0;
+        final sizeMin = 5.0 * s;
+        final sizeMax = 24.0 * s;
         for (final e in votosList) {
           final tVis = proporcaoVisualVotos(e.v, minV, maxV);
-          final size = sizeMin + (sizeMax - sizeMin) * tVis;
+          final size = (sizeMin + (sizeMax - sizeMin) * tVis).clamp(4.0, 48.0);
           final tier = tierParaVotos(e.v, minV, maxV);
           final cor = corHeatmapVotos(e.v, minV, maxV);
           final tseSym = SimpleMarkerSymbol(
@@ -492,7 +458,10 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
             color: cor,
             size: size,
           );
-          tseSym.outline = SimpleLineSymbol(color: Colors.white.withValues(alpha: 0.95), width: 1.5);
+          tseSym.outline = SimpleLineSymbol(
+            color: Colors.white.withValues(alpha: 0.95),
+            width: (1.5 * s).clamp(1.0, 4.0),
+          );
           overlayMarkers.graphics.add(
             Graphic(
               geometry: ArcGISPoint(x: e.coords!.longitude, y: e.coords!.latitude, spatialReference: _wgs84),
@@ -527,12 +496,13 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
         final coords = getCoordsMunicipioMT(e.key);
         if (coords != null) {
           final m = e.value;
+          final baseAp = m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty ? 12.0 : 10.0;
           final apSym = SimpleMarkerSymbol(
             style: SimpleMarkerSymbolStyle.circle,
             color: marcadorCor(m),
-            size: m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty ? 12 : 10,
+            size: (baseAp * s).clamp(6.0, 28.0),
           );
-          apSym.outline = SimpleLineSymbol(color: Colors.white, width: 1);
+          apSym.outline = SimpleLineSymbol(color: Colors.white, width: (1 * s).clamp(0.5, 3.0));
           overlayMarkers.graphics.add(
             Graphic(
               geometry: ArcGISPoint(x: coords.longitude, y: coords.latitude, spatialReference: _wgs84),
@@ -556,7 +526,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     if (ctrl != null) {
       ctrl.graphicsOverlays
         ..clear()
-        ..addAll([overlayBase, overlayEstados, overlayRegioesMT, overlayMarkers]);
+        ..addAll([overlayRegioesMT, overlayMarkers]);
     }
 
     setState(() => _geoLoaded = true);
@@ -648,7 +618,6 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                 );
                 ctrl.arcGISMap = map;
                 ctrl.graphicsOverlays.addAll([
-                  GraphicsOverlay(),
                   GraphicsOverlay(),
                   GraphicsOverlay(),
                 ]);

@@ -5,6 +5,7 @@ import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/constants/regioes_mt.dart';
 import '../../../mapa/providers/cidades_marcadores_provider.dart' show cidadesMarcadoresMapaCampanhaProvider;
 import '../../../dados_tse/providers/dados_tse_provider.dart';
+import '../../../mapa/providers/mapa_visual_prefs_provider.dart';
 import '../../../mapa/presentation/widgets/mapa_regional_widget.dart';
 import '../../providers/regioes_fundidas_provider.dart';
 
@@ -147,6 +148,7 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
     final coresCustomizadas = ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
     final theme = Theme.of(context);
     final isAdmin = ref.watch(isAdminProvider);
+    final mapaVisual = ref.watch(mapaVisualPrefsProvider);
 
     final selecionadas = _selectedCdRgints.length;
 
@@ -193,6 +195,8 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                 children: [
                   MapaRegionalWidget(
                       height: mapHeight,
+                      pontosMapaEscala: mapaVisual.escalaPontos,
+                      contornoMapaEscala: mapaVisual.escalaContorno,
                       votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
                       cidadesMarcadoresMapa: marcadoresCampanha.isEmpty ? null : marcadoresCampanha,
                       regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,

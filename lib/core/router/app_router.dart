@@ -19,6 +19,7 @@ import '../../features/estrategia/presentation/estrategia_screen.dart';
 import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
 import '../../features/configuracoes/presentation/configuracoes_screen.dart';
+import '../../features/assessores/providers/gestao_campanha_provider.dart';
 import '../../layout/main_scaffold.dart';
 import '../../models/profile.dart';
 import '../../features/auth/providers/auth_provider.dart';
@@ -84,26 +85,23 @@ GoRouter createAppRouter({String? initialLocation}) {
       }
 
       if (session != null && isAuthPage) {
-        final role = await cachedProfileRole(session.user.id);
-        return homePathForProfileRole(role);
+        return homePathForUserId(session.user.id);
       }
 
       if (session != null && path == '/') {
-        final role = await cachedProfileRole(session.user.id);
-        final home = homePathForProfileRole(role);
+        final home = await homePathForUserId(session.user.id);
         if (home != '/') return home;
       }
 
       if (session != null && path == '/benfeitorias') {
-        final role = await cachedProfileRole(session.user.id);
-        return homePathForProfileRole(role);
+        return homePathForUserId(session.user.id);
       }
 
       if (session != null) {
         final role = await cachedProfileRole(session.user.id);
         final gestaoCompleta = await cachedPodeGestaoCampanhaCompleta(session.user.id);
         if (!gestaoCompleta && path == '/configuracoes') {
-          return homePathForProfileRole(role);
+          return homePathForUserId(session.user.id);
         }
         if (role == 'apoiador' && path == '/apoiadores') {
           return '/apoiador-home';
@@ -244,7 +242,16 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
     });
 
     final profile = ref.watch(profileProvider).valueOrNull;
-    final role = profile?.role;
+    if (profile == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final role = profile.role;
+    final assessorOk = ref.watch(assessorRegistroResolvidoProvider);
+    final gestaoCompleta = ref.watch(podeGestaoCampanhaCompletaProvider);
+
+    if (role == 'assessor' && !assessorOk) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     if (role == 'apoiador' && _forbiddenApoiador.contains(widget.location)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -260,14 +267,14 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (role == 'assessor' && widget.location == '/assessores') {
+    if (role == 'assessor' && !gestaoCompleta && widget.location == '/assessores') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) context.go('/apoiadores');
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (role != 'candidato' && widget.location == '/configuracoes') {
+    if (!gestaoCompleta && widget.location == '/configuracoes') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!context.mounted) return;
         if (role == 'apoiador' || role == 'votante') {

@@ -12,6 +12,7 @@ import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
 import '../../agenda/providers/agenda_provider.dart';
+import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
 import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, refreshMunicipiosMTList;
@@ -687,7 +688,7 @@ class _AniversariantesTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final isCandidato = ref.watch(profileProvider).valueOrNull?.isCandidato == true;
+    final podeGestao = ref.watch(podeGestaoCampanhaCompletaProvider);
     final hojeAsync = ref.watch(aniversariantesHojeProvider);
     final proximosAsync = ref.watch(aniversariantesProximos30Provider);
     final allAsync = ref.watch(aniversariantesProvider);
@@ -724,8 +725,8 @@ class _AniversariantesTab extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  isCandidato
-                      ? 'Apoiadores e assessores com data informada. Como candidato, na seção Hoje o ícone do cartão ou o WhatsApp verde enviam o cartão de parabéns (imagem + mensagem); o visto indica que você já compartilhou hoje.'
+                  podeGestao
+                      ? 'Apoiadores e assessores com data informada. Com gestão completa (candidato ou assessor grau 1), na seção Hoje o ícone do cartão ou o WhatsApp verde enviam o cartão de parabéns (imagem + mensagem); o visto indica que você já compartilhou hoje.'
                       : 'Apoiadores e assessores com data informada. Toque no WhatsApp para enviar uma mensagem.',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -992,7 +993,8 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
 
   Future<void> _compartilharCartaoParabens() async {
     final profile = ref.read(profileProvider).valueOrNull;
-    if (profile == null || !profile.isCandidato) return;
+    final gestao = ref.read(podeGestaoCampanhaCompletaProvider);
+    if (profile == null || !gestao) return;
     if (_loadingParabens) return;
     setState(() => _loadingParabens = true);
     try {
@@ -1019,8 +1021,8 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
     final theme = Theme.of(context);
     final a = widget.aniversariante;
     final profile = ref.watch(profileProvider).valueOrNull;
-    final mostrarCartaoParabens =
-        widget.destaque && profile != null && profile.isCandidato;
+    final gestao = ref.watch(podeGestaoCampanhaCompletaProvider);
+    final mostrarCartaoParabens = widget.destaque && profile != null && gestao;
 
     String tipoLabel;
     Color tipoColor;

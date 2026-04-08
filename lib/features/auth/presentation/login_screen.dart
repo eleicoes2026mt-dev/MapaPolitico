@@ -8,7 +8,7 @@ import '../../../core/config/env_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/router/role_home.dart';
 import '../data/login_preferences.dart';
-import '../providers/auth_provider.dart';
+import '../providers/auth_provider.dart' show authNotifierProvider, currentUserProvider, profileProvider;
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -86,8 +86,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
       if (!mounted) return;
       await ref.read(profileProvider.future);
-      final role = ref.read(profileProvider).valueOrNull?.role;
-      if (mounted) context.go(homePathForProfileRole(role));
+      final uid = ref.read(currentUserProvider)?.id ?? Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+      final path = await homePathForUserId(uid);
+      if (mounted) context.go(path);
     } catch (e) {
       if (mounted) {
         setState(() {

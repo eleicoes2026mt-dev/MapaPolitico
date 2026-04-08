@@ -15,6 +15,7 @@ import '../../../models/profile.dart';
 import '../../../models/votante.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../assessores/providers/assessores_provider.dart' show meuAssessorRegistroProvider;
+import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart';
 import '../providers/votantes_provider.dart';
@@ -103,12 +104,14 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
+    final podeGestao = ref.watch(podeGestaoCampanhaCompletaProvider);
     final podeCadastrar = profile?.role == 'candidato' ||
         profile?.role == 'assessor' ||
         profile?.role == 'apoiador' ||
         profile?.role == 'votante';
     final podePromoverApoiador = profile?.role == 'candidato' || profile?.role == 'assessor';
-    final podeExcluirVotante = !(profile?.cadastroViaQr ?? false);
+    final podeExcluirVotante =
+        podeGestao && !(profile?.cadastroViaQr ?? false);
 
     final list = ref.watch(votantesListProvider);
     final apoiadoresAsync = ref.watch(apoiadoresListProvider);

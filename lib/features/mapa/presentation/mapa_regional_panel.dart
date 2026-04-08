@@ -12,6 +12,7 @@ import '../providers/mapa_camadas_filtradas_provider.dart';
 import '../providers/mapa_filtros_provider.dart';
 import '../providers/benfeitorias_mapa_provider.dart';
 import '../providers/metas_regiao_provider.dart';
+import '../providers/mapa_visual_prefs_provider.dart';
 import 'widgets/benfeitorias_municipio_panel.dart';
 import 'widgets/mapa_benfeitorias_legenda.dart';
 import 'widgets/mapa_kpis_regiao_panel.dart';
@@ -245,6 +246,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final profile = ref.watch(profileProvider).valueOrNull;
     final metasCampanha = ref.watch(metasRegiaoCampanhaProvider).valueOrNull ?? {};
     final podeMetasRegiao = candidatoCampanhaProfileId(profile) != null;
+    final mapaVisual = ref.watch(mapaVisualPrefsProvider);
 
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < 600 ? 12.0 : 16.0;
@@ -260,6 +262,8 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
       margin: EdgeInsets.zero,
       child: MapaRegionalWidget(
         height: mapH,
+        pontosMapaEscala: mapaVisual.escalaPontos,
+        contornoMapaEscala: mapaVisual.escalaContorno,
         // TSE: para ranking usa dados brutos; para círculos no mapa usa dados ajustados pelo toggle
         votosPorMunicipio: votosTseRaw.isNotEmpty ? votosTseRaw : (votosAjustados.isEmpty ? null : votosAjustados),
         // Estimativa: para ranking usa dados brutos; para marcadores no mapa usa dados filtrados

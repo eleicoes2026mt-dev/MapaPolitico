@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/apoiador.dart';
 import '../../../models/municipio.dart';
+import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart' show profileProvider;
 import '../../benfeitorias/providers/benfeitorias_provider.dart'
     show invalidateBenfeitoriasCaches;
@@ -230,6 +231,7 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
+    final podeGestaoCampanha = ref.watch(podeGestaoCampanhaCompletaProvider);
     final ehApoiador = profile?.role == 'apoiador';
     final podeEditarLote =
         profile?.role == 'candidato' || profile?.role == 'assessor';
@@ -597,8 +599,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
               data: (_) {
                 final podeEditar =
                     profile?.role == 'candidato' || profile?.role == 'assessor';
-                final podeRevogarAcesso = profile?.role == 'candidato';
-                final podeExcluirApoiador = profile?.role == 'candidato';
+                final podeRevogarAcesso = podeGestaoCampanha;
+                final podeExcluirApoiador = podeGestaoCampanha;
                 if (filtered.isEmpty) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 48),

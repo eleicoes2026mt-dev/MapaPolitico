@@ -51,6 +51,8 @@ class MapaRegionalWidget extends StatefulWidget {
     this.onSalvarMetas,
     this.painelRankingModo = 'nenhum',
     this.painelRankingModoNotifier,
+    this.pontosMapaEscala = 1.0,
+    this.contornoMapaEscala = 1.0,
   });
 
   final double height;
@@ -92,6 +94,12 @@ class MapaRegionalWidget extends StatefulWidget {
   final String painelRankingModo;
   /// Quando não nulo (painel da campanha), o ranking lê o modo aqui para não ficar desfasado da prop num frame.
   final ValueNotifier<String>? painelRankingModoNotifier;
+
+  /// Multiplicador do tamanho dos pontos (bolhas TSE, marcadores da rede). 1.0 = padrão.
+  final double pontosMapaEscala;
+
+  /// Multiplicador da espessura das linhas de contorno (MT, regiões). 1.0 = padrão.
+  final double contornoMapaEscala;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetWebState();
@@ -150,9 +158,6 @@ Color _colorForRegiao(
   return _colorFromHex(_coresPadrao[key] ?? '#9E9E9E');
 }
 
-/// Prefixo para hitValue dos polígonos de estado (não editáveis).
-const String _kEstadoHitPrefix = 'e:';
-
 /// Separa id da região do índice do polígono no hitValue (ex.: "510009#2" -> regiao 510009, polígono 2).
 /// Rótulo do ranking: deixa claro que é região intermediária (IBGE), não só o município homônimo.
 String _tituloRegiaoRanking(String nome) {
@@ -171,7 +176,6 @@ String _regiaoIdFromHitValue(String hitValue) {
 class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   final MapController _mapController = MapController();
   final LayerHitNotifier<String> _hitNotifier = ValueNotifier<LayerHitResult<String>?>(null);
-  List<RegiaoIntermediariaMT>? _regioes;
   List<RegiaoIntermediariaMT>? _regioesMT;
   String? _hoveredRegionName;
   Offset? _hoverPosition;
@@ -356,18 +360,11 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       return;
     }
     final firstId = result.hitValues.first;
-    String displayName;
-    if (firstId.startsWith(_kEstadoHitPrefix)) {
-      final id = firstId.substring(_kEstadoHitPrefix.length);
-      final regiao = _regioes?.where((r) => r.id == id).firstOrNull;
-      displayName = regiao?.nome ?? id;
-    } else {
-      final regiaoId = _regiaoIdFromHitValue(firstId);
-      final regiao = _regioesMT?.where((r) => r.id == regiaoId).firstOrNull;
-      if (regiao == null) return;
-      // Sempre nome oficial do GeoJSON no mapa (não exibe nomes customizados como "Vale de Peixoto").
-      displayName = regiao.nome;
-    }
+    final regiaoId = _regiaoIdFromHitValue(firstId);
+    final regiao = _regioesMT?.where((r) => r.id == regiaoId).firstOrNull;
+    if (regiao == null) return;
+    // Sempre nome oficial do GeoJSON no mapa (não exibe nomes customizados como "Vale de Peixoto").
+    final displayName = regiao.nome;
     final pt = result.point;
     setState(() {
       _hoveredRegionName = displayName;
@@ -377,11 +374,9 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
 
   Future<void> _loadGeo() async {
     try {
-      final estados = await loadDelimitacaoEstadosFromAsset();
       final mtRegioes = await loadRegioesImediatasMTFromAsset(kMTRegioesImediatas2024Asset);
       if (!mounted) return;
       setState(() {
-        _regioes = estados;
         _regioesMT = mtRegioes;
         _loading = false;
         _error = null;
@@ -389,7 +384,6 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _regioes = null;
         _regioesMT = null;
         _loading = false;
         _error = e.toString();
@@ -400,35 +394,12 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   List<Polygon<String>> _buildPolygons() {
     final polygons = <Polygon<String>>[];
     final theme = Theme.of(context);
+    final cLinha = widget.contornoMapaEscala.clamp(0.5, 2.0);
+    const neutralBorder = Color(0xFF757575);
 
-    // 1) Apenas MT: desenha só a delimitação de Mato Grosso (não desenha os outros estados).
-    final estados = _regioes;
-    if (estados != null) {
-      for (final regiao in estados) {
-        if (regiao.nome != 'Mato Grosso') continue;
-        final borderColor = theme.colorScheme.primary.withValues(alpha: 0.85);
-        const strokeWidth = 2.0;
-        for (final geo in regiao.polygons) {
-          final points = geo.points.map((p) => ll.LatLng(p.latitude, p.longitude)).toList();
-          final holes = geo.holes
-              .map((hole) => hole.map((p) => ll.LatLng(p.latitude, p.longitude)).toList())
-              .toList();
-          polygons.add(Polygon<String>(
-            points: points,
-            holePointsList: holes.isEmpty ? null : holes,
-            color: Colors.transparent,
-            borderColor: borderColor,
-            borderStrokeWidth: strokeWidth,
-            hitValue: '$_kEstadoHitPrefix${regiao.id}',
-          ));
-        }
-      }
-    }
-
-    // 2) Regiões de MT: comparativo preenche todas; fora disso, borda neutra e destaque leve na região selecionada.
+    // Regiões intermediárias de MT (sem contorno extra de Brasil ou do estado).
     final mtList = _regioesMT;
     if (mtList != null) {
-      const neutralBorder = Color(0xFF757575);
       final inComparativo = _comparativoColors != null && _comparativoColors!.isNotEmpty;
       final inBenfeitorias = _benfeitoriasColors != null && _benfeitoriasColors!.isNotEmpty;
       for (final regiao in mtList) {
@@ -459,19 +430,19 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           if (isEditing) {
             fillColor = color.withValues(alpha: 0.3);
             borderColor = Colors.white;
-            borderStrokeWidth = 5;
+            borderStrokeWidth = 5 * cLinha;
           } else if (hasComparativoFill || hasBenfeitoriasFill) {
             fillColor = color.withValues(alpha: 0.72);
             borderColor = isFocused ? Colors.white.withValues(alpha: 0.92) : color.withValues(alpha: 0.9);
-            borderStrokeWidth = isFocused ? 3.2 : 2;
+            borderStrokeWidth = (isFocused ? 3.2 : 2) * cLinha;
           } else if (isFocused) {
             fillColor = theme.colorScheme.primary.withValues(alpha: 0.16);
             borderColor = theme.colorScheme.primary.withValues(alpha: 0.82);
-            borderStrokeWidth = 2.5;
+            borderStrokeWidth = 2.5 * cLinha;
           } else {
             fillColor = Colors.transparent;
             borderColor = neutralBorder.withValues(alpha: (inComparativo || inBenfeitorias) ? 0.45 : 1);
-            borderStrokeWidth = 1;
+            borderStrokeWidth = 1 * cLinha;
           }
 
           polygons.add(Polygon<String>(
@@ -632,12 +603,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final maxV = mm.maxV;
 
     /// Intervalo completo (menor = bolha menor; maior = maior e mais “verde”).
-    const sizeMin = 18.0;
-    const sizeMax = 72.0;
+    final s = widget.pontosMapaEscala.clamp(0.5, 2.0);
+    final sizeMin = 18.0 * s;
+    final sizeMax = 72.0 * s;
 
     return entries.map((e) {
       final tVis = proporcaoVisualVotos(e.votos, minV, maxV);
-      final size = sizeMin + (sizeMax - sizeMin) * tVis;
+      final size = (sizeMin + (sizeMax - sizeMin) * tVis).clamp(12.0, 120.0);
       final tier = tierParaVotos(e.votos, minV, maxV);
       final core = corHeatmapVotos(e.votos, minV, maxV);
       final center = core.withValues(alpha: 0.92);
@@ -661,7 +633,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                   colors: [center, mid, edge],
                   stops: const [0.0, 0.55, 1.0],
                 ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.95), width: 2),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.95),
+                  width: (2 * s).clamp(1.0, 5.0),
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.22),
@@ -681,6 +656,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   /// Marcadores de apoiadores/votantes (camada acima dos círculos TSE).
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
+    final s = widget.pontosMapaEscala.clamp(0.5, 2.0);
     final porCidade = _marcadoresParaMapa;
     if (porCidade != null && porCidade.isNotEmpty) {
       for (final e in porCidade.entries) {
@@ -696,29 +672,35 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
                   ? m.bandeiraIniciais!.trim()
                   : '${m.quantidade}');
+          final tamBandeira = (30 * s).clamp(18.0, 48.0);
+          final tamMarcador = (32 * s).clamp(22.0, 52.0);
           final Widget marcadorChild = m.bandeiraVisual != null
               ? BandeiraMarcadorWidget(
                   visual: m.bandeiraVisual!,
-                  tamanho: 30,
+                  tamanho: tamBandeira,
                   fallbackIniciais: m.quantidade > 0 ? '${m.quantidade}' : '?',
                 )
               : (m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
-                  ? Text(label, style: const TextStyle(fontSize: 22))
+                  ? Text(label, style: TextStyle(fontSize: (22 * s).clamp(14.0, 36.0)))
                   : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
                       ? CircleAvatar(
-                          radius: 14,
+                          radius: (14 * s).clamp(10.0, 24.0),
                           backgroundColor: cor,
                           child: Text(
                             label.length > 3 ? label.substring(0, 3) : label,
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: (11 * s).clamp(9.0, 16.0),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         )
-                      : Icon(Icons.people, color: cor, size: 26)));
+                      : Icon(Icons.people, color: cor, size: (26 * s).clamp(18.0, 40.0))));
           markers.add(
             Marker(
               point: ll.LatLng(coords.latitude, coords.longitude),
-              width: 32,
-              height: 32,
+              width: tamMarcador,
+              height: tamMarcador,
               child: Tooltip(
                 message: '$nome: ${m.quantidade} na rede (apoiadores/votantes)',
                 child: GestureDetector(
@@ -1056,7 +1038,6 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final result = _hitNotifier.value;
     if (result == null || result.hitValues.isEmpty) return;
     final firstId = result.hitValues.first;
-    if (firstId.startsWith(_kEstadoHitPrefix)) return; // Estados não são editáveis.
     final regiaoId = _regiaoIdFromHitValue(firstId);
     final regiao = _regioesMT?.where((r) => r.id == regiaoId).firstOrNull;
     if (regiao == null) return;

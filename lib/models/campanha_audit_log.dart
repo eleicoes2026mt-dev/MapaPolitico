@@ -46,6 +46,12 @@ class CampanhaAuditLog {
         return 'Votantes';
       case 'benfeitorias':
         return 'Benfeitorias';
+      case 'mensagens':
+        return 'Mensagens';
+      case 'reunioes':
+        return 'Agenda / visitas';
+      case 'profiles':
+        return 'Perfil (papel / acesso)';
       default:
         return tableName;
     }

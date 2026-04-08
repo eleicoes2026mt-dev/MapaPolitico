@@ -123,9 +123,11 @@ class _CompletarCadastroScreenState extends ConsumerState<CompletarCadastroScree
       final profile = await ref
           .read(profileProvider.future)
           .timeout(const Duration(seconds: 25));
-      final role = profile?.role;
+      final uid = profile?.id ?? Supabase.instance.client.auth.currentUser?.id;
+      if (!mounted || uid == null) return;
+      final path = await homePathForUserId(uid);
       if (!mounted) return;
-      context.go(homePathForProfileRole(role));
+      context.go(path);
     } on TimeoutException {
       if (!mounted) return;
       setState(() {

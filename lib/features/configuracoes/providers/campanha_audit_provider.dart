@@ -8,7 +8,7 @@ import '../../dashboard/providers/dashboard_provider.dart';
 import '../../mapa/providers/estimativa_por_cidade_provider.dart';
 import '../../votantes/providers/votantes_provider.dart';
 
-/// Histórico de alterações (apenas candidato; RLS no Supabase).
+/// Histórico de alterações (candidato ou assessor grau 1; RLS no Supabase).
 final campanhaAuditLogProvider = FutureProvider.autoDispose<List<CampanhaAuditLog>>((ref) async {
   final client = supabase;
   try {

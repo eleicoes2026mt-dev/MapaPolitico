@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
@@ -403,6 +404,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       final inComparativo = _comparativoColors != null && _comparativoColors!.isNotEmpty;
       final inBenfeitorias = _benfeitoriasColors != null && _benfeitoriasColors!.isNotEmpty;
       for (final regiao in mtList) {
+        final largestIdx = indexOfLargestGeoPolygon(regiao.polygons);
         var polygonIndex = 0;
         for (final geo in regiao.polygons) {
           final isEditing = regiao.id == _editingRegionId && polygonIndex == _editingPolygonIndex;
@@ -445,12 +447,17 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             borderStrokeWidth = 1 * cLinha;
           }
 
+          // MultiPolygon: traço só no maior fragmento (e no polígono em edição). Evita malha de linhas.
+          final bool strokeOnThisPart =
+              isEditing || (largestIdx >= 0 && polygonIndex == largestIdx);
+          final double strokeW = strokeOnThisPart ? borderStrokeWidth : 0;
+
           polygons.add(Polygon<String>(
             points: points,
             holePointsList: holes.isEmpty ? null : holes,
             color: fillColor,
             borderColor: borderColor,
-            borderStrokeWidth: borderStrokeWidth,
+            borderStrokeWidth: strokeW,
             hitValue: '${regiao.id}#$polygonIndex',
           ));
           polygonIndex++;
@@ -931,9 +938,11 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   ) {
     final drillNome = _regiaoDrillDown?.nome;
     final narrow = MediaQuery.sizeOf(context).width < 600;
-    // WebKit móvel: useAltRendering:true costuma falhar (mapa “em branco”); simplificar polígonos alivia a GPU.
-    final polySimple = narrow ? 1.8 : 0.5;
-    final useAltPoly = !narrow;
+    // Tolerância em px lógicos (zoom); 1.8 deformava os limites no telemóvel (malha irregular).
+    // ~0,35–0,5 alinha-se ao desktop e à doc do flutter_map (default 0,3).
+    final polySimple = narrow ? 0.42 : 0.5;
+    // Triangulação + drawVertices: mais fluido. Safari iOS: regressão antiga de mapa vazio com este caminho.
+    final useAltPoly = defaultTargetPlatform != TargetPlatform.iOS;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -1194,6 +1203,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     required Map<String, int> metasMap,
     required int totalVotosTseGeral,
     required int totalEstimativaGeral,
+    bool hideDuplicateHeading = false,
   }) {
     Widget buildPanel(String modo) {
       return _RankingPanel(
@@ -1209,6 +1219,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         locaisVotacaoContent: widget.locaisVotacaoContent,
         selectedMunicipioKey: widget.selectedMunicipioKey,
         layoutCompact: compact,
+        hideDuplicateHeading: hideDuplicateHeading,
         focusedRegiaoId: _regiaoDrillDownId,
         onMostrarTSE: widget.onMostrarTSE,
         onMostrarMarcadores: widget.onMostrarMarcadores,
@@ -1284,30 +1295,41 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final totalEstimativaGeral = _totalEstimativaSomada();
     final metasMap = widget.metasPorRegiao ?? const <String, int>{};
 
-    // Dashboard/mobile embutido: mapa e ranking em coluna — o mapa deixa de ser tapado pelo painel.
+    // Ecrã estreito: mapa em cima + ranking em baixo (sem overlay). Sem ExpansionTile — toda a área
+    // do ranking faz scroll interno (abas, KPIs, lista) para aparecerem todos os botões e dados.
     if (widget.embedRankingBelowMap) {
-      if (ranking.isEmpty && rankingMetas.isEmpty) {
-        return SizedBox(
-          height: widget.height,
-          width: double.infinity,
-          child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
-        );
-      }
+      final theme = Theme.of(context);
       return SizedBox(
         height: widget.height,
         width: double.infinity,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Mapa um pouco menor — mais espaço para ranking + locais de votação (lista scrollável).
             Expanded(
-              flex: 8,
+              flex: 4,
               child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
             ),
+            Divider(height: 1, thickness: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.leaderboard_outlined, size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Ranking por região',
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
-              flex: 16,
+              flex: 9,
               child: _rankingPanelWidget(
                 compact: true,
+                hideDuplicateHeading: true,
                 ranking: ranking,
                 rankingMetas: rankingMetas,
                 metasMap: metasMap,
@@ -1328,11 +1350,12 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           final narrow = constraints.maxWidth < 560;
           // Painel inferior: com «Locais de votação» abertos precisa de mais altura para a lista scrollável.
           final temLocais = widget.locaisVotacaoContent != null;
+          // Painel inferior no telemóvel: ocupar a maior parte do mapa para a lista de dados (cabeçalho com scroll).
           final bottomPanelH = math.max(
-            temLocais ? 280.0 : 168.0,
+            temLocais ? 300.0 : 280.0,
             math.min(
-              temLocais ? 520.0 : 300.0,
-              constraints.maxHeight * (temLocais ? 0.58 : 0.36),
+              temLocais ? 580.0 : 720.0,
+              constraints.maxHeight * (temLocais ? 0.62 : 0.82),
             ),
           );
           Widget buildRankingPanel({required bool compact}) => _rankingPanelWidget(
@@ -1443,6 +1466,8 @@ class _RankingPanel extends StatefulWidget {
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
     this.layoutCompact = false,
+    /// Quando o título «Ranking por região» já existe no pai (ex.: [ExpansionTile] em baixo do mapa).
+    this.hideDuplicateHeading = false,
     this.focusedRegiaoId,
     required this.onToggleFocusRegiao,
     this.onMostrarTSE,
@@ -1468,6 +1493,8 @@ class _RankingPanel extends StatefulWidget {
   final Widget? locaisVotacaoContent;
   final String? selectedMunicipioKey;
   final bool layoutCompact;
+  /// Esconde a faixa com ícone + «Ranking por Região» (evita duplicar o [ExpansionTile]).
+  final bool hideDuplicateHeading;
   final String? focusedRegiaoId;
   final void Function(String regiaoId) onToggleFocusRegiao;
   final void Function(bool)? onMostrarTSE;
@@ -1670,50 +1697,80 @@ class _RankingPanelState extends State<_RankingPanel> {
     }
 
     return Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(12),
+      elevation: widget.hideDuplicateHeading ? 0 : 4,
+      borderRadius: widget.hideDuplicateHeading ? null : BorderRadius.circular(12),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
+        borderRadius: widget.hideDuplicateHeading ? BorderRadius.zero : BorderRadius.circular(12),
+          child: Container(
           width: panelWidth,
           color: theme.colorScheme.surface,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Cabeçalho ──────────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withValues(alpha: 0.35),
-                  border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              // ── Cabeçalho: com [hideDuplicateHeading] o cabeçalho precisa de ~2/3 da área do painel (abas+KPI sem cortar).
+              Flexible(
+                flex: widget.hideDuplicateHeading ? 10 : 1,
+                child: SingleChildScrollView(
+                  clipBehavior: Clip.hardEdge,
+                  physics: widget.hideDuplicateHeading
+                      ? const NeverScrollableScrollPhysics()
+                      : const ClampingScrollPhysics(),
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(
+                      widget.hideDuplicateHeading ? 12 : 14,
+                      widget.hideDuplicateHeading ? 8 : 12,
+                      widget.hideDuplicateHeading ? 12 : 14,
+                      widget.hideDuplicateHeading ? 8 : 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer.withValues(alpha: 0.35),
+                      border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.leaderboard_outlined, size: 18, color: cs.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Ranking por Região',
-                          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        if (focusedRegiaoId != null) ...[
-                          const Spacer(),
-                          TextButton.icon(
-                            onPressed: () => widget.onToggleFocusRegiao(focusedRegiaoId),
-                            icon: const Icon(Icons.zoom_out_map, size: 14),
-                            label: const Text('Ver tudo', style: TextStyle(fontSize: 11)),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    if (!widget.hideDuplicateHeading)
+                      Row(
+                        children: [
+                          Icon(Icons.leaderboard_outlined, size: 18, color: cs.primary),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Ranking por Região',
+                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (focusedRegiaoId != null) ...[
+                            TextButton.icon(
+                              onPressed: () => widget.onToggleFocusRegiao(focusedRegiaoId),
+                              icon: const Icon(Icons.zoom_out_map, size: 14),
+                              label: const Text('Ver tudo', style: TextStyle(fontSize: 11)),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
+                      )
+                    else if (focusedRegiaoId != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: () => widget.onToggleFocusRegiao(focusedRegiaoId),
+                          icon: const Icon(Icons.zoom_out_map, size: 14),
+                          label: const Text('Ver tudo', style: TextStyle(fontSize: 11)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
+                    if (!widget.hideDuplicateHeading) const SizedBox(height: 8) else if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas) const SizedBox(height: 4),
 
                     // ── Tabs: clique ativa; clique duplo limpa o mapa ──
                     if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas) ...[
@@ -1910,15 +1967,21 @@ class _RankingPanelState extends State<_RankingPanel> {
                           style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
 
               // ── Lista: nenhum / TSE / Rede / Comparativo / Metas / Benfeitorias ───────
               Expanded(
-                flex: showLocais ? 2 : 1,
+                flex: showLocais
+                    ? 2
+                    : (widget.layoutCompact
+                        ? (widget.hideDuplicateHeading ? 10 : 5)
+                        : 4),
                 child: modoNenhum
-                    ? _buildListaNenhum(cs, theme)
+                    ? _buildListaNenhum(cs, theme, compact: widget.hideDuplicateHeading)
                     : modoBenfeitorias
                     ? _buildListaBenfeitorias(widget.benfeitoriasRanking ?? const [], cs, theme)
                     : modoMetas
@@ -2483,29 +2546,46 @@ class _RankingPanelState extends State<_RankingPanel> {
 
   // ── Estado vazio: nenhuma camada selecionada ──────────────────────────────
 
-  Widget _buildListaNenhum(ColorScheme cs, ThemeData theme) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.touch_app_outlined, size: 40, color: cs.primary.withValues(alpha: 0.5)),
-            const SizedBox(height: 12),
-            Text(
-              'Selecione uma visualização',
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
+  Widget _buildListaNenhum(ColorScheme cs, ThemeData theme, {bool compact = false}) {
+    final iconSize = compact ? 28.0 : 40.0;
+    final pad = compact ? 10.0 : 16.0;
+    return LayoutBuilder(
+      builder: (context, box) {
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: box.maxHeight),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 20, vertical: pad),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.touch_app_outlined, size: iconSize, color: cs.primary.withValues(alpha: 0.5)),
+                    SizedBox(height: compact ? 6 : 12),
+                    Text(
+                      'Selecione uma visualização',
+                      style: (compact ? theme.textTheme.labelLarge : theme.textTheme.titleSmall)
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                      textAlign: TextAlign.center,
+                    ),
+                    SizedBox(height: compact ? 4 : 8),
+                    Text(
+                      compact
+                          ? 'Use as abas acima (Eleição 2022, Minha Rede, etc.) para carregar dados no mapa.'
+                          : 'Toque em "Eleição 2022", "Minha Rede", "Comparativo", "Metas" ou "Benfeitorias" (quando disponível) para carregar os dados no mapa.',
+                      style: (compact ? theme.textTheme.labelSmall : theme.textTheme.bodySmall)
+                          ?.copyWith(color: cs.onSurfaceVariant, height: 1.25),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Toque em "Eleição 2022", "Minha Rede", "Comparativo", "Metas" ou "Benfeitorias" (quando disponível) para carregar os dados no mapa.',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

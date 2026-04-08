@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/candidato_raiz_provider.dart';
 import '../../../core/utils/candidato_campanha.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -208,8 +209,9 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
   static double _embeddedMapHeight(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
     final h = MediaQuery.sizeOf(context).height;
-    if (w < 600) {
-      return (h * 0.64).clamp(480.0, 760.0);
+    // Cartão mais alto no telemóvel: mapa + ranking em coluna precisam de altura total generosa.
+    if (w < 720) {
+      return (h * 0.92).clamp(720.0, 1100.0);
     }
     if (w < 1100) {
       return (h * 0.64).clamp(580.0, 860.0);
@@ -245,16 +247,21 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final benfeitoriasRanking = ref.watch(benfeitoriasRankingRegioesProvider).valueOrNull;
     final profile = ref.watch(profileProvider).valueOrNull;
     final metasCampanha = ref.watch(metasRegiaoCampanhaProvider).valueOrNull ?? {};
-    final podeMetasRegiao = candidatoCampanhaProfileId(profile) != null;
+    final candidatoRaizAsync = ref.watch(candidatoRaizCampanhaProfileIdProvider);
+    final podeMetasRegiao = candidatoRaizAsync.maybeWhen(
+      data: (id) => id != null && id.isNotEmpty,
+      orElse: () => candidatoCampanhaProfileId(profile) != null,
+    );
     final mapaVisual = ref.watch(mapaVisualPrefsProvider);
 
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < 600 ? 12.0 : 16.0;
     final embedded = widget.mode == MapaPanelMode.embedded;
     final viewportH = MediaQuery.sizeOf(context).height;
-    /// Em ecrãs baixos ou mobile, Column + Expanded no mapa estoura; usa scroll + altura fixa do mapa.
-    final useScrollableFullScreen = !embedded && (viewportH < 780 || width < 600);
-    final scrollMapHeight = math.max(300.0, math.min(580.0, viewportH * 0.42));
+    /// Só em viewports muito baixos o Column+Expanded pode estourar; em telemóvel com altura normal
+    /// usamos o mesmo mapa em [Expanded] que no desktop (comportamento alinhado ao PC).
+    final useScrollableFullScreen = !embedded && viewportH < 640;
+    final scrollMapHeight = math.max(360.0, math.min(720.0, viewportH * 0.68));
     final mapH = embedded ? _embeddedMapHeight(context) : (useScrollableFullScreen ? scrollMapHeight : double.infinity);
 
     final mapCard = Card(
@@ -331,7 +338,8 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
                   ))
             : null,
         selectedMunicipioKey: _selectedMunicipio,
-        embedRankingBelowMap: embedded && width < 600,
+        // Ecrã estreito: ranking sempre abaixo do mapa (sem overlay). Larguras ≥720 usam painel lateral.
+        embedRankingBelowMap: width < 720,
       ),
     );
 

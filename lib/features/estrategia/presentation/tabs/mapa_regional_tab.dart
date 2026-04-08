@@ -190,11 +190,13 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final mapHeight = constraints.maxHeight.clamp(280.0, double.infinity);
+              final narrow = MediaQuery.sizeOf(context).width < 720;
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
                   MapaRegionalWidget(
                       height: mapHeight,
+                      embedRankingBelowMap: narrow,
                       pontosMapaEscala: mapaVisual.escalaPontos,
                       contornoMapaEscala: mapaVisual.escalaContorno,
                       votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,

@@ -482,8 +482,8 @@ class _Sidebar extends ConsumerWidget {
   /// Candidato/assessor: /apoiador-home é exclusivo dos apoiadores.
   static const _pathsOcultosCandidatoAssessor = {'/apoiador-home'};
 
-  /// Assessor: entra em «Apoiadores»; não vê dashboard do candidato nem menu Assessores.
-  static const _pathsOcultosAssessor = {'/', '/assessores', '/configuracoes'};
+  /// Assessor: nunca vê «Assessores» (só o candidato gere convites de assessor). Grau 1 mantém resto da gestão.
+  static const _pathsOcultosAssessor = {'/assessores'};
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -611,10 +611,8 @@ class _Sidebar extends ConsumerWidget {
                         return !_pathsOcultosApoiador.contains(e.path);
                       }
                       if (prof.role == 'assessor') {
-                        if (gestaoCompleta) {
-                          return !_pathsOcultosCandidatoAssessor.contains(e.path);
-                        }
-                        return !_pathsOcultosAssessor.contains(e.path) && !_pathsOcultosCandidatoAssessor.contains(e.path);
+                        return !_pathsOcultosAssessor.contains(e.path) &&
+                            !_pathsOcultosCandidatoAssessor.contains(e.path);
                       }
                       // Candidato: ocultar /apoiador-home (exclusivo dos apoiadores)
                       return !_pathsOcultosCandidatoAssessor.contains(e.path);

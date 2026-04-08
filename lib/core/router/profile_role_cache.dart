@@ -43,11 +43,17 @@ bool _computeGestaoCompleta(Map<String, dynamic>? data) {
   if (role == 'candidato') return true;
   if (role != 'assessor') return false;
   final a = data['assessores'];
+  // PostgREST: FK única (1 assessor por profile) → objeto, não lista.
+  Map<String, dynamic>? row;
   if (a is List && a.isNotEmpty) {
-    final g = (a.first as Map)['grau_acesso'];
-    if (g is num) return g.toInt() == 1;
+    row = Map<String, dynamic>.from(a.first as Map);
+  } else if (a is Map) {
+    row = Map<String, dynamic>.from(a);
   }
-  return false;
+  if (row == null) return false;
+  final g = row['grau_acesso'];
+  final gi = g is num ? g.toInt() : int.tryParse(g?.toString() ?? '');
+  return gi == 1;
 }
 
 void clearProfileRoleCache() {

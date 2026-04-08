@@ -5,6 +5,36 @@ import '../../../models/visita.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
+/// Perfis (auth) com apoiador ou votante neste município — para push segmentado por cidade.
+Future<List<String>> profileIdsMoradoresCidadeComConta(String municipioId) async {
+  if (municipioId.isEmpty) return [];
+  final ids = <String>{};
+  try {
+    final a = await supabase
+        .from('apoiadores')
+        .select('profile_id')
+        .eq('municipio_id', municipioId)
+        .eq('ativo', true)
+        .not('profile_id', 'is', null);
+    for (final e in a as List) {
+      final pid = e['profile_id'] as String?;
+      if (pid != null && pid.isNotEmpty) ids.add(pid);
+    }
+  } catch (_) {}
+  try {
+    final v = await supabase
+        .from('votantes')
+        .select('profile_id')
+        .eq('municipio_id', municipioId)
+        .not('profile_id', 'is', null);
+    for (final e in v as List) {
+      final pid = e['profile_id'] as String?;
+      if (pid != null && pid.isNotEmpty) ids.add(pid);
+    }
+  } catch (_) {}
+  return ids.toList();
+}
+
 // ── Visitas ──────────────────────────────────────────────────────────────────
 
 List<Map<String, dynamic>> _mergeReunioesPorId(List<dynamic> a, List<dynamic> b) {
@@ -179,6 +209,8 @@ class NovaVisitaParams {
     this.municipioId,
     this.visivelApoiadores = true,
     this.notificacaoProfileIds = const [],
+    /// Se true (visita pública com cidade), o push inicial usa só contas na cidade em vez de broadcast.
+    this.pushApenasMoradoresDaCidade = false,
   });
 
   final String titulo;
@@ -191,6 +223,7 @@ class NovaVisitaParams {
   final String? municipioId;
   final bool visivelApoiadores;
   final List<String> notificacaoProfileIds;
+  final bool pushApenasMoradoresDaCidade;
 }
 
 final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((ref) {
@@ -223,10 +256,23 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
           'url': '/#/agenda',
           'tag': 'visita-${res['id']}',
         };
+        var enviarPush = true;
         if (!p.visivelApoiadores && p.notificacaoProfileIds.isNotEmpty) {
           body['profileIds'] = p.notificacaoProfileIds;
+        } else if (p.visivelApoiadores &&
+            p.pushApenasMoradoresDaCidade &&
+            p.municipioId != null &&
+            p.municipioId!.isNotEmpty) {
+          final alvo = await profileIdsMoradoresCidadeComConta(p.municipioId!);
+          if (alvo.isEmpty) {
+            enviarPush = false;
+          } else {
+            body['profileIds'] = alvo;
+          }
         }
-        await supabase.functions.invoke('send-push', body: body);
+        if (enviarPush) {
+          await supabase.functions.invoke('send-push', body: body);
+        }
       } catch (_) {}
     }
 

@@ -23,6 +23,9 @@ import '../providers/agenda_provider.dart';
 import 'agenda_map_picker_sheet.dart';
 import 'agenda_municipio_picker_sheet.dart';
 
+/// Alcance do push ao notificar visita pública com cidade definida.
+enum _AlcancePushVisita { todos, moradoresCidade }
+
 class AgendaScreen extends ConsumerStatefulWidget {
   const AgendaScreen({super.key});
 
@@ -352,25 +355,82 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
 
   Future<void> _notificar(Visita v) async {
     final privada = v.notificacaoProfileIds.isNotEmpty;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enviar notificação'),
-        content: Text(
-          privada
-              ? 'Enviar push apenas aos ${v.notificacaoProfileIds.length} destinatário(s) desta agenda privada (${v.municipioNome ?? v.titulo})?'
-              : 'Notificar todos os usuários com push ativado sobre a visita a "${v.municipioNome ?? v.titulo}"?',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Notificar'),
+    final temCidade = v.municipioId != null && v.municipioId!.trim().isNotEmpty;
+
+    _AlcancePushVisita? alcance;
+    if (!privada && temCidade) {
+      alcance = await showDialog<_AlcancePushVisita>(
+        context: context,
+        builder: (ctx) {
+          var sel = _AlcancePushVisita.moradoresCidade;
+          return StatefulBuilder(
+            builder: (ctx, setSt) {
+              return AlertDialog(
+                title: const Text('Enviar notificação'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Visita em ${v.municipioNome ?? "município"}.',
+                        style: Theme.of(ctx).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      RadioListTile<_AlcancePushVisita>(
+                        title: const Text('Apenas moradores desta cidade'),
+                        subtitle: const Text(
+                          'Apoiadores e votantes com conta no app e município igual ao da visita.',
+                        ),
+                        value: _AlcancePushVisita.moradoresCidade,
+                        groupValue: sel,
+                        onChanged: (x) => setSt(() => sel = x!),
+                      ),
+                      RadioListTile<_AlcancePushVisita>(
+                        title: const Text('Todos com notificações ativas'),
+                        subtitle: const Text('Toda a base inscrita em push na campanha.'),
+                        value: _AlcancePushVisita.todos,
+                        groupValue: sel,
+                        onChanged: (x) => setSt(() => sel = x!),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, sel),
+                    child: const Text('Notificar'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+      if (alcance == null || !mounted) return;
+    } else {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Enviar notificação'),
+          content: Text(
+            privada
+                ? 'Enviar push apenas aos ${v.notificacaoProfileIds.length} destinatário(s) desta agenda privada (${v.municipioNome ?? v.titulo})?'
+                : 'Sem cidade definida nesta visita — a notificação será enviada a todos com push ativado. Continuar?',
           ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Notificar'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+      alcance = _AlcancePushVisita.todos;
+    }
 
     try {
       await supabase.auth.refreshSession();
@@ -384,6 +444,23 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
       };
       if (privada) {
         body['profileIds'] = v.notificacaoProfileIds;
+      } else if (!privada &&
+          temCidade &&
+          alcance == _AlcancePushVisita.moradoresCidade) {
+        final ids = await profileIdsMoradoresCidadeComConta(v.municipioId!);
+        if (ids.isEmpty) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Nenhum apoiador ou votante com conta neste município. Ajuste o cadastro ou use «Todos».',
+              ),
+              duration: Duration(seconds: 6),
+            ),
+          );
+          return;
+        }
+        body['profileIds'] = ids;
       }
       final r = await supabase.functions.invoke('send-push', body: body);
 
@@ -948,6 +1025,8 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
   double? _localLng;
   /// Se true, a visita não aparece para todos os apoiadores; só [destinatarios] recebem push e veem na agenda.
   bool _agendaPrivada = false;
+  /// Visita pública com cidade: ao agendar, push só para contas (apoiador/votante) neste município.
+  bool _pushApenasMoradoresDaCidade = false;
   final Set<String> _destProfileIds = {};
   bool _loading = false;
   Timer? _placesDebounce;
@@ -973,6 +1052,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     _data = v?.dataReuniao;
     _municipioIdSelecionado = v?.municipioId;
     _agendaPrivada = v != null ? !v.visivelApoiadores : false;
+    _pushApenasMoradoresDaCidade = false;
     _destProfileIds
       ..clear()
       ..addAll(v?.notificacaoProfileIds ?? const []);
@@ -1062,6 +1142,8 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
         municipioId: _municipioIdSelecionado,
         visivelApoiadores: !_agendaPrivada,
         notificacaoProfileIds: _agendaPrivada ? _destProfileIds.toList() : const [],
+        pushApenasMoradoresDaCidade:
+            !_agendaPrivada && _pushApenasMoradoresDaCidade && _municipioIdSelecionado != null,
       );
       if (widget.existente != null) {
         await ref.read(atualizarVisitaProvider)(widget.existente!.id, params);
@@ -1645,6 +1727,27 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                             ? 'Selecionar assessores e apoiadores'
                             : '${_destProfileIds.length} destinatário(s) selecionado(s)',
                       ),
+                    ),
+                  ),
+                ],
+                if (!_agendaPrivada && _municipioIdSelecionado != null) ...[
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.place_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                    title: const Text('Notificação ao agendar'),
+                    subtitle: Text(
+                      _pushApenasMoradoresDaCidade
+                          ? 'Enviar push só para apoiadores e votantes com conta neste município.'
+                          : 'Enviar push para todos inscritos em notificações (toda a campanha).',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    trailing: Switch(
+                      value: _pushApenasMoradoresDaCidade,
+                      onChanged: (v) => setState(() => _pushApenasMoradoresDaCidade = v),
                     ),
                   ),
                 ],

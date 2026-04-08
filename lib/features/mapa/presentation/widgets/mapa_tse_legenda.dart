@@ -96,60 +96,74 @@ class MapaTseLegenda extends StatelessWidget {
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: TseVotoTier.values.map((tier) {
-                return Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => _abrirDetalhe(context, tier, mm.minV, mm.maxV),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: theme.colorScheme.outlineVariant),
+            // Uma linha como no desktop; em ecrãs estreitos desliza horizontalmente em vez de empilhar.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < TseVotoTier.values.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _abrirDetalhe(
+                          context,
+                          TseVotoTier.values[i],
+                          mm.minV,
+                          mm.maxV,
+                        ),
                         borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 22,
-                            height: 22,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  corCentroTier(tier).withValues(alpha: 0.9),
-                                  corCentroTier(tier).withValues(alpha: 0.15),
-                                ],
-                                stops: const [0.35, 1.0],
-                              ),
-                              border: Border.all(color: Colors.white, width: 1.5),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.12),
-                                  blurRadius: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: theme.colorScheme.outlineVariant),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      corCentroTier(TseVotoTier.values[i]).withValues(alpha: 0.9),
+                                      corCentroTier(TseVotoTier.values[i]).withValues(alpha: 0.15),
+                                    ],
+                                    stops: const [0.35, 1.0],
+                                  ),
+                                  border: Border.all(color: Colors.white, width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.12),
+                                      blurRadius: 2,
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              const SizedBox(width: 8),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 200),
+                                child: Text(
+                                  TseVotoTier.values[i].tituloLegenda,
+                                  style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.info_outline, size: 16, color: theme.colorScheme.primary),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              tier.tituloLegenda,
-                              style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(Icons.info_outline, size: 16, color: theme.colorScheme.primary),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  ],
+                ],
+              ),
             ),
           ],
         ),

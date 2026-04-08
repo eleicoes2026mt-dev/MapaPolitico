@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/candidato_raiz_provider.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
@@ -57,7 +58,25 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
   final profile = await ref.watch(profileProvider.future);
   if (profile == null) return const DashboardStats();
 
-  final sqTse = profile.sqCandidatoTse2022;
+  // TSE / comparação oficial: perfil do deputado (`app_candidato_raiz_campanha` no servidor).
+  int? sqTse = profile.sqCandidatoTse2022;
+  if (profile.role == 'assessor') {
+    final raiz = await ref.read(candidatoRaizCampanhaProfileIdProvider.future);
+    if (raiz != null) {
+      try {
+        final row = await client
+            .from('profiles')
+            .select('sq_candidato_tse_2022')
+            .eq('id', raiz)
+            .maybeSingle();
+        sqTse = (row?['sq_candidato_tse_2022'] as num?)?.toInt();
+      } catch (_) {
+        sqTse = null;
+      }
+    } else {
+      sqTse = null;
+    }
+  }
   final tseVinculado = sqTse != null;
   final votosTseTotal = await _totalVotosTseEleicao2022(client, sqTse);
 
@@ -91,8 +110,9 @@ final dashboardStatsProvider = FutureProvider<DashboardStats>((ref) async {
 
   final assessoresRes = await client.from('assessores').select('id');
   var assessoresCount = assessoresRes.length;
-  // O candidato também tem linha em assessores; a métrica é só assessores convidados (nível 2).
-  if (profile.role == 'candidato' && assessoresCount > 0) {
+  // O deputado também tem linha em assessores; a métrica é só assessores convidados (nível 2).
+  if ((profile.role == 'candidato' || profile.role == 'assessor') &&
+      assessoresCount > 0) {
     assessoresCount -= 1;
   }
   final apoiadoresRes =

@@ -25,7 +25,7 @@ import '../../models/profile.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import 'navigation_keys.dart';
 import 'profile_role_cache.dart';
-import 'role_home.dart';
+import 'role_home.dart' show homePathForUserId;
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -119,8 +119,8 @@ GoRouter createAppRouter({String? initialLocation}) {
             return '/apoiador-home';
           }
         }
-        if (role == 'assessor' && !gestaoCompleta && path == '/assessores') {
-          return '/apoiadores';
+        if (role == 'assessor' && path == '/assessores') {
+          return homePathForUserId(session.user.id);
         }
       }
 
@@ -267,9 +267,11 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (role == 'assessor' && !gestaoCompleta && widget.location == '/assessores') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) context.go('/apoiadores');
+    if (role == 'assessor' && widget.location == '/assessores') {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!context.mounted) return;
+        final home = await homePathForUserId(profile.id);
+        if (context.mounted) context.go(home);
       });
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }

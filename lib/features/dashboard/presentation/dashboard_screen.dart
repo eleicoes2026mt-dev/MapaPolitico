@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/utils/formato_pt_br.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../mapa/presentation/mapa_regional_panel.dart';
 import '../providers/dashboard_provider.dart';
 
@@ -19,6 +20,7 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(dashboardStatsProvider);
+    final profile = ref.watch(profileProvider).valueOrNull;
     final theme = Theme.of(context);
     final width = MediaQuery.sizeOf(context).width;
     final padding = width < _Breakpoint.mobile ? 12.0 : 18.0;
@@ -40,7 +42,12 @@ class DashboardScreen extends ConsumerWidget {
             _Header(padding: padding),
             SizedBox(height: padding * 0.5),
             stats.when(
-              data: (s) => _StatsCards(stats: s),
+              data: (s) => _StatsCards(
+                stats: s,
+                mensagemTseSeNaoVinculado: profile?.role == 'assessor'
+                    ? 'Quando o candidato vincular o cadastro à eleição 2022 (lista TSE) em Meu perfil, a comparação com os votos oficiais aparece aqui.'
+                    : null,
+              ),
               loading: () => const Center(
                   child: Padding(
                       padding: EdgeInsets.all(20),
@@ -108,9 +115,14 @@ class _Header extends StatelessWidget {
 }
 
 class _StatsCards extends StatelessWidget {
-  const _StatsCards({required this.stats});
+  const _StatsCards({
+    required this.stats,
+    this.mensagemTseSeNaoVinculado,
+  });
 
   final DashboardStats stats;
+  /// Se não null, substitui o texto de ajuda do cartão «Est. Votos» (ex.: assessor).
+  final String? mensagemTseSeNaoVinculado;
 
   @override
   Widget build(BuildContext context) {
@@ -134,14 +146,15 @@ class _StatsCards extends StatelessWidget {
         mostrarComparacaoTse: true,
         votosTseEleicao2022: stats.votosTseEleicao2022,
         perfilTseVinculado: stats.perfilTseVinculado,
+        mensagemTseSeNaoVinculado: mensagemTseSeNaoVinculado,
       ),
     ];
 
-    /// Maior ratio = células mais baixas (mais compacto). Ajuste se «Est. Votos» cortar texto.
+    /// Maior ratio = células mais baixas. Uma coluna precisa de mais altura («Est. Votos» + linhas TSE).
     final aspectRatio = switch (crossCount) {
       4 => 1.52,
       2 => 2.12,
-      _ => 3.1,
+      _ => 2.15,
     };
 
     return GridView.count(
@@ -172,6 +185,7 @@ class _CardData {
     this.mostrarComparacaoTse = false,
     this.votosTseEleicao2022 = 0,
     this.perfilTseVinculado = false,
+    this.mensagemTseSeNaoVinculado,
   });
 
   final String label;
@@ -182,6 +196,7 @@ class _CardData {
   final bool mostrarComparacaoTse;
   final int votosTseEleicao2022;
   final bool perfilTseVinculado;
+  final String? mensagemTseSeNaoVinculado;
 }
 
 class _StatCard extends StatelessWidget {
@@ -215,63 +230,75 @@ class _StatCard extends StatelessWidget {
         ),
         SizedBox(width: isCompact ? 10 : 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                formatarInteiroPtBr(data.value),
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                data.label,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-              if (data.mostrarComparacaoTse) ...[
-                const SizedBox(height: 8),
-                if (data.perfilTseVinculado && tse > 0 &&
-                    delta != null &&
-                    pctDoTse != null) ...[
-                  Text(
-                    'Votos oficiais TSE (2022): ${formatarInteiroPtBr(tse)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.3,
-                    ),
+          child: LayoutBuilder(
+            builder: (context, box) {
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                primary: false,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: 0, maxWidth: box.maxWidth),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        formatarInteiroPtBr(data.value),
+                        style: theme.textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        data.label,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                      if (data.mostrarComparacaoTse) ...[
+                        const SizedBox(height: 8),
+                        if (data.perfilTseVinculado && tse > 0 &&
+                            delta != null &&
+                            pctDoTse != null) ...[
+                          Text(
+                            'Votos oficiais TSE (2022): ${formatarInteiroPtBr(tse)}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${delta >= 0 ? '+' : ''}${formatarInteiroPtBr(delta)} votos vs TSE · '
+                            '${pctDoTse.toStringAsFixed(1)}% do resultado 2022',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: delta >= 0
+                                  ? const Color(0xFF2E7D32)
+                                  : theme.colorScheme.error,
+                              fontWeight: FontWeight.w600,
+                              height: 1.3,
+                            ),
+                          ),
+                        ] else if (!data.perfilTseVinculado)
+                          Text(
+                            data.mensagemTseSeNaoVinculado ??
+                                'Em Meu perfil, vincule o candidato à eleição 2022 (lista TSE) para comparar a estimativa com os dados oficiais.',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.35,
+                            ),
+                          )
+                        else
+                          Text(
+                            'Não foi possível obter a soma de votos TSE (2022) para este candidato.',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.35,
+                            ),
+                          ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${delta >= 0 ? '+' : ''}${formatarInteiroPtBr(delta)} votos vs TSE · '
-                    '${pctDoTse.toStringAsFixed(1)}% do resultado 2022',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: delta >= 0
-                          ? const Color(0xFF2E7D32)
-                          : theme.colorScheme.error,
-                      fontWeight: FontWeight.w600,
-                      height: 1.3,
-                    ),
-                  ),
-                ] else if (!data.perfilTseVinculado)
-                  Text(
-                    'Em Meu perfil, vincule o candidato à eleição 2022 (lista TSE) para comparar a estimativa com os dados oficiais.',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.35,
-                    ),
-                  )
-                else
-                  Text(
-                    'Não foi possível obter a soma de votos TSE (2022) para este candidato.',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      height: 1.35,
-                    ),
-                  ),
-              ],
-            ],
+                ),
+              );
+            },
           ),
         ),
       ],

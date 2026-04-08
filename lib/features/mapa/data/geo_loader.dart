@@ -38,6 +38,37 @@ bool pointInRegion(LatLng point, List<GeoPolygon> polygons) {
   return false;
 }
 
+/// Área aproximada do anel exterior (|graus²|) — só para comparar fragmentos de um MultiPolygon.
+double geoPolygonExteriorAreaSq(GeoPolygon g) {
+  return _ringAreaAbs(g.points);
+}
+
+double _ringAreaAbs(List<LatLng> ring) {
+  if (ring.length < 3) return 0;
+  var s = 0.0;
+  for (var i = 0; i < ring.length; i++) {
+    final j = (i + 1) % ring.length;
+    s += ring[i].longitude * ring[j].latitude - ring[j].longitude * ring[i].latitude;
+  }
+  return (s * 0.5).abs();
+}
+
+/// Índice do maior polígono numa região (MultiPolygon). Usar para desenhar **contorno só nessa parte**,
+/// evitando linhas internas entre fragmentos da mesma região no mapa.
+int indexOfLargestGeoPolygon(List<GeoPolygon> polygons) {
+  if (polygons.isEmpty) return -1;
+  var bestI = 0;
+  var bestA = geoPolygonExteriorAreaSq(polygons[0]);
+  for (var i = 1; i < polygons.length; i++) {
+    final a = geoPolygonExteriorAreaSq(polygons[i]);
+    if (a > bestA) {
+      bestA = a;
+      bestI = i;
+    }
+  }
+  return bestI;
+}
+
 /// Região com nome (ex.: estado "Mato Grosso") e um ou mais polígonos.
 class GeoRegion {
   const GeoRegion({this.name, required this.polygons});

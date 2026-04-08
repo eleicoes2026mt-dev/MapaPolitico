@@ -377,14 +377,16 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       final nomeOriginal = regiao.nome;
       final cdRgint = regiao.cdRgint;
       final isFocused = _regiaoDrillDownId != null && regionId == _regiaoDrillDownId;
+      final largestIdx = indexOfLargestGeoPolygon(regiao.polygons);
 
-      for (final geo in regiao.polygons) {
+      for (var polygonIndex = 0; polygonIndex < regiao.polygons.length; polygonIndex++) {
+        final geo = regiao.polygons[polygonIndex];
         final g = _geoPolygonToArcGIS(geo);
         if (g != null) {
           final isEditing = regionId == _editingRegionId;
           final Color fillColor;
           final Color outlineColor;
-          final double outlineWidth;
+          double outlineWidth;
           if (isEditing) {
             fillColor = color.withValues(alpha: 0.2);
             outlineColor = Colors.white;
@@ -398,8 +400,14 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
             outlineColor = neutralBorder;
             outlineWidth = 1 * cLinha;
           }
+          // MultiPolygon: contorno só no maior fragmento — evita malha de linhas entre partes.
+          if (largestIdx >= 0 && polygonIndex != largestIdx) {
+            outlineWidth = 0;
+          }
           final sym = SimpleFillSymbol(color: fillColor);
-          sym.outline = SimpleLineSymbol(color: outlineColor, width: outlineWidth);
+          if (outlineWidth > 0) {
+            sym.outline = SimpleLineSymbol(color: outlineColor, width: outlineWidth);
+          }
           overlayRegioesMT.graphics.add(
             Graphic(
               geometry: g,

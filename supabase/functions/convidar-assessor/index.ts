@@ -109,6 +109,8 @@ serve(async (req) => {
     }
     const telefone = (body?.telefone ?? '').trim() || null;
     const municipioId = body?.municipio_id ?? null;
+    const grauRaw = Number(body?.grau_acesso);
+    const grauAcesso = grauRaw === 1 ? 1 : 2;
 
     // redirectTo: nunca usar localhost; prioridade: body válido > env REDIRECT_URL
     const rawRedirect = (body?.redirect_to && String(body.redirect_to).trim()) || '';
@@ -202,6 +204,7 @@ serve(async (req) => {
             telefone: telefone || null,
             municipio_id: municipioId || null,
             ativo: true,
+            grau_acesso: grauAcesso,
           },
           { onConflict: 'profile_id' },
         );
@@ -262,6 +265,7 @@ serve(async (req) => {
       telefone: telefone || null,
       municipio_id: municipioId || null,
       ativo: true,
+      grau_acesso: grauAcesso,
     });
 
     if (assessorError) {

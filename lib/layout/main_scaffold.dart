@@ -18,6 +18,7 @@ import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/agenda/providers/agenda_provider.dart';
 import '../features/agenda/widgets/sidebar_aniversariantes_banner.dart';
 import '../features/auth/providers/auth_provider.dart';
+import '../features/assessores/providers/gestao_campanha_provider.dart';
 import '../models/profile.dart';
 import '../models/visita.dart';
 
@@ -433,7 +434,7 @@ class _SidebarCollapsed extends StatelessWidget {
   }
 }
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends ConsumerWidget {
   const _Sidebar({
     this.profile,
     required this.onSignOut,
@@ -485,8 +486,9 @@ class _Sidebar extends StatelessWidget {
   static const _pathsOcultosAssessor = {'/', '/assessores', '/configuracoes'};
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final prof = profile;
+    final gestaoCompleta = ref.watch(podeGestaoCampanhaCompletaProvider);
     final loc = GoRouterState.of(context).uri.path;
     final theme = Theme.of(context);
 
@@ -601,14 +603,19 @@ class _Sidebar extends StatelessWidget {
                     ..._items.where((e) {
                       if (prof == null) return true;
                       if (_pathsOcultosMenuGlobal.contains(e.path)) return false;
-                      if (e.path == '/configuracoes' && prof.role != 'candidato') return false;
+                      if (e.path == '/configuracoes' && !gestaoCompleta) return false;
                       if (prof.role == 'apoiador' || prof.role == 'votante') {
                         if (prof.role == 'votante' && e.path == '/votantes') {
                           return false;
                         }
                         return !_pathsOcultosApoiador.contains(e.path);
                       }
-                      if (prof.role == 'assessor') return !_pathsOcultosAssessor.contains(e.path) && !_pathsOcultosCandidatoAssessor.contains(e.path);
+                      if (prof.role == 'assessor') {
+                        if (gestaoCompleta) {
+                          return !_pathsOcultosCandidatoAssessor.contains(e.path);
+                        }
+                        return !_pathsOcultosAssessor.contains(e.path) && !_pathsOcultosCandidatoAssessor.contains(e.path);
+                      }
                       // Candidato: ocultar /apoiador-home (exclusivo dos apoiadores)
                       return !_pathsOcultosCandidatoAssessor.contains(e.path);
                     }).map((e) {

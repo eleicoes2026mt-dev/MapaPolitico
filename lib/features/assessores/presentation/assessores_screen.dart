@@ -1,12 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/router/profile_role_cache.dart';
 import '../../../core/widgets/confirmar_senha_deputado_dialog.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
 import '../providers/assessores_provider.dart'
-    show assessoresListProvider, convidarAssessor, ConvidarAssessorResult, reenviarConviteAssessor, removerAssessor, promoverACandidato, messageFromException, setAssessorAtivo;
+    show
+        assessoresListProvider,
+        meuAssessorRegistroProvider,
+        convidarAssessor,
+        ConvidarAssessorResult,
+        reenviarConviteAssessor,
+        removerAssessor,
+        promoverACandidato,
+        messageFromException,
+        setAssessorAtivo,
+        setAssessorGrauAcesso;
+import '../providers/gestao_campanha_provider.dart';
 import '../../configuracoes/providers/menu_access_provider.dart';
 
 /// Link de convite para enviar por WhatsApp se o e-mail do Supabase não chegar.
@@ -94,8 +106,7 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final profile = ref.watch(profileProvider).valueOrNull;
-    final isCandidato = profile?.isCandidato ?? false;
+    final podeGestao = ref.watch(podeGestaoCampanhaCompletaProvider);
     final list = ref.watch(assessoresListProvider);
     final filtered = list.valueOrNull?.where((a) => a.nome.toLowerCase().contains(_query.toLowerCase())).toList() ?? [];
 
@@ -129,7 +140,7 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ),
-              if (isCandidato) ...[
+              if (podeGestao) ...[
                 const SizedBox(width: 16),
                 FilledButton.icon(
                   onPressed: () => _openNovoAssessorDialog(context),
@@ -139,15 +150,15 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
               ],
             ],
           ),
-          if (isCandidato)
+          if (podeGestao)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'Nível 2: convide assessores por e-mail. Eles poderão gerir dados e convidar apoiadores.',
+                'Grau 1: mesmo nível de gestão do candidato. Grau 2: gestão atual (dados e convites de apoiadores). Defina o grau ao convidar ou no cartão.',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
-          if (!isCandidato) ...[
+          if (!podeGestao) ...[
             const SizedBox(height: 16),
             Card(
               child: Padding(
@@ -206,7 +217,7 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
                   runSpacing: 16,
                   children: filtered.map((a) => _AssessorCard(
                     assessor: a,
-                    isCandidato: isCandidato,
+                    podeGestao: podeGestao,
                     onRefresh: () => ref.invalidate(assessoresListProvider),
                   )).toList(),
                 );
@@ -239,6 +250,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
   final _telefoneController = TextEditingController();
   bool _loading = false;
   String? _error;
+  int _grauAcesso = 2;
 
   @override
   void dispose() {
@@ -262,6 +274,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
         nome: _nomeController.text,
         email: _emailController.text,
         telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
+        grauAcesso: _grauAcesso,
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -302,8 +315,26 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'O assessor receberá um e-mail para criar a senha e acessar o sistema (nível 2: gerir dados e convidar apoiadores).',
+                'Grau 1: acesso equivalente ao do candidato. Grau 2: gestão padrão (dados e convites). O assessor receberá e-mail para criar a senha.',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: DropdownButton<int>(
+                  value: _grauAcesso,
+                  isExpanded: true,
+                  hint: const Text('Grau de acesso'),
+                  onChanged: _loading
+                      ? null
+                      : (v) {
+                          if (v != null) setState(() => _grauAcesso = v);
+                        },
+                  items: const [
+                    DropdownMenuItem(value: 2, child: Text('Grau 2 — padrão')),
+                    DropdownMenuItem(value: 1, child: Text('Grau 1 — como o candidato')),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -364,12 +395,12 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
 class _AssessorCard extends ConsumerStatefulWidget {
   const _AssessorCard({
     required this.assessor,
-    required this.isCandidato,
+    required this.podeGestao,
     required this.onRefresh,
   });
 
   final Assessor assessor;
-  final bool isCandidato;
+  final bool podeGestao;
   final VoidCallback onRefresh;
 
   @override
@@ -380,6 +411,7 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
   bool _reenviando = false;
   bool _removendo = false;
   bool _toggleAtivo = false;
+  bool _grauUpdating = false;
 
   Future<void> _reenviarConvite() async {
     setState(() => _reenviando = true);
@@ -443,6 +475,25 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
       );
     } finally {
       if (mounted) setState(() => _removendo = false);
+    }
+  }
+
+  Future<void> _alterarGrau(int novo) async {
+    if (novo == widget.assessor.grauAcesso) return;
+    setState(() => _grauUpdating = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await setAssessorGrauAcesso(assessorId: widget.assessor.id, grauAcesso: novo);
+      if (!mounted) return;
+      clearProfileRoleCache();
+      widget.onRefresh();
+      ref.invalidate(meuAssessorRegistroProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('Grau de acesso atualizado.')));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(messageFromException(e))));
+    } finally {
+      if (mounted) setState(() => _grauUpdating = false);
     }
   }
 
@@ -538,6 +589,21 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           visualDensity: VisualDensity.compact,
                         ),
+                        if (!widget.podeGestao) ...[
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Chip(
+                              label: Text(
+                                assessor.grauAcesso == 1 ? 'Grau 1 — gestão completa' : 'Grau 2 — padrão',
+                                style: theme.textTheme.labelSmall,
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -572,10 +638,35 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                     ],
                   ),
               ],
-              // Ações (candidato)
-              if (widget.isCandidato) ...[
+              // Ações (candidato ou assessor grau 1)
+              if (widget.podeGestao) ...[
                 const SizedBox(height: 14),
                 Divider(height: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text('Grau: '),
+                    if (_grauUpdating)
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      DropdownButton<int>(
+                        value: assessor.grauAcesso == 1 ? 1 : 2,
+                        isDense: true,
+                        underline: const SizedBox.shrink(),
+                        onChanged: (v) {
+                          if (v != null) _alterarGrau(v);
+                        },
+                        items: const [
+                          DropdownMenuItem(value: 2, child: Text('Grau 2 — padrão')),
+                          DropdownMenuItem(value: 1, child: Text('Grau 1 — como candidato')),
+                        ],
+                      ),
+                  ],
+                ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,

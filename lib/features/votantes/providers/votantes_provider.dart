@@ -49,11 +49,18 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
     return ref.watch(meuApoiadorIdProvider).when(
           data: (apoiadorId) async {
             if (apoiadorId == null) return [];
-            final res = await supabase
-                .from('votantes')
-                .select(_kVotantesSelect)
-                .eq('apoiador_id', apoiadorId)
-                .order('nome');
+            final uid = profile.id;
+            final res = profile.cadastroViaQr
+                ? await supabase
+                    .from('votantes')
+                    .select(_kVotantesSelect)
+                    .or('apoiador_id.eq.$apoiadorId,convite_por_profile_id.eq.$uid')
+                    .order('nome')
+                : await supabase
+                    .from('votantes')
+                    .select(_kVotantesSelect)
+                    .eq('apoiador_id', apoiadorId)
+                    .order('nome');
             return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
           },
           loading: () async => [],

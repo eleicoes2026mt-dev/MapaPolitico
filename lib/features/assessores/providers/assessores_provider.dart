@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:postgrest/postgrest.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/assessor.dart';
 import '../../../core/supabase/supabase_provider.dart';
@@ -170,13 +171,16 @@ Future<ConvidarAssessorResult> convidarAssessor({
   required String email,
   String? telefone,
   String? municipioId,
+  int grauAcesso = 2,
 }) async {
   // Garantir sessão válida (evita 401 Invalid JWT por token expirado)
   await supabase.auth.refreshSession();
 
+  final g = grauAcesso == 1 ? 1 : 2;
   final body = <String, dynamic>{
     'nome': nome.trim(),
     'email': email.trim().toLowerCase(),
+    'grau_acesso': g,
     if (telefone != null && telefone.isNotEmpty) 'telefone': telefone.trim(),
     if (municipioId != null && municipioId.isNotEmpty) 'municipio_id': municipioId,
   };
@@ -256,6 +260,16 @@ Future<void> removerAssessor(String assessorId) async {
 }
 
 /// Desativar ou reativar assessor convidado (apenas candidato). Atualiza `assessores.ativo` e `profiles.ativo`.
+Future<void> setAssessorGrauAcesso({required String assessorId, required int grauAcesso}) async {
+  await supabase.auth.refreshSession();
+  final g = grauAcesso == 1 ? 1 : 2;
+  try {
+    await supabase.from('assessores').update({'grau_acesso': g}).eq('id', assessorId);
+  } on PostgrestException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}
+
 Future<void> setAssessorAtivo({required String assessorId, required bool ativo}) async {
   await supabase.auth.refreshSession();
   try {

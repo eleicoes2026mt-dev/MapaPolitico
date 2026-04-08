@@ -108,6 +108,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
         profile?.role == 'apoiador' ||
         profile?.role == 'votante';
     final podePromoverApoiador = profile?.role == 'candidato' || profile?.role == 'assessor';
+    final podeExcluirVotante = !(profile?.cadastroViaQr ?? false);
 
     final list = ref.watch(votantesListProvider);
     final apoiadoresAsync = ref.watch(apoiadoresListProvider);
@@ -200,6 +201,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
               votantes: filtered,
               apoiadorPorId: apoiadorPorId,
               podePromoverApoiador: podePromoverApoiador,
+              podeExcluir: podeExcluirVotante,
               onEdit: (v) => _abrirNovoOuEditar(existente: v),
               onDelete: _confirmarExcluir,
               onPromover: _promoverParaApoiador,
@@ -219,6 +221,7 @@ class _VotantesTable extends StatelessWidget {
     required this.votantes,
     required this.apoiadorPorId,
     required this.podePromoverApoiador,
+    required this.podeExcluir,
     required this.onEdit,
     required this.onDelete,
     required this.onPromover,
@@ -227,6 +230,7 @@ class _VotantesTable extends StatelessWidget {
   final List<Votante> votantes;
   final Map<String, String> apoiadorPorId;
   final bool podePromoverApoiador;
+  final bool podeExcluir;
   final void Function(Votante) onEdit;
   final void Function(Votante) onDelete;
   final void Function(Votante) onPromover;
@@ -261,7 +265,8 @@ class _VotantesTable extends StatelessWidget {
                       onPressed: () => onPromover(v),
                     ),
                   IconButton(icon: const Icon(Icons.edit), onPressed: () => onEdit(v)),
-                  IconButton(icon: const Icon(Icons.delete), onPressed: () => onDelete(v)),
+                  if (podeExcluir)
+                    IconButton(icon: const Icon(Icons.delete), onPressed: () => onDelete(v)),
                 ],
               ),
             ),
@@ -310,7 +315,8 @@ class _VotantesTable extends StatelessWidget {
                       onPressed: () => onPromover(v),
                     ),
                   IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => onEdit(v)),
-                  IconButton(icon: const Icon(Icons.delete, size: 20), onPressed: () => onDelete(v)),
+                  if (podeExcluir)
+                    IconButton(icon: const Icon(Icons.delete, size: 20), onPressed: () => onDelete(v)),
                 ],
               )),
             ],

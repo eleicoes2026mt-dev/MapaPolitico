@@ -10,6 +10,8 @@ class Assessor {
   final String? logradouro;
   final String? numero;
   final String? complemento;
+  /// 1 = mesma gestão que o candidato; 2 = assessor padrão.
+  final int grauAcesso;
 
   const Assessor({
     required this.id,
@@ -23,6 +25,7 @@ class Assessor {
     this.logradouro,
     this.numero,
     this.complemento,
+    this.grauAcesso = 2,
   });
 
   factory Assessor.fromJson(Map<String, dynamic> json) {
@@ -38,6 +41,7 @@ class Assessor {
       logradouro: json['logradouro'] as String?,
       numero: json['numero'] as String?,
       complemento: json['complemento'] as String?,
+      grauAcesso: (json['grau_acesso'] as num?)?.toInt() ?? 2,
     );
   }
 
@@ -53,6 +57,7 @@ class Assessor {
         'logradouro': logradouro,
         'numero': numero,
         'complemento': complemento,
+        'grau_acesso': grauAcesso,
       };
 
   String get initial => nome.isNotEmpty ? nome[0].toUpperCase() : '?';

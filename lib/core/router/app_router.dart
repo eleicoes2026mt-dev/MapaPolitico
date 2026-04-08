@@ -101,7 +101,8 @@ GoRouter createAppRouter({String? initialLocation}) {
 
       if (session != null) {
         final role = await cachedProfileRole(session.user.id);
-        if (role != 'candidato' && path == '/configuracoes') {
+        final gestaoCompleta = await cachedPodeGestaoCampanhaCompleta(session.user.id);
+        if (!gestaoCompleta && path == '/configuracoes') {
           return homePathForProfileRole(role);
         }
         if (role == 'apoiador' && path == '/apoiadores') {
@@ -120,7 +121,7 @@ GoRouter createAppRouter({String? initialLocation}) {
             return '/apoiador-home';
           }
         }
-        if (role == 'assessor' && path == '/assessores') {
+        if (role == 'assessor' && !gestaoCompleta && path == '/assessores') {
           return '/apoiadores';
         }
       }

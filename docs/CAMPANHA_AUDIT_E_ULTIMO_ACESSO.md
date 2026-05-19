@@ -1,23 +1,20 @@
-# Auditoria da campanha e último acesso (menu)
+# Último acesso (menu) e histórico de alterações (removido)
 
-## Migração
+## Histórico de alterações (`campanha_audit_log`) — descontinuado
 
-Aplicar `supabase/migrations/20250325120000_campanha_audit_e_ultimo_acesso.sql` (ou `supabase db push`).
+Para aliviar o banco e a interface, o **Registro de alterações** (auditoria, reverter edição, restaurar exclusões via log) foi **removido**.
 
-Inclui:
+- Migração que remove triggers, funções de log e a tabela: `supabase/migrations/20260518180000_remove_campanha_audit_log.sql`
+- A função `restaurar_registro_audit` permanece no schema mas **só lança exceção** informando que o recurso foi descontinuado (evita chamadas antigas silenciosas).
 
-- Colunas em `profiles`: `last_access_assessores_at`, `last_access_apoiadores_at`
-- Tabela `campanha_audit_log` (insert/update/delete em assessores, apoiadores, votantes, benfeitorias)
-- RPCs: `register_menu_access(p_menu)`, `restaurar_registro_audit(p_log_id)`
+Aplicar com `supabase db push` ou colar o SQL no Supabase SQL Editor no projeto correto.
 
-## App
+## Último acesso nos menus (Assessores / Apoiadores)
 
-- Ao abrir **Assessores** ou **Apoiadores**, chama `register_menu_access` e o menu mostra **Último acesso** nesses itens.
-- **Configurações** (`/configuracoes`) aparece só para **candidato** (conta do deputado): lista de histórico, **Restaurar** (exclusões) e **Reverter edição** (volta ao `payload_before`).
+Isto continua separado do histórico. A migração original `supabase/migrations/20250325120000_campanha_audit_e_ultimo_acesso.sql` (ou o estado atual após `db push`) define colunas em `profiles` como `last_access_assessores_at`, `last_access_apoiadores_at` e a RPC `register_menu_access(p_menu)`.
 
-## Restauração
+- Ao abrir **Assessores** ou **Apoiadores**, o app pode chamar `register_menu_access` e o menu mostra **Último acesso** nesses itens.
 
-- **Exclusão**: RPC `restaurar_registro_audit` reinsere a linha a partir do snapshot.
-- **Edição**: atualização no cliente com os dados anteriores do log (pode falhar se houver FKs ou regras de negócio).
+## Configurações
 
-RLS: só o candidato dono da campanha lê `campanha_audit_log`.
+A tela **Configurações** continua disponível ao **candidato**, mas **sem** a lista de histórico de alterações.

@@ -10,8 +10,6 @@ import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart' show profileProvider;
 import '../../benfeitorias/providers/benfeitorias_provider.dart'
     show invalidateBenfeitoriasCaches;
-import '../../configuracoes/providers/campanha_audit_provider.dart'
-    show campanhaAuditLogProvider;
 import '../../configuracoes/providers/menu_access_provider.dart';
 import '../../dashboard/providers/dashboard_provider.dart'
     show dashboardStatsProvider;
@@ -128,7 +126,6 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
 
   void _refreshApoiadoresCampanha() {
     ref.invalidate(apoiadoresListProvider);
-    ref.invalidate(campanhaAuditLogProvider);
     ref.invalidate(dashboardStatsProvider);
     invalidateBenfeitoriasCaches(ref);
   }

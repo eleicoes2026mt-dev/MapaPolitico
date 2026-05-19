@@ -12,6 +12,8 @@ class Assessor {
   final String? complemento;
   /// 1 = mesma gestão que o candidato; 2 = assessor padrão.
   final int grauAcesso;
+  /// URL ou @ do Instagram (opcional).
+  final String? linkInstagram;
 
   const Assessor({
     required this.id,
@@ -26,6 +28,7 @@ class Assessor {
     this.numero,
     this.complemento,
     this.grauAcesso = 2,
+    this.linkInstagram,
   });
 
   factory Assessor.fromJson(Map<String, dynamic> json) {
@@ -42,6 +45,7 @@ class Assessor {
       numero: json['numero'] as String?,
       complemento: json['complemento'] as String?,
       grauAcesso: (json['grau_acesso'] as num?)?.toInt() ?? 2,
+      linkInstagram: json['link_instagram'] as String?,
     );
   }
 
@@ -58,6 +62,7 @@ class Assessor {
         'numero': numero,
         'complemento': complemento,
         'grau_acesso': grauAcesso,
+        'link_instagram': linkInstagram,
       };
 
   String get initial => nome.isNotEmpty ? nome[0].toUpperCase() : '?';

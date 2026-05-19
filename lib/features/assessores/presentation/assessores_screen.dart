@@ -17,7 +17,8 @@ import '../providers/assessores_provider.dart'
         promoverACandidato,
         messageFromException,
         setAssessorAtivo,
-        setAssessorGrauAcesso;
+        setAssessorGrauAcesso,
+        atualizarAssessorLinkInstagram;
 import '../providers/gestao_campanha_provider.dart';
 import '../../configuracoes/providers/menu_access_provider.dart';
 
@@ -247,6 +248,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
+  final _instagramController = TextEditingController();
   final _telefoneController = TextEditingController();
   bool _loading = false;
   String? _error;
@@ -256,6 +258,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
   void dispose() {
     _nomeController.dispose();
     _emailController.dispose();
+    _instagramController.dispose();
     _telefoneController.dispose();
     super.dispose();
   }
@@ -275,6 +278,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
         email: _emailController.text,
         telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
         grauAcesso: _grauAcesso,
+        linkInstagram: _instagramController.text.trim().isEmpty ? null : _instagramController.text.trim(),
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -360,6 +364,17 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
                   if (!v.contains('@')) return 'E-mail inválido';
                   return null;
                 },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _instagramController,
+                decoration: const InputDecoration(
+                  labelText: 'Instagram (opcional)',
+                  hintText: 'https://instagram.com/… ou @usuario',
+                  prefixIcon: Icon(Icons.link),
+                ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -497,6 +512,47 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
     }
   }
 
+  Future<void> _editarLinkInstagram() async {
+    final ctrl = TextEditingController(text: widget.assessor.linkInstagram ?? '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Instagram do assessor'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            hintText: 'https://instagram.com/… ou @usuario',
+          ),
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salvar')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) {
+      ctrl.dispose();
+      return;
+    }
+    try {
+      await atualizarAssessorLinkInstagram(
+        assessorId: widget.assessor.id,
+        linkInstagram: ctrl.text.trim().isEmpty ? null : ctrl.text.trim(),
+      );
+      ctrl.dispose();
+      if (!mounted) return;
+      widget.onRefresh();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Instagram atualizado.')));
+    } catch (e) {
+      ctrl.dispose();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(messageFromException(e))));
+    }
+  }
+
   Future<void> _alternarAtivo() async {
     final a = widget.assessor;
     final desativar = a.ativo;
@@ -540,6 +596,9 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final assessor = widget.assessor;
+    final uid = ref.watch(currentUserProvider)?.id;
+    final podeEditarInstagram = widget.podeGestao || (uid != null && uid == assessor.profileId);
+    final igTxt = assessor.linkInstagram?.trim() ?? '';
     final width = MediaQuery.sizeOf(context).width > 700 ? 320.0 : (MediaQuery.sizeOf(context).width > 500 ? 260.0 : double.infinity);
     return SizedBox(
       width: width,
@@ -610,7 +669,10 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                 ],
               ),
               // Contato
-              if (assessor.email != null || assessor.telefone != null) ...[
+              if (assessor.email != null ||
+                  assessor.telefone != null ||
+                  igTxt.isNotEmpty ||
+                  podeEditarInstagram) ...[
                 const SizedBox(height: 14),
                 Divider(height: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 const SizedBox(height: 12),
@@ -635,6 +697,34 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                       Icon(Icons.phone_outlined, size: 18, color: theme.colorScheme.onSurfaceVariant),
                       const SizedBox(width: 10),
                       Text(assessor.telefone!, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                if ((assessor.email != null || assessor.telefone != null) &&
+                    (igTxt.isNotEmpty || podeEditarInstagram))
+                  const SizedBox(height: 6),
+                if (igTxt.isNotEmpty || podeEditarInstagram)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.link, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          igTxt.isNotEmpty ? igTxt : 'Instagram não informado',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontStyle: igTxt.isEmpty ? FontStyle.italic : null,
+                            color: igTxt.isEmpty ? theme.colorScheme.onSurfaceVariant : null,
+                          ),
+                        ),
+                      ),
+                      if (podeEditarInstagram)
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          tooltip: 'Editar Instagram',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          onPressed: () => _editarLinkInstagram(),
+                        ),
                     ],
                   ),
               ],

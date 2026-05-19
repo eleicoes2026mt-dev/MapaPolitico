@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/mensagem.dart';
@@ -127,7 +128,7 @@ class ApoiadorHomeScreen extends ConsumerWidget {
               },
             ),
 
-            // ── Mensagens da campanha ─────────────────────────────────────
+            // ── Mensagens da pré-campanha ─────────────────────────────────────
             const SizedBox(height: 24),
             Container(
               width: double.infinity,
@@ -153,7 +154,7 @@ class ApoiadorHomeScreen extends ConsumerWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Mensagens da campanha',
+                          'Mensagens da pré-campanha',
                           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ),
@@ -302,6 +303,23 @@ class _MensagemCard extends StatelessWidget {
             if (m.corpo != null && m.corpo!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(m.corpo!, style: theme.textTheme.bodyMedium),
+            ],
+            if (m.linkUrl != null && m.linkUrl!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () async {
+                  final u = Uri.tryParse(m.linkUrl!.trim());
+                  if (u != null && await canLaunchUrl(u)) {
+                    await launchUrl(u, mode: LaunchMode.externalApplication);
+                  }
+                },
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: Text(
+                  m.linkUrl!.trim(),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ],
         ),

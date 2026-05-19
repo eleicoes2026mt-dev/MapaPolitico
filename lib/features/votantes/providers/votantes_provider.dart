@@ -117,6 +117,7 @@ class NovoVotanteParams {
     this.complemento,
     this.votosPrometidosUltimaEleicao,
     this.cadastroViaQr = false,
+    this.linkInstagram,
   });
   final String nome;
   final String? telefone;
@@ -133,6 +134,7 @@ class NovoVotanteParams {
   final int? votosPrometidosUltimaEleicao;
   /// Marca linha como cadastro público (QR / link Amigos do Gilberto).
   final bool cadastroViaQr;
+  final String? linkInstagram;
 }
 
 final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>((ref) {
@@ -217,6 +219,7 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       // Só marca na linha quando o perfil veio do link/QR (evita confundir com cadastro pelo candidato).
       if (params.cadastroViaQr) 'cadastro_via_qr': true,
       if (role == 'candidato') 'cadastrado_pelo_candidato': true,
+      'link_instagram': params.linkInstagram?.trim().isEmpty == true ? null : params.linkInstagram?.trim(),
     };
 
     await client.from('votantes').insert(insert);
@@ -239,6 +242,8 @@ class AtualizarVotanteParams {
     this.complemento,
     this.votosPrometidosUltimaEleicao,
     this.atualizarLegado = false,
+    this.linkInstagram,
+    this.atualizarLinkInstagram = false,
   });
   final String? nome;
   final String? telefone;
@@ -253,6 +258,9 @@ class AtualizarVotanteParams {
   final String? complemento;
   final int? votosPrometidosUltimaEleicao;
   final bool atualizarLegado;
+  final String? linkInstagram;
+  /// Se true, grava [linkInstagram] (string vazia → null no banco).
+  final bool atualizarLinkInstagram;
 }
 
 final atualizarVotanteProvider = Provider<Future<void> Function(String id, AtualizarVotanteParams)>((ref) {
@@ -271,6 +279,9 @@ final atualizarVotanteProvider = Provider<Future<void> Function(String id, Atual
     if (p.numero != null) row['numero'] = p.numero!.trim().isEmpty ? null : p.numero!.trim();
     if (p.complemento != null) row['complemento'] = p.complemento!.trim().isEmpty ? null : p.complemento!.trim();
     if (p.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = p.votosPrometidosUltimaEleicao;
+    if (p.atualizarLinkInstagram) {
+      row['link_instagram'] = p.linkInstagram?.trim().isEmpty == true ? null : p.linkInstagram?.trim();
+    }
     if (row.isEmpty) return;
     final updated = await client.from('votantes').update(row).eq('id', id).select('id').maybeSingle();
     if (updated == null) {

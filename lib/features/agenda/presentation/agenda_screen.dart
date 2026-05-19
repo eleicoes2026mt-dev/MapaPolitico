@@ -242,16 +242,13 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
           // ── Lista de visitas ──────────────────────────────────────────────
           visitasAsync.when(
             data: (todasVisitas) {
-              final filtradas = _diaSelecionado != null
-                  ? todasVisitas
-                      .where((v) =>
-                          v.dataReuniao.day == _diaSelecionado!.day &&
-                          v.dataReuniao.month == _diaSelecionado!.month &&
-                          v.dataReuniao.year == _diaSelecionado!.year)
-                      .toList()
-                  : todasVisitas
-                      .where((v) => podeEditar ? true : v.isFutura)
-                      .toList();
+              List<Visita> filtradas;
+              if (_diaSelecionado != null) {
+                filtradas = todasVisitas.where((v) => v.cobreDia(_diaSelecionado!)).toList()
+                  ..sort((a, b) => a.dataReuniao.compareTo(b.dataReuniao));
+              } else {
+                filtradas = todasVisitas.where((v) => podeEditar ? true : v.isFutura).toList();
+              }
 
               if (filtradas.isEmpty) {
                 return Card(
@@ -526,10 +523,18 @@ class _MiniCalendario extends StatelessWidget {
     final hoje = DateTime.now();
     final primeiroDia = DateTime(mes.year, mes.month, 1);
     final diasNoMes = DateUtils.getDaysInMonth(mes.year, mes.month);
-    final diasComVisita = <int>{
-      for (final v in visitas)
-        if (v.dataReuniao.year == mes.year && v.dataReuniao.month == mes.month) v.dataReuniao.day,
-    };
+    final diasComVisita = <int>{};
+    for (final v in visitas) {
+      var d = DateTime(v.dataReuniao.year, v.dataReuniao.month, v.dataReuniao.day);
+      final f = v.dataReuniaoFim ?? v.dataReuniao;
+      final fim = DateTime(f.year, f.month, f.day);
+      while (!d.isAfter(fim)) {
+        if (d.year == mes.year && d.month == mes.month) {
+          diasComVisita.add(d.day);
+        }
+        d = d.add(const Duration(days: 1));
+      }
+    }
 
     // Offset: weekday 1=seg, 7=dom → posição 0=seg
     final offset = (primeiroDia.weekday - 1) % 7;
@@ -645,6 +650,64 @@ class _MiniCalendario extends StatelessWidget {
 
 // ── Card de visita ────────────────────────────────────────────────────────────
 
+class _DataResumoVisita extends StatelessWidget {
+  const _DataResumoVisita({required this.visita, required this.theme});
+
+  final Visita visita;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final fim = visita.dataReuniaoFim;
+    if (fim == null) {
+      return Column(
+        children: [
+          Text(
+            DateFormat('dd').format(visita.dataReuniao),
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          Text(
+            DateFormat('MMM', 'pt_BR').format(visita.dataReuniao).toUpperCase(),
+            style: theme.textTheme.labelSmall,
+          ),
+        ],
+      );
+    }
+    final ini = visita.dataReuniao;
+    final sameMonth = ini.year == fim.year && ini.month == fim.month;
+    if (sameMonth) {
+      return Column(
+        children: [
+          Text(
+            '${DateFormat('dd').format(ini)}–${DateFormat('dd').format(fim)}',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          Text(
+            DateFormat('MMM', 'pt_BR').format(ini).toUpperCase(),
+            style: theme.textTheme.labelSmall,
+          ),
+        ],
+      );
+    }
+    return Column(
+      children: [
+        Text(
+          DateFormat('dd/MMM', 'pt_BR').format(ini).toUpperCase(),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        Text('–', style: theme.textTheme.labelSmall),
+        Text(
+          DateFormat('dd/MMM', 'pt_BR').format(fim).toUpperCase(),
+          textAlign: TextAlign.center,
+          style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+}
+
 class _VisitaCard extends StatelessWidget {
   const _VisitaCard({
     required this.visita,
@@ -695,18 +758,7 @@ class _VisitaCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Column(
-                    children: [
-                      Text(
-                        DateFormat('dd').format(visita.dataReuniao),
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        DateFormat('MMM', 'pt_BR').format(visita.dataReuniao).toUpperCase(),
-                        style: theme.textTheme.labelSmall,
-                      ),
-                    ],
-                  ),
+                  child: _DataResumoVisita(visita: visita, theme: theme),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -771,13 +823,18 @@ class _VisitaCard extends StatelessWidget {
                           ],
                         ),
                       ],
-                      if (visita.horaExibicao.isNotEmpty) ...[
+                      if (visita.horarioOuPeriodoCard.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Row(
                           children: [
                             Icon(Icons.access_time_outlined, size: 14, color: theme.colorScheme.onSurfaceVariant),
                             const SizedBox(width: 4),
-                            Text(visita.horaExibicao, style: theme.textTheme.bodySmall),
+                            Expanded(
+                              child: Text(
+                                visita.horarioOuPeriodoCard,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -1020,6 +1077,8 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
   final _localFocus = FocusNode();
   DateTime? _data;
   TimeOfDay? _horaTd;
+  DateTime? _dataFim;
+  TimeOfDay? _horaFimTd;
   String? _municipioIdSelecionado;
   double? _localLat;
   double? _localLng;
@@ -1050,6 +1109,8 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     _descricao = TextEditingController(text: v?.descricao ?? '');
     _horaTd = _parseHoraVisita(v?.hora);
     _data = v?.dataReuniao;
+    _dataFim = v?.dataReuniaoFim;
+    _horaFimTd = _parseHoraVisita(v?.horaFim);
     _municipioIdSelecionado = v?.municipioId;
     _agendaPrivada = v != null ? !v.visivelApoiadores : false;
     _pushApenasMoradoresDaCidade = false;
@@ -1129,12 +1190,50 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
       );
       return;
     }
+    var dataFim = _dataFim;
+    if (_horaFimTd != null && dataFim == null) {
+      dataFim = _data;
+    }
+    if (dataFim != null) {
+      final diCollapse = DateTime(_data!.year, _data!.month, _data!.day);
+      final dfCollapse = DateTime(dataFim.year, dataFim.month, dataFim.day);
+      if (dfCollapse == diCollapse && _horaFimTd == null) {
+        dataFim = null;
+      }
+    }
+    if (dataFim != null) {
+      final di = DateTime(_data!.year, _data!.month, _data!.day);
+      final df = DateTime(dataFim.year, dataFim.month, dataFim.day);
+      if (df.isBefore(di)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('A data de fim não pode ser anterior à data de início.')),
+        );
+        return;
+      }
+      if (df == di) {
+        final hi = _horaTd;
+        final hf = _horaFimTd;
+        if (hi != null && hf != null) {
+          final ti = hi.hour * 60 + hi.minute;
+          final tf = hf.hour * 60 + hf.minute;
+          if (tf < ti) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('No mesmo dia, o horário de fim deve ser após o de início.')),
+            );
+            return;
+          }
+        }
+      }
+    }
     setState(() => _loading = true);
     try {
+      final horaFimSalvar = dataFim != null ? _horaVisitaParaSalvar(_horaFimTd) : null;
       final params = NovaVisitaParams(
         titulo: _titulo.text.trim(),
         dataReuniao: _data!,
         hora: _horaVisitaParaSalvar(_horaTd),
+        dataReuniaoFim: dataFim,
+        horaFim: horaFimSalvar,
         localTexto: _local.text.trim().isEmpty ? null : _local.text.trim(),
         localLat: _localLat,
         localLng: _localLng,
@@ -1187,6 +1286,32 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
       },
     );
     if (picked != null) setState(() => _horaTd = picked);
+  }
+
+  Future<void> _selecionarDataFim() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dataFim ?? _data ?? DateTime.now(),
+      firstDate: _data ?? DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+      locale: const Locale('pt', 'BR'),
+    );
+    if (picked != null) setState(() => _dataFim = picked);
+  }
+
+  Future<void> _selecionarHoraFim() async {
+    if (_dataFim == null) return;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _horaFimTd ?? const TimeOfDay(hour: 17, minute: 0),
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) setState(() => _horaFimTd = picked);
   }
 
   String _rotuloCidade(List<Municipio> municipios) {
@@ -1468,7 +1593,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,
                 ),
                 const SizedBox(height: 16),
-                Text('Data e horário', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Início', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1482,7 +1607,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                           borderRadius: BorderRadius.circular(12),
                           child: InputDecorator(
                             decoration: const InputDecoration(
-                              labelText: 'Data *',
+                              labelText: 'Data de início *',
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               suffixIcon: Icon(Icons.calendar_today_outlined),
@@ -1505,7 +1630,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                           borderRadius: BorderRadius.circular(12),
                           child: InputDecorator(
                             decoration: const InputDecoration(
-                              labelText: 'Horário',
+                              labelText: 'Horário de início',
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               suffixIcon: Icon(Icons.schedule_outlined),
@@ -1525,7 +1650,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4, left: 4),
                   child: Text(
-                    'Horário opcional • seletor em formato 24 horas.',
+                    'Horário de início opcional • 24 h. Abaixo: fim do período (vários dias), também opcional.',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
@@ -1534,7 +1659,78 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: () => setState(() => _horaTd = null),
-                      child: const Text('Remover horário'),
+                      child: const Text('Remover horário de início'),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+                Text('Fim do período (opcional)', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Material(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          onTap: _selecionarDataFim,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Data de fim',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              suffixIcon: Icon(Icons.calendar_today_outlined),
+                            ),
+                            child: Text(
+                              _dataFim != null ? DateFormat('dd/MM/yyyy').format(_dataFim!) : 'Selecionar',
+                              style: theme.textTheme.bodyLarge,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Material(
+                        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InkWell(
+                          onTap: _dataFim != null ? _selecionarHoraFim : null,
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Horário de fim',
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              suffixIcon: const Icon(Icons.schedule_outlined),
+                              labelStyle: theme.textTheme.bodySmall?.copyWith(
+                                color: _dataFim == null ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5) : null,
+                              ),
+                            ),
+                            child: Text(
+                              _horaFimTd != null
+                                  ? '${_horaFimTd!.hour.toString().padLeft(2, '0')}:${_horaFimTd!.minute.toString().padLeft(2, '0')}'
+                                  : 'Selecionar',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: _dataFim == null ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45) : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_dataFim != null || _horaFimTd != null)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        _dataFim = null;
+                        _horaFimTd = null;
+                      }),
+                      child: const Text('Remover fim do período'),
                     ),
                   ),
                 const SizedBox(height: 12),

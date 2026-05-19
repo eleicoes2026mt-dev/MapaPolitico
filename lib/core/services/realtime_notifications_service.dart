@@ -8,6 +8,7 @@ import '../../features/benfeitorias/providers/benfeitorias_provider.dart';
 import '../../features/dashboard/providers/dashboard_provider.dart';
 import '../../features/mensagens/providers/mensagens_provider.dart';
 import '../../features/votantes/providers/votantes_provider.dart';
+import '../../models/mensagem.dart';
 import '../supabase/supabase_provider.dart';
 
 /// Gerencia assinaturas Realtime do Supabase: avisos in-app + atualização das listas.
@@ -129,7 +130,10 @@ class RealtimeNotificationsService {
             _invalidateMensagens();
             final data = payload.newRecord;
             final titulo = data['titulo'] as String? ?? 'Nova mensagem';
-            final corpo = data['corpo'] as String? ?? '';
+            final corpo = Mensagem.textoParaNotificacao(
+              corpo: data['corpo'] as String?,
+              linkUrl: data['link_url'] as String?,
+            );
             _onNotificacao?.call(titulo, corpo, '/#/mensagens');
           },
         )

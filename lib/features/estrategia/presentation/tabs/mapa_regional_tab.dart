@@ -141,7 +141,8 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
 
   @override
   Widget build(BuildContext context) {
-    final votosPorMunicipio = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
+    final votosTseAsync = ref.watch(votosPorMunicipioTseProvider);
+    final votosPorMunicipio = votosTseAsync.valueOrNull ?? {};
     final marcadoresCampanha = ref.watch(cidadesMarcadoresMapaCampanhaProvider);
     final regioesFundidas = ref.watch(regioesFundidasParaMapaProvider);
     final nomesCustomizados = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
@@ -199,6 +200,7 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                       embedRankingBelowMap: narrow,
                       pontosMapaEscala: mapaVisual.escalaPontos,
                       contornoMapaEscala: mapaVisual.escalaContorno,
+                      tseVotosCarregando: votosTseAsync.isLoading,
                       votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
                       cidadesMarcadoresMapa: marcadoresCampanha.isEmpty ? null : marcadoresCampanha,
                       regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,

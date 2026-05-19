@@ -2,6 +2,8 @@ class Mensagem {
   final String id;
   final String titulo;
   final String? corpo;
+  /// Link opcional (rede social, site), repassado no push e na lista.
+  final String? linkUrl;
   /// global | polo | cidade | performance | reuniao | privada_assessores | privada_apoiadores
   final String escopo;
   final String? poloId;
@@ -15,6 +17,7 @@ class Mensagem {
     required this.id,
     required this.titulo,
     this.corpo,
+    this.linkUrl,
     this.escopo = 'global',
     this.poloId,
     this.municipiosIds = const [],
@@ -30,6 +33,7 @@ class Mensagem {
       id: json['id'] as String,
       titulo: json['titulo'] as String,
       corpo: json['corpo'] as String?,
+      linkUrl: json['link_url'] as String?,
       escopo: json['escopo'] as String? ?? 'global',
       poloId: json['polo_id'] as String?,
       municipiosIds: list is List ? list.map((e) => e.toString()).toList() : [],
@@ -38,5 +42,41 @@ class Mensagem {
       enviadaEm: json['enviada_em'] != null ? DateTime.tryParse(json['enviada_em'].toString()) : null,
       criadoPor: json['criado_por'] as String?,
     );
+  }
+
+  /// Corpo da notificação push / in-app: texto + link, se houver.
+  static String textoParaNotificacao({String? corpo, String? linkUrl}) {
+    final c = corpo?.trim();
+    final l = linkUrl?.trim();
+    final parts = <String>[];
+    if (c != null && c.isNotEmpty) parts.add(c);
+    if (l != null && l.isNotEmpty) parts.add('🔗 $l');
+    if (parts.isEmpty) return 'Nova mensagem da campanha.';
+    return parts.join('\n\n');
+  }
+
+  /// Normaliza URL para gravação (aceita `instagram.com/...` sem esquema).
+  static String? normalizarLinkOpcional(String? raw) {
+    final s = raw?.trim();
+    if (s == null || s.isEmpty) return null;
+    final lower = s.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) return s;
+    if (lower.startsWith('www.')) return 'https://$s';
+    return 'https://$s';
+  }
+
+  /// Validação simples antes de salvar (opcional: [raw] vazio = válido).
+  static String? erroValidacaoLink(String? raw) {
+    final s = raw?.trim();
+    if (s == null || s.isEmpty) return null;
+    final n = normalizarLinkOpcional(s)!;
+    final u = Uri.tryParse(n);
+    if (u == null || !u.hasScheme || u.host.isEmpty) {
+      return 'Informe um link válido (ex.: instagram.com/seuperfil ou https://…)';
+    }
+    if (u.scheme != 'http' && u.scheme != 'https') {
+      return 'Use apenas links http ou https.';
+    }
+    return null;
   }
 }

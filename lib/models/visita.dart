@@ -6,6 +6,8 @@ class Visita {
     required this.titulo,
     required this.dataReuniao,
     this.hora,
+    this.dataReuniaoFim,
+    this.horaFim,
     this.localTexto,
     this.localLat,
     this.localLng,
@@ -22,6 +24,9 @@ class Visita {
   final String titulo;
   final DateTime dataReuniao;
   final String? hora; // "HH:MM"
+  /// Último dia do período; null = evento só em [dataReuniao].
+  final DateTime? dataReuniaoFim;
+  final String? horaFim;
   final String? localTexto;
   final double? localLat;
   final double? localLng;
@@ -37,16 +42,38 @@ class Visita {
   bool get agendaPrivada =>
       !visivelApoiadores && notificacaoProfileIds.isNotEmpty;
 
-  bool get isFutura => dataReuniao.isAfter(DateTime.now().subtract(const Duration(days: 1)));
+  DateTime get _dataInicioDia =>
+      DateTime(dataReuniao.year, dataReuniao.month, dataReuniao.day);
+
+  DateTime get _dataFimDia {
+    final f = dataReuniaoFim ?? dataReuniao;
+    return DateTime(f.year, f.month, f.day);
+  }
+
+  /// O dia [d] (qualquer hora) está entre o início e o fim do período (inclusive).
+  bool cobreDia(DateTime d) {
+    final dia = DateTime(d.year, d.month, d.day);
+    return !dia.isBefore(_dataInicioDia) && !dia.isAfter(_dataFimDia);
+  }
+
+  bool get isFutura {
+    final cutoff = DateTime.now().subtract(const Duration(days: 1));
+    final limite = DateTime(cutoff.year, cutoff.month, cutoff.day);
+    return !_dataFimDia.isBefore(limite);
+  }
+
   bool get isHoje {
     final hoje = DateTime.now();
-    return dataReuniao.year == hoje.year &&
-        dataReuniao.month == hoje.month &&
-        dataReuniao.day == hoje.day;
+    final dia = DateTime(hoje.year, hoje.month, hoje.day);
+    return !dia.isBefore(_dataInicioDia) && !dia.isAfter(_dataFimDia);
   }
 
   String get dataFormatada => DateFormat('dd/MM/yyyy').format(dataReuniao);
   String get horaFormatada => hora ?? '';
+
+  String get dataFimFormatada => dataReuniaoFim != null
+      ? DateFormat('dd/MM/yyyy').format(dataReuniaoFim!)
+      : '';
 
   /// Exibe hora em HH:mm (remove segundos vindos do banco, ex.: 09:00:00).
   String get horaExibicao {
@@ -62,8 +89,44 @@ class Visita {
     return hora!.trim();
   }
 
-  String get dataHoraFormatada =>
+  /// Exibe hora de término em HH:mm.
+  String get horaFimExibicao {
+    if (horaFim == null || horaFim!.trim().isEmpty) return '';
+    final p = horaFim!.trim().split(':');
+    if (p.length >= 2) {
+      final h = int.tryParse(p[0].trim());
+      final m = int.tryParse(p[1].trim());
+      if (h != null && m != null) {
+        return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+      }
+    }
+    return horaFim!.trim();
+  }
+
+  String get _inicioTexto =>
       horaExibicao.isNotEmpty ? '$dataFormatada às $horaExibicao' : dataFormatada;
+
+  String get _fimTexto {
+    if (dataReuniaoFim == null) return '';
+    if (horaFimExibicao.isNotEmpty) {
+      return '${DateFormat('dd/MM/yyyy').format(dataReuniaoFim!)} às $horaFimExibicao';
+    }
+    return DateFormat('dd/MM/yyyy').format(dataReuniaoFim!);
+  }
+
+  /// Período completo (início e, se houver, fim).
+  String get dataHoraFormatada =>
+      dataReuniaoFim != null ? '$_inicioTexto a $_fimTexto' : _inicioTexto;
+
+  /// Linha compacta para o card: horas no mesmo dia ou texto completo em períodos longos.
+  String get horarioOuPeriodoCard {
+    if (dataReuniaoFim == null) return horaExibicao;
+    final mesmoDia = _dataInicioDia == _dataFimDia;
+    if (mesmoDia && horaExibicao.isNotEmpty && horaFimExibicao.isNotEmpty) {
+      return '$horaExibicao – $horaFimExibicao';
+    }
+    return dataHoraFormatada;
+  }
 
   factory Visita.fromJson(Map<String, dynamic> json) {
     final mun = json['municipios'];
@@ -73,6 +136,10 @@ class Visita {
       titulo: json['titulo'] as String,
       dataReuniao: DateTime.parse(json['data_reuniao'] as String),
       hora: json['hora'] as String?,
+      dataReuniaoFim: json['data_reuniao_fim'] != null
+          ? DateTime.tryParse(json['data_reuniao_fim'].toString())
+          : null,
+      horaFim: json['hora_fim'] as String?,
       localTexto: json['local_texto'] as String?,
       localLat: (json['local_lat'] as num?)?.toDouble(),
       localLng: (json['local_lng'] as num?)?.toDouble(),
@@ -100,6 +167,9 @@ class Visita {
         'titulo': titulo,
         'data_reuniao': dataReuniao.toIso8601String().split('T').first,
         if (hora != null && hora!.isNotEmpty) 'hora': hora,
+        if (dataReuniaoFim != null)
+          'data_reuniao_fim': dataReuniaoFim!.toIso8601String().split('T').first,
+        if (horaFim != null && horaFim!.isNotEmpty) 'hora_fim': horaFim,
         if (localTexto != null && localTexto!.isNotEmpty) 'local_texto': localTexto,
         if (localLat != null) 'local_lat': localLat,
         if (localLng != null) 'local_lng': localLng,

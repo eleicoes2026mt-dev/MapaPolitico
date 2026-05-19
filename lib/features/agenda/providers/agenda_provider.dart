@@ -50,6 +50,19 @@ List<Map<String, dynamic>> _mergeReunioesPorId(List<dynamic> a, List<dynamic> b)
   return map.values.toList();
 }
 
+/// Visita pontual ainda não expirada OU visita com término em [dataMinimaDia] ou depois.
+String _filtroReuniaoAindaEmVigor(String dataMinimaDia) =>
+    'and(data_reuniao_fim.is.null,data_reuniao.gte.$dataMinimaDia),data_reuniao_fim.gte.$dataMinimaDia';
+
+String _pushBodyPeriodo(NovaVisitaParams p) => Visita(
+      id: '00000000-0000-0000-0000-000000000000',
+      titulo: ' ',
+      dataReuniao: p.dataReuniao,
+      hora: p.hora,
+      dataReuniaoFim: p.dataReuniaoFim,
+      horaFim: p.horaFim,
+    ).dataHoraFormatada;
+
 /// Todas as visitas futuras (candidato + assessor + apoiador com regras de visibilidade).
 final visitasProvider = FutureProvider<List<Visita>>((ref) async {
   final profile = await ref.read(profileProvider.future);
@@ -61,13 +74,13 @@ final visitasProvider = FutureProvider<List<Visita>>((ref) async {
         .from('reunioes')
         .select('*, municipios(nome)')
         .eq('visivel_apoiadores', true)
-        .gte('data_reuniao', hoje)
+        .or(_filtroReuniaoAindaEmVigor(hoje))
         .order('data_reuniao');
     final res2 = await supabase
         .from('reunioes')
         .select('*, municipios(nome)')
         .contains('notificacao_profile_ids', [pid])
-        .gte('data_reuniao', hoje)
+        .or(_filtroReuniaoAindaEmVigor(hoje))
         .order('data_reuniao');
     final merged = _mergeReunioesPorId(res1 as List, res2 as List);
     merged.sort((a, b) => a['data_reuniao'].toString().compareTo(b['data_reuniao'].toString()));
@@ -77,7 +90,7 @@ final visitasProvider = FutureProvider<List<Visita>>((ref) async {
   final res = await supabase
       .from('reunioes')
       .select('*, municipios(nome)')
-      .gte('data_reuniao', hoje)
+      .or(_filtroReuniaoAindaEmVigor(hoje))
       .order('data_reuniao');
   return (res as List).map((e) => Visita.fromJson(e as Map<String, dynamic>)).toList();
 });
@@ -106,29 +119,23 @@ final proximaVisitaMinhaCidadeProvider = FutureProvider<Visita?>((ref) async {
       .select('*, municipios(nome)')
       .eq('municipio_id', municipioId)
       .eq('visivel_apoiadores', true)
-      .gte('data_reuniao', hoje)
+      .or(_filtroReuniaoAindaEmVigor(hoje))
       .order('data_reuniao')
-      .limit(1)
-      .maybeSingle();
+      .limit(15);
 
   final res2 = await supabase
       .from('reunioes')
       .select('*, municipios(nome)')
       .eq('municipio_id', municipioId)
       .contains('notificacao_profile_ids', [profile.id])
-      .gte('data_reuniao', hoje)
+      .or(_filtroReuniaoAindaEmVigor(hoje))
       .order('data_reuniao')
-      .limit(1)
-      .maybeSingle();
+      .limit(15);
 
-  if (res1 == null && res2 == null) return null;
-  if (res1 == null) return Visita.fromJson(Map<String, dynamic>.from(res2 as Map));
-  if (res2 == null) return Visita.fromJson(Map<String, dynamic>.from(res1 as Map));
-  final v1 = Visita.fromJson(Map<String, dynamic>.from(res1 as Map));
-  final v2 = Visita.fromJson(Map<String, dynamic>.from(res2 as Map));
-  if (v1.dataReuniao.isBefore(v2.dataReuniao)) return v1;
-  if (v2.dataReuniao.isBefore(v1.dataReuniao)) return v2;
-  return v1;
+  final merged = _mergeReunioesPorId(res1 as List, res2 as List);
+  if (merged.isEmpty) return null;
+  merged.sort((a, b) => a['data_reuniao'].toString().compareTo(b['data_reuniao'].toString()));
+  return Visita.fromJson(merged.first);
 });
 
 /// Primeira visita futura visível ainda sem confirmação de presença (apoiador: só da cidade).
@@ -150,7 +157,7 @@ final visitaPendenteConfirmacaoProvider = FutureProvider<Visita?>((ref) async {
         .select('*, municipios(nome)')
         .eq('municipio_id', mid)
         .eq('visivel_apoiadores', true)
-        .gte('data_reuniao', hoje)
+        .or(_filtroReuniaoAindaEmVigor(hoje))
         .order('data_reuniao')
         .limit(25);
     final rows2 = await supabase
@@ -158,7 +165,7 @@ final visitaPendenteConfirmacaoProvider = FutureProvider<Visita?>((ref) async {
         .select('*, municipios(nome)')
         .eq('municipio_id', mid)
         .contains('notificacao_profile_ids', [profile.id])
-        .gte('data_reuniao', hoje)
+        .or(_filtroReuniaoAindaEmVigor(hoje))
         .order('data_reuniao')
         .limit(25);
     rows = _mergeReunioesPorId(rows1 as List, rows2 as List);
@@ -168,14 +175,14 @@ final visitaPendenteConfirmacaoProvider = FutureProvider<Visita?>((ref) async {
         .from('reunioes')
         .select('*, municipios(nome)')
         .eq('visivel_apoiadores', true)
-        .gte('data_reuniao', hoje)
+        .or(_filtroReuniaoAindaEmVigor(hoje))
         .order('data_reuniao')
         .limit(25);
     final rows2 = await supabase
         .from('reunioes')
         .select('*, municipios(nome)')
         .contains('notificacao_profile_ids', [profile.id])
-        .gte('data_reuniao', hoje)
+        .or(_filtroReuniaoAindaEmVigor(hoje))
         .order('data_reuniao')
         .limit(25);
     rows = _mergeReunioesPorId(rows1 as List, rows2 as List);
@@ -202,6 +209,8 @@ class NovaVisitaParams {
     required this.titulo,
     required this.dataReuniao,
     this.hora,
+    this.dataReuniaoFim,
+    this.horaFim,
     this.localTexto,
     this.localLat,
     this.localLng,
@@ -216,6 +225,8 @@ class NovaVisitaParams {
   final String titulo;
   final DateTime dataReuniao;
   final String? hora;
+  final DateTime? dataReuniaoFim;
+  final String? horaFim;
   final String? localTexto;
   final double? localLat;
   final double? localLng;
@@ -233,6 +244,9 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
       'titulo': p.titulo.trim(),
       if (p.hora != null && p.hora!.isNotEmpty) 'hora': p.hora,
       'data_reuniao': p.dataReuniao.toIso8601String().split('T').first,
+      if (p.dataReuniaoFim != null)
+        'data_reuniao_fim': p.dataReuniaoFim!.toIso8601String().split('T').first,
+      if (p.horaFim != null && p.horaFim!.isNotEmpty) 'hora_fim': p.horaFim,
       if (p.localTexto != null && p.localTexto!.isNotEmpty) 'local_texto': p.localTexto!.trim(),
       'local_lat': p.localLat,
       'local_lng': p.localLng,
@@ -249,10 +263,10 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
         await supabase.auth.refreshSession();
         final titulo = res['titulo'] as String? ?? p.titulo;
         final local = res['local_texto'] as String? ?? p.localTexto ?? '';
-        final dataStr = p.dataReuniao.toIso8601String().split('T').first;
+        final periodo = _pushBodyPeriodo(p);
         final body = <String, dynamic>{
           'title': '📅 Nova visita agendada',
-          'body': '$titulo — $dataStr${local.isNotEmpty ? " • $local" : ""}',
+          'body': '$titulo — $periodo${local.isNotEmpty ? " • $local" : ""}',
           'url': '/#/agenda',
           'tag': 'visita-${res['id']}',
         };
@@ -290,6 +304,8 @@ final atualizarVisitaProvider =
       'titulo': p.titulo.trim(),
       'hora': p.hora?.isNotEmpty == true ? p.hora : null,
       'data_reuniao': p.dataReuniao.toIso8601String().split('T').first,
+      'data_reuniao_fim': p.dataReuniaoFim?.toIso8601String().split('T').first,
+      'hora_fim': p.horaFim?.isNotEmpty == true ? p.horaFim : null,
       'local_texto': p.localTexto?.trim().isEmpty == true ? null : p.localTexto?.trim(),
       'local_lat': p.localLat,
       'local_lng': p.localLng,

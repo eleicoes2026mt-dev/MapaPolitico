@@ -33,6 +33,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
   late final TextEditingController _logradouro;
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
+  late final TextEditingController _linkInstagram;
   final _passwordController = TextEditingController();
   final _confirmarPasswordController = TextEditingController();
 
@@ -56,6 +57,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
     _logradouro = TextEditingController();
     _numero = TextEditingController();
     _complemento = TextEditingController();
+    _linkInstagram = TextEditingController();
   }
 
   @override
@@ -68,6 +70,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
     _logradouro.dispose();
     _numero.dispose();
     _complemento.dispose();
+    _linkInstagram.dispose();
     _passwordController.dispose();
     _confirmarPasswordController.dispose();
     super.dispose();
@@ -126,7 +129,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
             title: const Text('Cadastro recebido'),
             content: const Text(
               'Abra o link que enviamos ao seu e-mail para confirmar a conta. '
-              'Sua cidade e dados na campanha já foram registrados.',
+              'Sua cidade e dados na pré-campanha já foram registrados.',
             ),
             actions: [
               FilledButton(
@@ -174,6 +177,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
             'p_logradouro': _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
             'p_numero': _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             'p_complemento': _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+            'p_link_instagram': _linkInstagram.text.trim().isEmpty ? null : _linkInstagram.text.trim(),
           },
         );
       } on PostgrestException catch (e) {
@@ -198,6 +202,8 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
                 logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
                 numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
                 complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+                linkInstagram: _linkInstagram.text.trim().isEmpty ? null : _linkInstagram.text.trim(),
+                atualizarLinkInstagram: true,
               ));
         }
       }
@@ -226,7 +232,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
           ),
           title: const Text('Cadastro concluído'),
           content: const Text(
-            'Sua conta e seus dados na campanha foram registrados. Na próxima tela, entre com o mesmo e-mail e senha para acessar o painel.',
+            'Sua conta e seus dados na pré-campanha foram registrados. Na próxima tela, entre com o mesmo e-mail e senha para acessar o painel.',
           ),
           actions: [
             FilledButton(
@@ -345,6 +351,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
                                 telefone: _telefone,
                                 email: _emailController,
                                 qtd: _qtd,
+                                linkInstagram: _linkInstagram,
                                 cep: _cep,
                                 logradouro: _logradouro,
                                 numero: _numero,
@@ -378,7 +385,7 @@ class _CadastroAmigosGilbertoScreenState extends ConsumerState<CadastroAmigosGil
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Text(
-                                            '$kAmigosGilbertoLabel — cidade e endereço alimentam o mapa e a estimativa da campanha.',
+                                            '$kAmigosGilbertoLabel — cidade e endereço alimentam o mapa e a estimativa da pré-campanha.',
                                             style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
                                           ),
                                         ),

@@ -336,7 +336,7 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
           _NotifBenefit(icon: Icons.event, text: 'Visitas do deputado à sua cidade'),
           const SizedBox(height: 8),
           _NotifBenefit(icon: Icons.cake_outlined, text: 'Alertas de aniversariantes'),
-          _NotifBenefit(icon: Icons.chat_bubble_outline, text: 'Mensagens da campanha'),
+          _NotifBenefit(icon: Icons.chat_bubble_outline, text: 'Mensagens da pré-campanha'),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,

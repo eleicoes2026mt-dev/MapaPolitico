@@ -172,6 +172,7 @@ Future<ConvidarAssessorResult> convidarAssessor({
   String? telefone,
   String? municipioId,
   int grauAcesso = 2,
+  String? linkInstagram,
 }) async {
   // Garantir sessão válida (evita 401 Invalid JWT por token expirado)
   await supabase.auth.refreshSession();
@@ -183,6 +184,7 @@ Future<ConvidarAssessorResult> convidarAssessor({
     'grau_acesso': g,
     if (telefone != null && telefone.isNotEmpty) 'telefone': telefone.trim(),
     if (municipioId != null && municipioId.isNotEmpty) 'municipio_id': municipioId,
+    if (linkInstagram != null && linkInstagram.trim().isNotEmpty) 'link_instagram': linkInstagram.trim(),
   };
   // Abre direto na tela de definir senha após o clique no e-mail (path URL + Redirect URLs no Supabase).
   body['redirect_to'] = EnvConfig.webInviteRedirectTo;
@@ -265,6 +267,21 @@ Future<void> setAssessorGrauAcesso({required String assessorId, required int gra
   final g = grauAcesso == 1 ? 1 : 2;
   try {
     await supabase.from('assessores').update({'grau_acesso': g}).eq('id', assessorId);
+  } on PostgrestException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}
+
+/// Atualiza link do Instagram (gestor ou próprio assessor, conforme RLS).
+Future<void> atualizarAssessorLinkInstagram({
+  required String assessorId,
+  String? linkInstagram,
+}) async {
+  await supabase.auth.refreshSession();
+  try {
+    await supabase.from('assessores').update({
+      'link_instagram': linkInstagram?.trim().isEmpty == true ? null : linkInstagram?.trim(),
+    }).eq('id', assessorId);
   } on PostgrestException catch (e) {
     throw Exception(messageFromException(e));
   }

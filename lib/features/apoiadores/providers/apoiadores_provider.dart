@@ -152,6 +152,7 @@ class NovoApoiadorParams {
     this.numero,
     this.complemento,
     this.origemLugarTexto,
+    this.linkInstagram,
   });
   final String nome;
   final String cidadeNome;
@@ -182,6 +183,7 @@ class NovoApoiadorParams {
   final String? complemento;
   /// Texto livre; o servidor reutiliza lugar já cadastrado ou cria entrada em `apoiador_origem_lugares`.
   final String? origemLugarTexto;
+  final String? linkInstagram;
 }
 
 final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)>((ref) {
@@ -266,6 +268,7 @@ final criarApoiadorProvider = Provider<Future<void> Function(NovoApoiadorParams)
       'votos_funcionarios': params.votosFuncionarios,
       'votos_prometidos_ultima_eleicao': params.votosPrometidosUltimaEleicao,
       if (origemLugarIdResolved != null) 'origem_lugar_id': origemLugarIdResolved,
+      'link_instagram': params.linkInstagram?.trim().isEmpty == true ? null : params.linkInstagram?.trim(),
     };
 
     final res = await client.from('apoiadores').insert(row).select('id').maybeSingle();
@@ -321,6 +324,8 @@ class AtualizarApoiadorParams {
     this.atualizarDataNascimento = false,
     this.origemLugarTexto,
     this.atualizarOrigemLugar = false,
+    this.linkInstagram,
+    this.atualizarLinkInstagram = false,
   });
   final String? nome;
   final String? cidadeNome;
@@ -356,6 +361,8 @@ class AtualizarApoiadorParams {
   /// Procedência / lugar (catálogo). Use com [atualizarOrigemLugar].
   final String? origemLugarTexto;
   final bool atualizarOrigemLugar;
+  final String? linkInstagram;
+  final bool atualizarLinkInstagram;
 }
 
 final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiadorId, AtualizarApoiadorParams params)>((ref) {
@@ -387,6 +394,9 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
         row['origem_lugar_id'] = await resolveOrInsertOrigemLugarId(ref, aid, txt);
       }
       ref.invalidate(apoiadorOrigemLugaresProvider);
+    }
+    if (params.atualizarLinkInstagram) {
+      row['link_instagram'] = params.linkInstagram?.trim().isEmpty == true ? null : params.linkInstagram?.trim();
     }
     if (params.atualizarEndereco) {
       row['cep'] = params.cep?.trim().isEmpty == true ? null : params.cep?.trim();

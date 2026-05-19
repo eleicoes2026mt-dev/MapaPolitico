@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/utils/whatsapp_launch.dart';
@@ -213,7 +214,8 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
                           Text('Nenhuma mensagem', style: theme.textTheme.titleMedium),
                           const SizedBox(height: 8),
                           Text(
-                            'Crie mensagens globais, por polo, por cidade (apoiadores e $kAmigosGilbertoLabel) ou privadas para assessores/apoiadores.',
+                            'Crie mensagens globais, por polo, por cidade (apoiadores e $kAmigosGilbertoLabel) ou privadas para assessores/apoiadores. '
+                            'Use o campo de link para divulgar redes (ex.: Instagram) — o endereço vai na notificação e na lista.',
                             style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                             textAlign: TextAlign.center,
                           ),
@@ -359,6 +361,37 @@ class _MensagemCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(m.corpo!, style: theme.textTheme.bodyMedium),
             ],
+            if (m.linkUrl != null && m.linkUrl!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final u = Uri.tryParse(m.linkUrl!.trim());
+                  if (u != null && await canLaunchUrl(u)) {
+                    await launchUrl(u, mode: LaunchMode.externalApplication);
+                  }
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.link_rounded, size: 18, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          m.linkUrl!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.primary,
+                            decoration: TextDecoration.underline,
+                            decorationColor: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [
@@ -411,6 +444,7 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   final _formKey = GlobalKey<FormState>();
   final _titulo = TextEditingController();
   final _corpo = TextEditingController();
+  final _link = TextEditingController();
   String _escopo = 'global';
   String? _poloId;
   String? _municipioCidadeId;
@@ -421,13 +455,14 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   void dispose() {
     _titulo.dispose();
     _corpo.dispose();
+    _link.dispose();
     super.dispose();
   }
 
   String _subtituloPush() {
     switch (_escopo) {
       case 'global':
-        return 'Envia para todos com push ativado (broadcast).';
+        return 'Envia para todos com push ativado (broadcast). Texto e link opcional vão no corpo da notificação.';
       case 'polo':
         return 'Envia para todos com push (broadcast). Refine o polo abaixo.';
       case 'cidade':
@@ -457,6 +492,7 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
         NovaMensagemParams(
           titulo: _titulo.text.trim(),
           corpo: _corpo.text.trim().isEmpty ? null : _corpo.text.trim(),
+          linkUrl: _link.text.trim().isEmpty ? null : _link.text.trim(),
           escopo: _escopo,
           poloId: _escopo == 'polo' ? _poloId : null,
           municipiosIds: _escopo == 'cidade' && _municipioCidadeId != null ? [_municipioCidadeId!] : const [],
@@ -514,6 +550,20 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                   ),
                   maxLines: 4,
                   textCapitalization: TextCapitalization.sentences,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _link,
+                  decoration: const InputDecoration(
+                    labelText: 'Link para divulgar (opcional)',
+                    hintText: 'Ex.: instagram.com/seuperfil ou https://…',
+                    prefixIcon: Icon(Icons.link_rounded),
+                    alignLabelWithHint: true,
+                  ),
+                  keyboardType: TextInputType.url,
+                  textCapitalization: TextCapitalization.none,
+                  autocorrect: false,
+                  validator: Mensagem.erroValidacaoLink,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(

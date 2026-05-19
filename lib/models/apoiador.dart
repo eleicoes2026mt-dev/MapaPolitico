@@ -45,6 +45,8 @@ class Apoiador {
   final String? origemLugarId;
   /// Nome do lugar (join `origem_lugar` ou cache).
   final String? origemLugarNome;
+  /// URL ou @ do Instagram (opcional).
+  final String? linkInstagram;
 
   const Apoiador({
     required this.id,
@@ -87,6 +89,7 @@ class Apoiador {
     this.bandeiraVisualJson,
     this.origemLugarId,
     this.origemLugarNome,
+    this.linkInstagram,
   });
 
   factory Apoiador.fromJson(Map<String, dynamic> json) {
@@ -141,6 +144,7 @@ class Apoiador {
           : null,
       origemLugarId: json['origem_lugar_id'] as String?,
       origemLugarNome: origemNome,
+      linkInstagram: json['link_instagram'] as String?,
     );
   }
 
@@ -184,6 +188,7 @@ class Apoiador {
         'bandeira_emoji': bandeiraEmoji,
         'bandeira_visual': bandeiraVisualJson,
         'origem_lugar_id': origemLugarId,
+        'link_instagram': linkInstagram,
       };
 
   /// Configuração da bandeira: JSON novo ou campos legados.

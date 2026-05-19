@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/candidato_raiz_provider.dart';
 import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../data/tse_storage.dart';
@@ -114,12 +115,34 @@ final votosPorMunicipioTseSupabaseProvider = FutureProvider.family<Map<String, i
   return map;
 });
 
+/// sq_candidato TSE usado no mapa / ranking: perfil do deputado; assessor grau 1 via raiz da campanha.
+final candidatoSqTse2022Provider = FutureProvider<int?>((ref) async {
+  final p = ref.watch(profileProvider).valueOrNull;
+  if (p == null) return null;
+  if (p.role == 'candidato') return p.sqCandidatoTse2022;
+  if (p.role == 'assessor') {
+    final raiz = await ref.watch(candidatoRaizCampanhaProfileIdProvider.future);
+    if (raiz == null || raiz.isEmpty) return null;
+    try {
+      final row = await supabase
+          .from('profiles')
+          .select('sq_candidato_tse_2022')
+          .eq('id', raiz)
+          .maybeSingle();
+      return (row?['sq_candidato_tse_2022'] as num?)?.toInt();
+    } catch (_) {
+      return null;
+    }
+  }
+  return p.sqCandidatoTse2022;
+});
+
 /// Locais de votação (nome, endereço e quantidade de votos) por município via RPC.
 /// Usa get_locais_votacao_por_municipio (agregação no banco + índice) para evitar timeout.
 /// Filtra pelo mesmo candidato (sq_candidato_tse_2022) do perfil, para bater com o ranking e o mapa.
 final locaisVotacaoPorMunicipioProvider = FutureProvider.family<List<({String nome, String? endereco, int votos})>, String>((ref, nomeMunicipio) async {
   if (nomeMunicipio.trim().isEmpty) return [];
-  final sq = ref.watch(profileProvider).valueOrNull?.sqCandidatoTse2022;
+  final sq = await ref.watch(candidatoSqTse2022Provider.future);
   final res = await supabase.rpc(
     'get_locais_votacao_por_municipio',
     params: {
@@ -138,24 +161,16 @@ final locaisVotacaoPorMunicipioProvider = FutureProvider.family<List<({String no
   }).where((e) => e.nome.isNotEmpty).toList();
 });
 
-/// Votos por município (NM_MUNICIPIO) para exibir no mapa.
-/// Usa votacao_secao (Supabase) quando o perfil tem sq_candidato_tse_2022; senão usa CSV local.
-final votosPorMunicipioTseProvider = Provider<AsyncValue<Map<String, int>>>((ref) {
-  final profileAsync = ref.watch(profileProvider);
-  final sq = profileAsync.valueOrNull?.sqCandidatoTse2022;
-  if (sq != null) {
-    final supabaseAsync = ref.watch(votosPorMunicipioTseSupabaseProvider(sq));
-    return supabaseAsync;
-  }
+Map<String, int> _votosTseFromCsvMap(Ref ref) {
   final rowsAsync = ref.watch(tseRowsProvider);
   final selectedAsync = ref.watch(tseNmVotavelSelectedProvider);
   if (rowsAsync is! AsyncData<List<Map<String, dynamic>>> ||
       selectedAsync is! AsyncData<String?>) {
-    return const AsyncValue.data({});
+    return {};
   }
   final rows = rowsAsync.value;
   final selected = selectedAsync.value;
-  if (selected == null || selected.isEmpty) return const AsyncValue.data({});
+  if (selected == null || selected.isEmpty) return {};
   final map = <String, int>{};
   for (final row in rows) {
     if (_getString(row, 'NM_VOTAVEL')?.trim() != selected.trim()) continue;
@@ -164,7 +179,18 @@ final votosPorMunicipioTseProvider = Provider<AsyncValue<Map<String, int>>>((ref
     final votos = _getInt(row, 'QT_VOTOS') ?? 0;
     map[municipio] = (map[municipio] ?? 0) + votos;
   }
-  return AsyncValue.data(map);
+  return map;
+}
+
+/// Votos por município (NM_MUNICIPIO) para exibir no mapa.
+/// [FutureProvider] linear: evita `ref.watch` condicional (assessor grau 1 não recebia TSE no ranking).
+/// Usa Supabase quando há sq do candidato (deputado ou raiz para assessor); senão CSV local.
+final votosPorMunicipioTseProvider = FutureProvider<Map<String, int>>((ref) async {
+  final sq = await ref.watch(candidatoSqTse2022Provider.future);
+  if (sq != null) {
+    return ref.read(votosPorMunicipioTseSupabaseProvider(sq).future);
+  }
+  return _votosTseFromCsvMap(ref);
 });
 
 String? _getString(Map<String, dynamic> row, String key) {

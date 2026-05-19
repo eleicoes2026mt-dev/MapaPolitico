@@ -20,6 +20,20 @@ import 'bandeira_marcador_widget.dart';
 BuildContext _dialogContextForShell(BuildContext context) =>
     shellNavigatorKey.currentContext ?? context;
 
+/// Reparte o espaço vertical sobrando entre os itens (margem extra por item), para não ficar faixa vazia no fundo.
+double _rankingListaSlackExtraPorItem({
+  required double viewportHeight,
+  required int itemCount,
+  required double approxItemHeight,
+  double baseVerticalMargin = 3.0,
+}) {
+  if (itemCount <= 0 || !viewportHeight.isFinite || viewportHeight <= 0) return 0;
+  final totalBase = itemCount * (approxItemHeight + 2 * baseVerticalMargin);
+  final slack = viewportHeight - totalBase;
+  if (slack <= 0) return 0;
+  return slack / (2 * itemCount);
+}
+
 /// Mapa para **web**: OpenStreetMap + regiões de MT (flutter_map).
 /// Mesma funcionalidade de regiões, toque e tooltip que no app mobile.
 class MapaRegionalWidget extends StatefulWidget {
@@ -54,6 +68,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.painelRankingModoNotifier,
     this.pontosMapaEscala = 1.0,
     this.contornoMapaEscala = 1.0,
+    this.tseVotosCarregando = false,
   });
 
   final double height;
@@ -101,6 +116,9 @@ class MapaRegionalWidget extends StatefulWidget {
 
   /// Multiplicador da espessura das linhas de contorno (MT, regiões). 1.0 = padrão.
   final double contornoMapaEscala;
+
+  /// Enquanto os votos TSE por município ainda carregam (ex.: assessor a resolver raiz do candidato).
+  final bool tseVotosCarregando;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetWebState();
@@ -1204,6 +1222,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     required int totalVotosTseGeral,
     required int totalEstimativaGeral,
     bool hideDuplicateHeading = false,
+    bool tseVotosCarregando = false,
   }) {
     Widget buildPanel(String modo) {
       return _RankingPanel(
@@ -1214,6 +1233,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         onSalvarMetas: widget.onSalvarMetas,
         totalVotosTseGeral: totalVotosTseGeral,
         totalEstimativaGeral: totalEstimativaGeral,
+        tseVotosCarregando: tseVotosCarregando,
         benfeitoriasRanking: widget.benfeitoriasRanking,
         onCityTap: widget.onCityTap,
         locaisVotacaoContent: widget.locaisVotacaoContent,
@@ -1330,6 +1350,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               child: _rankingPanelWidget(
                 compact: true,
                 hideDuplicateHeading: true,
+                tseVotosCarregando: widget.tseVotosCarregando,
                 ranking: ranking,
                 rankingMetas: rankingMetas,
                 metasMap: metasMap,
@@ -1360,6 +1381,7 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           );
           Widget buildRankingPanel({required bool compact}) => _rankingPanelWidget(
             compact: compact,
+            tseVotosCarregando: widget.tseVotosCarregando,
             ranking: ranking,
             rankingMetas: rankingMetas,
             metasMap: metasMap,
@@ -1419,8 +1441,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               if (_rankingVisivel)
                 narrow
                     ? Positioned(
-                        left: 8,
-                        right: 8,
+                        left: 4,
+                        right: 4,
                         bottom: 8,
                         height: bottomPanelH,
                         child: Material(
@@ -1461,6 +1483,7 @@ class _RankingPanel extends StatefulWidget {
     this.onSalvarMetas,
     required this.totalVotosTseGeral,
     required this.totalEstimativaGeral,
+    this.tseVotosCarregando = false,
     this.benfeitoriasRanking,
     this.onCityTap,
     this.locaisVotacaoContent,
@@ -1488,6 +1511,7 @@ class _RankingPanel extends StatefulWidget {
   final Future<void> Function(Map<String, int> metas)? onSalvarMetas;
   final int totalVotosTseGeral;
   final int totalEstimativaGeral;
+  final bool tseVotosCarregando;
   final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
   final void Function(String nomeMunicipio)? onCityTap;
   final Widget? locaisVotacaoContent;
@@ -1696,6 +1720,17 @@ class _RankingPanelState extends State<_RankingPanel> {
       totalAtingidoSoma += r.totalEstimativa;
     }
 
+    /// Com «locais de votação» abertos: ranking 2 : locais 3. Caso contrário a lista ocupa o espaço restante (cabeçalho = altura intrínseca).
+    final listaAreaFlex = showLocais ? 2 : 1;
+
+    final compactOverlay = widget.layoutCompact && !widget.hideDuplicateHeading;
+    final padCabecalho = EdgeInsets.fromLTRB(
+      compactOverlay ? 10 : (widget.hideDuplicateHeading ? 12 : 14),
+      compactOverlay ? 8 : (widget.hideDuplicateHeading ? 8 : 12),
+      compactOverlay ? 10 : (widget.hideDuplicateHeading ? 12 : 14),
+      compactOverlay ? 6 : (widget.hideDuplicateHeading ? 8 : 10),
+    );
+
     return Material(
       elevation: widget.hideDuplicateHeading ? 0 : 4,
       borderRadius: widget.hideDuplicateHeading ? null : BorderRadius.circular(12),
@@ -1707,29 +1742,18 @@ class _RankingPanelState extends State<_RankingPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Cabeçalho: com [hideDuplicateHeading] o cabeçalho precisa de ~2/3 da área do painel (abas+KPI sem cortar).
-              Flexible(
-                flex: widget.hideDuplicateHeading ? 10 : 1,
-                child: SingleChildScrollView(
-                  clipBehavior: Clip.hardEdge,
-                  physics: widget.hideDuplicateHeading
-                      ? const NeverScrollableScrollPhysics()
-                      : const ClampingScrollPhysics(),
-                  child: Container(
-                    padding: EdgeInsets.fromLTRB(
-                      widget.hideDuplicateHeading ? 12 : 14,
-                      widget.hideDuplicateHeading ? 8 : 12,
-                      widget.hideDuplicateHeading ? 12 : 14,
-                      widget.hideDuplicateHeading ? 8 : 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer.withValues(alpha: 0.35),
-                      border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+              // ── Cabeçalho: altura = conteúdo (abas, KPIs); largura total. Sem scroll = sem barra lateral.
+              Container(
+                width: double.infinity,
+                padding: padCabecalho,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.35),
+                  border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     if (!widget.hideDuplicateHeading)
                       Row(
                         children: [
@@ -1770,13 +1794,16 @@ class _RankingPanelState extends State<_RankingPanel> {
                           ),
                         ),
                       ),
-                    if (!widget.hideDuplicateHeading) const SizedBox(height: 8) else if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas) const SizedBox(height: 4),
+                    if (!widget.hideDuplicateHeading)
+                      SizedBox(height: compactOverlay ? 6 : 8)
+                    else if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas)
+                      const SizedBox(height: 4),
 
                     // ── Tabs: clique ativa; clique duplo limpa o mapa ──
                     if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas) ...[
                       Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                        spacing: compactOverlay ? 4 : 6,
+                        runSpacing: compactOverlay ? 4 : 6,
                         children: [
                           if (mostrarAbasTseRedeComparativo) ...[
                             _TabBtn(
@@ -1887,7 +1914,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: compactOverlay ? 4 : 8),
                     ],
 
                     // KPIs: mostra apenas o que é relevante para o tab ativo
@@ -1955,7 +1982,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                       ),
                     if (widget.onCityTap != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: 6),
+                        padding: EdgeInsets.only(top: compactOverlay ? 4 : 6),
                         child: Text(
                           modoBenfeitorias
                               ? 'Toque na região para filtrar o mapa • Valores por município cadastrado nas benfeitorias'
@@ -1964,22 +1991,21 @@ class _RankingPanelState extends State<_RankingPanel> {
                               : (modoRede || modoNenhum)
                                   ? 'Toque na região para filtrar o mapa'
                                   : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
-                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontSize: compactOverlay ? 11 : null,
+                          ),
+                          maxLines: compactOverlay ? 2 : 5,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       ],
-                    ),
-                  ),
                 ),
               ),
 
               // ── Lista: nenhum / TSE / Rede / Comparativo / Metas / Benfeitorias ───────
               Expanded(
-                flex: showLocais
-                    ? 2
-                    : (widget.layoutCompact
-                        ? (widget.hideDuplicateHeading ? 10 : 5)
-                        : 4),
+                flex: listaAreaFlex,
                 child: modoNenhum
                     ? _buildListaNenhum(cs, theme, compact: widget.hideDuplicateHeading)
                     : modoBenfeitorias
@@ -1990,7 +2016,36 @@ class _RankingPanelState extends State<_RankingPanel> {
                     ? _buildListaComparativo(ranking, totalVotosTseGeral, totalEstimativaGeral, cs, theme)
                     : modoRede
                     ? _buildListaRede(rankingRede, totalEstimativaGeral, cs, theme)
-                    : ListView.builder(
+                    : (widget.tseVotosCarregando && ranking.isEmpty)
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: CircularProgressIndicator(),
+                        ),
+                      )
+                    : ranking.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            'Sem dados TSE por região. Aguarde o carregamento ou confirme o vínculo TSE 2022 no perfil do candidato (a mesma visão para toda a equipa com grau 1).',
+                            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : LayoutBuilder(
+                        builder: (context, listCx) {
+                          const baseVm = 3.0;
+                          const approxTile = 102.0;
+                          final n = ranking.length;
+                          final boost = _rankingListaSlackExtraPorItem(
+                            viewportHeight: listCx.maxHeight,
+                            itemCount: n,
+                            approxItemHeight: approxTile,
+                            baseVerticalMargin: baseVm,
+                          );
+                          return ListView.builder(
                   itemCount: ranking.length,
                   itemBuilder: (context, i) {
                     final r = ranking[i];
@@ -2001,7 +2056,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                     final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
 
                     return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: isFocused
@@ -2242,7 +2297,9 @@ class _RankingPanelState extends State<_RankingPanel> {
                       ),
                     );
                   },
-                ),
+                );
+                        },
+                      ),
               ),
 
               if (showLocais) ...[
@@ -2427,10 +2484,21 @@ class _RankingPanelState extends State<_RankingPanel> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: ListView.builder(
-            itemCount: ranking.length,
-            itemBuilder: (context, i) {
-              final r = ranking[i];
+          child: LayoutBuilder(
+            builder: (context, listCx) {
+              const baseVm = 3.0;
+              const approxTile = 132.0;
+              final n = ranking.length;
+              final boost = _rankingListaSlackExtraPorItem(
+                viewportHeight: listCx.maxHeight,
+                itemCount: n,
+                approxItemHeight: approxTile,
+                baseVerticalMargin: baseVm,
+              );
+              return ListView.builder(
+                itemCount: ranking.length,
+                itemBuilder: (context, i) {
+                  final r = ranking[i];
               final m = metas[r.id] ?? 0;
               final ratio = m > 0 ? r.totalEstimativa / m : 0.0;
               final isFocused = widget.focusedRegiaoId == r.id;
@@ -2438,7 +2506,7 @@ class _RankingPanelState extends State<_RankingPanel> {
               final corBarra = cs.primary;
 
               return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
@@ -2538,6 +2606,8 @@ class _RankingPanelState extends State<_RankingPanel> {
                   ),
                 );
             },
+          );
+            },
           ),
         ),
       ],
@@ -2627,7 +2697,18 @@ class _RankingPanelState extends State<_RankingPanel> {
       if (r.valorTotal > maxV) maxV = r.valorTotal;
     }
 
-    return ListView.builder(
+    return LayoutBuilder(
+      builder: (context, listCx) {
+        const baseVm = 3.0;
+        const approxTile = 102.0;
+        final n = rankingBenf.length;
+        final boost = _rankingListaSlackExtraPorItem(
+          viewportHeight: listCx.maxHeight,
+          itemCount: n,
+          approxItemHeight: approxTile,
+          baseVerticalMargin: baseVm,
+        );
+        return ListView.builder(
       itemCount: rankingBenf.length,
       itemBuilder: (context, i) {
         final r = rankingBenf[i];
@@ -2639,7 +2720,7 @@ class _RankingPanelState extends State<_RankingPanel> {
         final barCor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: isFocused
@@ -2814,6 +2895,8 @@ class _RankingPanelState extends State<_RankingPanel> {
         );
       },
     );
+      },
+    );
   }
 
   // ── Lista comparativa (TSE 2022 vs Campanha) ─────────────────────────────
@@ -2826,11 +2909,19 @@ class _RankingPanelState extends State<_RankingPanel> {
     ThemeData theme,
   ) {
     if (ranking.isEmpty) {
+      if (widget.tseVotosCarregando) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Text(
-            'Sem dados TSE. Configure seu candidato em Meu Perfil.',
+            'Sem dados TSE para comparar. Isto costuma aparecer enquanto carrega ou se o deputado ainda não vinculou o cadastro à lista TSE 2022. A equipa (grau 1) vê os mesmos totais do candidato quando o vínculo existe.',
             style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
@@ -2870,10 +2961,21 @@ class _RankingPanelState extends State<_RankingPanel> {
         legendaWidget,
         const Divider(height: 1),
         Expanded(
-          child: ListView.builder(
-            itemCount: ranking.length,
-            itemBuilder: (context, i) {
-              final r = ranking[i];
+          child: LayoutBuilder(
+            builder: (context, listCx) {
+              const baseVm = 3.0;
+              const approxTile = 118.0;
+              final n = ranking.length;
+              final boost = _rankingListaSlackExtraPorItem(
+                viewportHeight: listCx.maxHeight,
+                itemCount: n,
+                approxItemHeight: approxTile,
+                baseVerticalMargin: baseVm,
+              );
+              return ListView.builder(
+                itemCount: ranking.length,
+                itemBuilder: (context, i) {
+                  final r = ranking[i];
               final ratio = r.total > 0 ? r.totalEstimativa / r.total : 0.0;
               final hexCor = _corAtingimento(ratio);
               final corAtingimento = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
@@ -2881,7 +2983,7 @@ class _RankingPanelState extends State<_RankingPanel> {
               final isFocused = widget.focusedRegiaoId == r.id;
 
               return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: isFocused
@@ -3003,6 +3105,8 @@ class _RankingPanelState extends State<_RankingPanel> {
                 ),
               );
             },
+          );
+            },
           ),
         ),
       ],
@@ -3043,7 +3147,18 @@ class _RankingPanelState extends State<_RankingPanel> {
       );
     }
 
-    return ListView.builder(
+    return LayoutBuilder(
+      builder: (context, listCx) {
+        const baseVm = 3.0;
+        const approxTile = 100.0;
+        final n = rankingRede.length;
+        final boost = _rankingListaSlackExtraPorItem(
+          viewportHeight: listCx.maxHeight,
+          itemCount: n,
+          approxItemHeight: approxTile,
+          baseVerticalMargin: baseVm,
+        );
+        return ListView.builder(
       itemCount: rankingRede.length,
       itemBuilder: (context, i) {
         final r = rankingRede[i];
@@ -3052,7 +3167,7 @@ class _RankingPanelState extends State<_RankingPanel> {
         final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: isFocused
@@ -3225,6 +3340,8 @@ class _RankingPanelState extends State<_RankingPanel> {
             ],
           ),
         );
+      },
+    );
       },
     );
   }

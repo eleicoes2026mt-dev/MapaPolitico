@@ -34,6 +34,7 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
   final _nomeController = TextEditingController();
   final _telefoneController = TextEditingController();
   final _emailController = TextEditingController();
+  final _instagramController = TextEditingController();
   final _nascimentoController = TextEditingController();
   final _cnpjController = TextEditingController();
   final _contatoRespController = TextEditingController();
@@ -75,6 +76,7 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
     _nomeController.dispose();
     _telefoneController.dispose();
     _emailController.dispose();
+    _instagramController.dispose();
     _nascimentoController.dispose();
     _cnpjController.dispose();
     _contatoRespController.dispose();
@@ -275,6 +277,7 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
         numero: _numeroController.text.trim().isEmpty ? null : _numeroController.text.trim(),
         complemento: _complementoController.text.trim().isEmpty ? null : _complementoController.text.trim(),
         origemLugarTexto: _origemController.text.trim().isEmpty ? null : _origemController.text.trim(),
+        linkInstagram: _instagramController.text.trim().isEmpty ? null : _instagramController.text.trim(),
       ));
       if (mounted) {
         widget.onCreate();
@@ -470,6 +473,17 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
       ),
       const SizedBox(height: 16),
       TextFormField(
+        controller: _instagramController,
+        decoration: const InputDecoration(
+          labelText: 'Instagram (opcional)',
+          hintText: 'https://instagram.com/… ou @usuario',
+          prefixIcon: Icon(Icons.link),
+        ),
+        keyboardType: TextInputType.url,
+        autocorrect: false,
+      ),
+      const SizedBox(height: 16),
+      TextFormField(
         controller: _telefoneController,
         decoration: const InputDecoration(labelText: 'Contato', hintText: '(00) 0 0000-0000'),
         keyboardType: TextInputType.phone,
@@ -549,6 +563,17 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
           if (_tipo != 'PJ') return null;
           return (v == null || v.trim().isEmpty) ? 'Informe o e-mail do responsável' : null;
         },
+      ),
+      const SizedBox(height: 16),
+      TextFormField(
+        controller: _instagramController,
+        decoration: const InputDecoration(
+          labelText: 'Instagram da empresa (opcional)',
+          hintText: 'https://instagram.com/… ou @usuario',
+          prefixIcon: Icon(Icons.link),
+        ),
+        keyboardType: TextInputType.url,
+        autocorrect: false,
       ),
       const SizedBox(height: 16),
       const Text('Votos em pessoa física (responsável):'),

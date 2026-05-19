@@ -270,6 +270,7 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
         'De: ${a.origemLugarNome!.trim()}',
       '~${a.estimativaVotos} votos',
       if (a.telefone != null && a.telefone!.trim().isNotEmpty) a.telefone!.trim(),
+      if (a.linkInstagram != null && a.linkInstagram!.trim().isNotEmpty) 'IG: ${a.linkInstagram!.trim()}',
     ];
     return Text(
       parts.join(' · '),
@@ -433,6 +434,22 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
                   const SizedBox(width: 8),
                   Text(apoiador.telefone!, style: theme.textTheme.bodySmall),
                 ]),
+              ],
+              if (apoiador.linkInstagram != null && apoiador.linkInstagram!.trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.link, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        apoiador.linkInstagram!.trim(),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
               ],
               const SizedBox(height: 4),
               Row(

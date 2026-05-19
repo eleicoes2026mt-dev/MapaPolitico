@@ -111,6 +111,7 @@ serve(async (req) => {
     const municipioId = body?.municipio_id ?? null;
     const grauRaw = Number(body?.grau_acesso);
     const grauAcesso = grauRaw === 1 ? 1 : 2;
+    const linkInstagram = (body?.link_instagram ?? '').toString().trim() || null;
 
     // redirectTo: nunca usar localhost; prioridade: body válido > env REDIRECT_URL
     const rawRedirect = (body?.redirect_to && String(body.redirect_to).trim()) || '';
@@ -205,6 +206,7 @@ serve(async (req) => {
             municipio_id: municipioId || null,
             ativo: true,
             grau_acesso: grauAcesso,
+            link_instagram: linkInstagram,
           },
           { onConflict: 'profile_id' },
         );
@@ -266,6 +268,7 @@ serve(async (req) => {
       municipio_id: municipioId || null,
       ativo: true,
       grau_acesso: grauAcesso,
+      link_instagram: linkInstagram,
     });
 
     if (assessorError) {

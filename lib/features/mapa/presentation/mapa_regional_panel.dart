@@ -235,7 +235,8 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
     final theme = Theme.of(context);
     final votosAjustados = ref.watch(mapaVotosTseAjustadosProvider);
     // Dados brutos para o ranking (independentes dos toggles de visibilidade)
-    final votosTseRaw = ref.watch(votosPorMunicipioTseProvider).valueOrNull ?? {};
+    final votosTseAsync = ref.watch(votosPorMunicipioTseProvider);
+    final votosTseRaw = votosTseAsync.valueOrNull ?? {};
     final estimativaRaw = ref.watch(mapaEstimativaRawProvider);
     final estimativaPorCidade = ref.watch(mapaEstimativaFiltradaProvider);
     final marcadores = ref.watch(mapaMarcadoresFiltradosProvider);
@@ -271,6 +272,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
         height: mapH,
         pontosMapaEscala: mapaVisual.escalaPontos,
         contornoMapaEscala: mapaVisual.escalaContorno,
+        tseVotosCarregando: votosTseAsync.isLoading,
         // TSE: para ranking usa dados brutos; para círculos no mapa usa dados ajustados pelo toggle
         votosPorMunicipio: votosTseRaw.isNotEmpty ? votosTseRaw : (votosAjustados.isEmpty ? null : votosAjustados),
         // Estimativa: para ranking usa dados brutos; para marcadores no mapa usa dados filtrados
@@ -386,7 +388,7 @@ class _MapaRegionalPanelState extends ConsumerState<MapaRegionalPanel> {
             : _painelModoNv.value == 'metas'
                 ? 'Modo Metas: defina e acompanhe metas por região na lista ao lado. O mapa mantém-se como nas outras visualizações (sem camada extra de metas).'
             : (votosAjustados.isEmpty && marcadores.isEmpty
-                ? 'Mapa interativo MT com regiões e cidades. Selecione seu candidato 2022 em Meu perfil para ver votos por cidade. Cadastre apoiadores e votantes (com município) para marcar cidades no mapa.'
+                ? 'Mapa interativo MT com regiões e cidades. Votos TSE por município seguem o deputado vinculado à eleição 2022 (visível para candidato e assessores com acesso à campanha). Cadastre apoiadores e votantes com município para marcar cidades no mapa.'
                 : 'Mapa com ${votosAjustados.length} cidade(s) com votos (TSE) e ${marcadores.length} cidade(s) com apoiadores ou votantes. Toque numa cidade (mapa ou lista) para ver locais de votação e endereços.'),
         style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
       ),

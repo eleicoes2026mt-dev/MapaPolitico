@@ -27,6 +27,8 @@ class Votante {
   final String? convitePorProfileId;
   /// Nome do perfil convidador (join opcional `inviter`).
   final String? convitePorNome;
+  /// URL ou @ do Instagram (opcional).
+  final String? linkInstagram;
 
   const Votante({
     required this.id,
@@ -50,6 +52,7 @@ class Votante {
     this.cadastradoPeloCandidato = false,
     this.convitePorProfileId,
     this.convitePorNome,
+    this.linkInstagram,
   });
 
   /// Nome de exibição da cidade: join > texto livre > '—'.
@@ -85,6 +88,7 @@ class Votante {
       cadastradoPeloCandidato: json['cadastrado_pelo_candidato'] as bool? ?? false,
       convitePorProfileId: json['convite_por_profile_id'] as String?,
       convitePorNome: conviteNome,
+      linkInstagram: json['link_instagram'] as String?,
     );
   }
 
@@ -109,5 +113,6 @@ class Votante {
         'cadastrado_pelo_candidato': cadastradoPeloCandidato,
         'convite_por_profile_id': convitePorProfileId,
         'convite_por_nome': convitePorNome,
+        'link_instagram': linkInstagram,
       };
 }

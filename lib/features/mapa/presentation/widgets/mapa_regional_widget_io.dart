@@ -68,6 +68,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.painelRankingModoNotifier,
     this.pontosMapaEscala = 1.0,
     this.contornoMapaEscala = 1.0,
+    this.tseVotosCarregando = false,
   });
 
   final double height;
@@ -111,6 +112,9 @@ class MapaRegionalWidget extends StatefulWidget {
 
   /// Multiplicador da espessura das linhas de contorno (Brasil, MT, regiões). 1.0 = padrão.
   final double contornoMapaEscala;
+
+  /// Só web (ranking); ignorado no ArcGIS.
+  final bool tseVotosCarregando;
 
   @override
   State<MapaRegionalWidget> createState() => _MapaRegionalWidgetState();

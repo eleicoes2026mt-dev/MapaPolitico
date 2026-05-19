@@ -30,6 +30,7 @@ class AmigosGilbertoDadosFormFields extends ConsumerStatefulWidget {
     required this.onAbrangenciaChanged,
     this.emailValidator,
     this.footerWidget,
+    this.linkInstagram,
   });
 
   final TextEditingController nome;
@@ -52,6 +53,9 @@ class AmigosGilbertoDadosFormFields extends ConsumerStatefulWidget {
 
   /// Ex.: cartão «Cadastro pelo candidato» ou texto do link público.
   final Widget? footerWidget;
+
+  /// Campo opcional; quando null, o bloco não é exibido.
+  final TextEditingController? linkInstagram;
 
   @override
   ConsumerState<AmigosGilbertoDadosFormFields> createState() => _AmigosGilbertoDadosFormFieldsState();
@@ -150,6 +154,19 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
           keyboardType: TextInputType.emailAddress,
           validator: ev,
         ),
+        if (widget.linkInstagram != null) ...[
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: widget.linkInstagram,
+            decoration: const InputDecoration(
+              labelText: 'Instagram (opcional)',
+              hintText: 'https://instagram.com/… ou @usuario',
+              prefixIcon: Icon(Icons.link),
+            ),
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+          ),
+        ],
         const SizedBox(height: 12),
         MunicipioMtFormRow(
           selectedNormalizedKey: widget.selectedCidadeKey,

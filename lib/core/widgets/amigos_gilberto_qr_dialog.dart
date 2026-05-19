@@ -27,7 +27,7 @@ String _mensagemConviteSemUrl({required String inviterLabel}) {
   if (n.isEmpty) {
     return 'Cadastre-se nos $kAmigosGilbertoLabel. O link de cadastro está logo abaixo.';
   }
-  return '$n convida você a participar da campanha. Use o link de cadastro abaixo.';
+  return '$n convida você a participar da pré-campanha. Use o link de cadastro abaixo.';
 }
 
 String _legendaCompartilhamentoComLink({required String url, required String inviterLabel}) {
@@ -206,7 +206,7 @@ class _ExportCaptureCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
+                    'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a pré-campanha — em um só lugar.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: _tagline,
@@ -228,13 +228,13 @@ class _ExportCaptureCard extends StatelessWidget {
                   const SizedBox(height: 16),
                   const _BenefitTile(
                     icon: Icons.campaign_outlined,
-                    title: 'Informações da campanha',
+                    title: 'Informações da pré-campanha',
                     subtitle: 'Atualizações e comunicados oficiais.',
                     forExport: true,
                   ),
                   const _BenefitTile(
                     icon: Icons.chat_bubble_outline_rounded,
-                    title: 'Mensagens da campanha',
+                    title: 'Mensagens da pré-campanha',
                     subtitle: 'Conteúdos enviados à rede de apoio.',
                     forExport: true,
                   ),
@@ -490,7 +490,7 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Conexão com a campanha',
+              'Conexão com a pré-campanha',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.75),
                     letterSpacing: 0.4,
@@ -726,7 +726,7 @@ class _HeaderBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Conexão com a campanha',
+                  'Conexão com a pré-campanha',
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: cs.onPrimary.withValues(alpha: 0.9),
                     letterSpacing: 0.6,
@@ -862,7 +862,7 @@ class _WideBody extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
+                    'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a pré-campanha — em um só lugar.',
                     style: taglineStyle,
                     textAlign: TextAlign.left,
                   ),
@@ -975,7 +975,7 @@ class _WideBody extends StatelessWidget {
               ),
               SizedBox(height: fs ? 18 : 18),
               Text(
-                'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
+                'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a pré-campanha — em um só lugar.',
                 style: taglineStyle,
                 textAlign: fs ? TextAlign.left : TextAlign.center,
               ),
@@ -1181,7 +1181,7 @@ class _NarrowBody extends StatelessWidget {
         ),
         SizedBox(height: fs ? 22 : 18),
         Text(
-          'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a campanha — em um só lugar.',
+          'Acompanhe a trajetória, participe da rede e receba tudo o que importa para a pré-campanha — em um só lugar.',
           style: taglineStyle,
         ),
         SizedBox(height: fs ? 22 : 18),
@@ -1192,13 +1192,13 @@ class _NarrowBody extends StatelessWidget {
         SizedBox(height: fs ? 14 : 12),
         _BenefitTile(
           icon: Icons.campaign_outlined,
-          title: 'Informações da campanha',
+          title: 'Informações da pré-campanha',
           subtitle: 'Atualizações e comunicados oficiais.',
           compact: !fs,
         ),
         _BenefitTile(
           icon: Icons.chat_bubble_outline_rounded,
-          title: 'Mensagens da campanha',
+          title: 'Mensagens da pré-campanha',
           subtitle: 'Conteúdos enviados à rede de apoio.',
           compact: !fs,
         ),
@@ -1250,7 +1250,7 @@ Widget _benefitsTwoByTwo(BuildContext context, {bool dense = true}) {
           Expanded(
             child: _BenefitTile(
               icon: Icons.campaign_outlined,
-              title: 'Informações da campanha',
+              title: 'Informações da pré-campanha',
               subtitle: 'Atualizações e comunicados oficiais.',
               compact: dense,
             ),
@@ -1259,7 +1259,7 @@ Widget _benefitsTwoByTwo(BuildContext context, {bool dense = true}) {
           Expanded(
             child: _BenefitTile(
               icon: Icons.chat_bubble_outline_rounded,
-              title: 'Mensagens da campanha',
+              title: 'Mensagens da pré-campanha',
               subtitle: 'Conteúdos enviados à rede de apoio.',
               compact: dense,
             ),

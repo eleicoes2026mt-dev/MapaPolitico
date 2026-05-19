@@ -219,6 +219,13 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
   }
 }
 
+String _instagramCelulaVotante(String? raw) {
+  final s = raw?.trim();
+  if (s == null || s.isEmpty) return '—';
+  if (s.length > 28) return '${s.substring(0, 25)}…';
+  return s;
+}
+
 class _VotantesTable extends StatelessWidget {
   const _VotantesTable({
     required this.votantes,
@@ -256,7 +263,8 @@ class _VotantesTable extends StatelessWidget {
             child: ListTile(
               title: Text(v.nome),
               subtitle: Text(
-                '${v.telefone == null || v.telefone!.isEmpty ? "—" : formatTelefoneBrFromDigits(v.telefone)} • $cidade • ${v.abrangencia} • ${v.qtdVotosFamilia} voto(s) • Apoiador: $ap • Convite: $ind',
+                '${v.telefone == null || v.telefone!.isEmpty ? "—" : formatTelefoneBrFromDigits(v.telefone)} • '
+                'IG: ${_instagramCelulaVotante(v.linkInstagram)} • $cidade • ${v.abrangencia} • ${v.qtdVotosFamilia} voto(s) • Apoiador: $ap • Convite: $ind',
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -283,6 +291,7 @@ class _VotantesTable extends StatelessWidget {
         columns: const [
           DataColumn(label: Text('Nome')),
           DataColumn(label: Text('Contato')),
+          DataColumn(label: Text('Instagram')),
           DataColumn(label: Text('Cidade')),
           DataColumn(label: Text('Abrangência')),
           DataColumn(label: Text('Votos')),
@@ -303,6 +312,7 @@ class _VotantesTable extends StatelessWidget {
                     ? '—'
                     : formatTelefoneBrFromDigits(v.telefone),
               )),
+              DataCell(Text(_instagramCelulaVotante(v.linkInstagram))),
               DataCell(Text(displayNomeCidadeMT(cidade))),
               DataCell(Text(v.abrangencia)),
               DataCell(Text('${v.qtdVotosFamilia}')),
@@ -349,6 +359,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   late final TextEditingController _logradouro;
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
+  late final TextEditingController _linkInstagram;
   /// Chave normalizada (lista `listCidadesMTNomesNormalizados`), igual ao cadastro de apoiadores.
   String? _cidadeNomeNormalizado;
   String? _cidadeErro;
@@ -372,6 +383,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _logradouro = TextEditingController(text: v?.logradouro ?? '');
     _numero = TextEditingController(text: v?.numero ?? '');
     _complemento = TextEditingController(text: v?.complemento ?? '');
+    _linkInstagram = TextEditingController(text: v?.linkInstagram ?? '');
     // Prioridade: nome do join > cidade_nome salvo > vazio
     final cidadeInicial = v?.municipioNome?.trim().isNotEmpty == true
         ? v!.municipioNome!
@@ -395,6 +407,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _logradouro.dispose();
     _numero.dispose();
     _complemento.dispose();
+    _linkInstagram.dispose();
     super.dispose();
   }
 
@@ -436,6 +449,8 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+            linkInstagram: _linkInstagram.text.trim().isEmpty ? null : _linkInstagram.text.trim(),
+            atualizarLinkInstagram: true,
           ),
         );
       } else {
@@ -455,6 +470,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
             complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
             cadastroViaQr: cadastroAvulsoQr,
+            linkInstagram: _linkInstagram.text.trim().isEmpty ? null : _linkInstagram.text.trim(),
           ),
         );
       }
@@ -565,6 +581,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                   telefone: _telefone,
                   email: _email,
                   qtd: _qtd,
+                  linkInstagram: _linkInstagram,
                   cep: _cep,
                   logradouro: _logradouro,
                   numero: _numero,

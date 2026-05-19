@@ -47,6 +47,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   late final TextEditingController _numeroController;
   late final TextEditingController _complementoController;
   late final TextEditingController _origemController;
+  late final TextEditingController _instagramController;
   late final TextEditingController _nascimentoController;
   late String? _cidadeNome;
   final _formKey = GlobalKey<FormState>();
@@ -75,6 +76,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _numeroController = TextEditingController(text: widget.apoiador.numero ?? '');
     _complementoController = TextEditingController(text: widget.apoiador.complemento ?? '');
     _origemController = TextEditingController(text: widget.apoiador.origemLugarNome ?? '');
+    _instagramController = TextEditingController(text: widget.apoiador.linkInstagram ?? '');
     _nascimentoController = TextEditingController(
       text: widget.apoiador.dataNascimento != null
           ? DateFormat('dd/MM/yyyy').format(widget.apoiador.dataNascimento!)
@@ -136,6 +138,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _numeroController.dispose();
     _complementoController.dispose();
     _origemController.dispose();
+    _instagramController.dispose();
     _nascimentoController.dispose();
     super.dispose();
   }
@@ -240,6 +243,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           complemento: _complementoController.text.trim(),
           origemLugarTexto: _origemController.text,
           atualizarOrigemLugar: true,
+          atualizarLinkInstagram: true,
+          linkInstagram: _instagramController.text.trim().isEmpty ? null : _instagramController.text.trim(),
         ),
       );
       await _sincronizarBenfeitorias(widget.apoiador.id, mid, municipios);
@@ -330,6 +335,17 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                     if (!isEmailValido(v)) return 'E-mail inválido.';
                     return null;
                   },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _instagramController,
+                  decoration: const InputDecoration(
+                    labelText: 'Instagram (opcional)',
+                    hintText: 'https://instagram.com/… ou @usuario',
+                    prefixIcon: Icon(Icons.link),
+                  ),
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
                 ),
                 if (widget.apoiador.tipo == 'PF') ...[
                   const SizedBox(height: 16),

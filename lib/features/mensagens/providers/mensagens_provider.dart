@@ -80,6 +80,7 @@ Future<List<String>> profileIdsParaMensagemExistente(Mensagem m) async {
     NovaMensagemParams(
       titulo: m.titulo,
       corpo: m.corpo,
+      linkUrl: m.linkUrl,
       escopo: m.escopo,
       poloId: m.poloId,
       municipiosIds: m.municipiosIds,
@@ -97,6 +98,7 @@ class NovaMensagemParams {
   const NovaMensagemParams({
     required this.titulo,
     this.corpo,
+    this.linkUrl,
     this.escopo = 'global',
     this.poloId,
     this.municipiosIds = const [],
@@ -105,6 +107,7 @@ class NovaMensagemParams {
 
   final String titulo;
   final String? corpo;
+  final String? linkUrl;
   final String escopo;
   final String? poloId;
   final List<String> municipiosIds;
@@ -114,10 +117,12 @@ class NovaMensagemParams {
 final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemParams)>((ref) {
   return (NovaMensagemParams p) async {
     final userId = ref.read(currentUserProvider)?.id;
+    final linkNorm = Mensagem.normalizarLinkOpcional(p.linkUrl);
 
     final row = {
       'titulo': p.titulo.trim(),
       if (p.corpo != null && p.corpo!.trim().isNotEmpty) 'corpo': p.corpo!.trim(),
+      if (linkNorm != null) 'link_url': linkNorm,
       'escopo': p.escopo,
       if (p.poloId != null) 'polo_id': p.poloId,
       if (p.municipiosIds.isNotEmpty) 'municipios_ids': p.municipiosIds,
@@ -137,7 +142,7 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
       await supabase.auth.refreshSession();
       final body = <String, dynamic>{
         'title': mensagem.titulo,
-        'body': mensagem.corpo ?? 'Nova mensagem da campanha.',
+        'body': Mensagem.textoParaNotificacao(corpo: mensagem.corpo, linkUrl: mensagem.linkUrl),
         'url': '/#/mensagens',
         'tag': 'mensagem-${mensagem.id}',
       };
@@ -182,7 +187,7 @@ final enviarPushMensagemProvider = Provider<Future<Map<String, dynamic>> Functio
     await supabase.auth.refreshSession();
     final body = <String, dynamic>{
       'title': m.titulo,
-      'body': m.corpo ?? 'Nova mensagem da campanha.',
+      'body': Mensagem.textoParaNotificacao(corpo: m.corpo, linkUrl: m.linkUrl),
       'url': '/#/mensagens',
       'tag': 'mensagem-${m.id}',
     };

@@ -61,6 +61,7 @@ String _pushBodyPeriodo(NovaVisitaParams p) => Visita(
       hora: p.hora,
       dataReuniaoFim: p.dataReuniaoFim,
       horaFim: p.horaFim,
+      agendaStatus: p.agendaStatus ?? AgendaVisitaStatus.agendado,
     ).dataHoraFormatada;
 
 /// Todas as visitas futuras (candidato + assessor + apoiador com regras de visibilidade).
@@ -220,6 +221,8 @@ class NovaVisitaParams {
     this.notificacaoProfileIds = const [],
     /// Se true (visita pública com cidade), o push inicial usa só contas na cidade em vez de broadcast.
     this.pushApenasMoradoresDaCidade = false,
+    /// Situação no calendário ([AgendaVisitaStatus]). Null na atualização = não alterar a coluna no banco.
+    this.agendaStatus,
   });
 
   final String titulo;
@@ -235,6 +238,9 @@ class NovaVisitaParams {
   final bool visivelApoiadores;
   final List<String> notificacaoProfileIds;
   final bool pushApenasMoradoresDaCidade;
+
+  /// Ver [AgendaVisitaStatus].
+  final String? agendaStatus;
 }
 
 final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((ref) {
@@ -254,6 +260,7 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
       if (p.municipioId != null) 'municipio_id': p.municipioId,
       'visivel_apoiadores': p.visivelApoiadores,
       'notificacao_profile_ids': p.notificacaoProfileIds,
+      'agenda_status': p.agendaStatus ?? AgendaVisitaStatus.agendado,
       'criado_por': user?.id,
     }).select('id, titulo, local_texto').maybeSingle();
 
@@ -300,7 +307,7 @@ final criarVisitaProvider = Provider<Future<void> Function(NovaVisitaParams)>((r
 final atualizarVisitaProvider =
     Provider<Future<void> Function(String id, NovaVisitaParams p)>((ref) {
   return (String id, NovaVisitaParams p) async {
-    await supabase.from('reunioes').update({
+    final patch = <String, dynamic>{
       'titulo': p.titulo.trim(),
       'hora': p.hora?.isNotEmpty == true ? p.hora : null,
       'data_reuniao': p.dataReuniao.toIso8601String().split('T').first,
@@ -313,7 +320,11 @@ final atualizarVisitaProvider =
       'municipio_id': p.municipioId,
       'visivel_apoiadores': p.visivelApoiadores,
       'notificacao_profile_ids': p.notificacaoProfileIds,
-    }).eq('id', id);
+    };
+    if (p.agendaStatus != null) {
+      patch['agenda_status'] = p.agendaStatus;
+    }
+    await supabase.from('reunioes').update(patch).eq('id', id);
     ref.invalidate(visitasProvider);
     ref.invalidate(todasVisitasProvider);
     ref.invalidate(proximaVisitaMinhaCidadeProvider);
@@ -324,6 +335,20 @@ final atualizarVisitaProvider =
 final excluirVisitaProvider = Provider<Future<void> Function(String id)>((ref) {
   return (String id) async {
     await supabase.from('reunioes').delete().eq('id', id);
+    ref.invalidate(visitasProvider);
+    ref.invalidate(todasVisitasProvider);
+    ref.invalidate(proximaVisitaMinhaCidadeProvider);
+    ref.invalidate(visitaPendenteConfirmacaoProvider);
+  };
+});
+
+/// Atualiza só [agenda_status] (candidato ou assessor grau 1 no banco).
+final atualizarStatusAgendaVisitaProvider =
+    Provider<Future<void> Function(String reuniaoId, String agendaStatus)>((ref) {
+  return (String reuniaoId, String agendaStatus) async {
+    await supabase.from('reunioes').update({
+      'agenda_status': agendaStatus,
+    }).eq('id', reuniaoId);
     ref.invalidate(visitasProvider);
     ref.invalidate(todasVisitasProvider);
     ref.invalidate(proximaVisitaMinhaCidadeProvider);

@@ -1,5 +1,11 @@
 import 'package:intl/intl.dart';
 
+/// Valores de [Visita.agendaStatus] alinhados à coluna `reunioes.agenda_status`.
+abstract class AgendaVisitaStatus {
+  static const agendado = 'agendado';
+  static const realizada = 'realizada';
+}
+
 class Visita {
   const Visita({
     required this.id,
@@ -18,6 +24,7 @@ class Visita {
     this.notificadosEm,
     this.visivelApoiadores = true,
     this.notificacaoProfileIds = const [],
+    this.agendaStatus = AgendaVisitaStatus.agendado,
   });
 
   final String id;
@@ -38,6 +45,14 @@ class Visita {
   final bool visivelApoiadores;
   /// Quando [visivelApoiadores] é false, só estes perfis recebem push e veem a visita (apoiador).
   final List<String> notificacaoProfileIds;
+
+  /// `agendado` ou `realizada` (vide [AgendaVisitaStatus]).
+  final String agendaStatus;
+
+  bool get isAgendaRealizada => agendaStatus == AgendaVisitaStatus.realizada;
+
+  String get agendaStatusLabelPt =>
+      isAgendaRealizada ? 'Agenda realizada' : 'Agendado';
 
   bool get agendaPrivada =>
       !visivelApoiadores && notificacaoProfileIds.isNotEmpty;
@@ -152,7 +167,14 @@ class Visita {
           : null,
       visivelApoiadores: json['visivel_apoiadores'] as bool? ?? true,
       notificacaoProfileIds: _parseUuidList(json['notificacao_profile_ids']),
+      agendaStatus: _parseAgendaStatus(json['agenda_status']),
     );
+  }
+
+  static String _parseAgendaStatus(dynamic raw) {
+    final s = raw?.toString().trim().toLowerCase();
+    if (s == AgendaVisitaStatus.realizada) return AgendaVisitaStatus.realizada;
+    return AgendaVisitaStatus.agendado;
   }
 
   static List<String> _parseUuidList(dynamic raw) {
@@ -177,6 +199,7 @@ class Visita {
         if (municipioId != null) 'municipio_id': municipioId,
         'visivel_apoiadores': visivelApoiadores,
         'notificacao_profile_ids': notificacaoProfileIds,
+        'agenda_status': agendaStatus,
       };
 }
 

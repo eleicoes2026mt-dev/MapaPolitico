@@ -246,6 +246,7 @@ class _VisitaHomeTile extends StatelessWidget {
           [
             v.dataHoraFormatada,
             if (v.municipioNome != null && v.municipioNome!.trim().isNotEmpty) v.municipioNome!,
+            v.agendaStatusLabelPt,
           ].join(' · '),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,

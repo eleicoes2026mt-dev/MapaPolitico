@@ -16,6 +16,7 @@ import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
     show CepInputFormatter, cepSoDigitos, formatCepDisplayFromDigits;
 import '../../apoiadores/providers/apoiadores_provider.dart' show apoiadoresListProvider;
 import '../../assessores/providers/assessores_provider.dart' show assessoresListProvider;
+import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, refreshMunicipiosMTList;
 import '../../mapa/data/mt_municipios_coords.dart' show getCoordsMunicipioMT;
@@ -94,6 +95,7 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
+    final podeAlterarStatusAgenda = ref.watch(podeGestaoCampanhaCompletaProvider);
     final isApoiador = profile?.role == 'apoiador';
     final isAssessor = profile?.role == 'assessor';
 
@@ -302,10 +304,38 @@ class _AgendaScreenState extends ConsumerState<AgendaScreen> {
                 itemBuilder: (_, i) => _VisitaCard(
                   visita: filtradas[i],
                   podeEditar: podeEditar,
+                  podeAlterarStatusAgenda: podeAlterarStatusAgenda,
                   mostrarRotas: isApoiador || isAssessor,
                   onEdit: () => _abrirFormulario(context, existente: filtradas[i]),
                   onDelete: () => _confirmarExcluir(context, filtradas[i]),
                   onNotificar: () => _notificar(filtradas[i]),
+                  onDefinirStatusAgenda: podeAlterarStatusAgenda
+                      ? (status) async {
+                          try {
+                            await ref.read(atualizarStatusAgendaVisitaProvider)(filtradas[i].id, status);
+                            if (!context.mounted) return;
+                            ref.invalidate(visitasProvider);
+                            ref.invalidate(todasVisitasProvider);
+                            ref.invalidate(proximaVisitaMinhaCidadeProvider);
+                            ref.invalidate(visitaPendenteConfirmacaoProvider);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  status == AgendaVisitaStatus.realizada
+                                      ? 'Visita marcada como realizada.'
+                                      : 'Visita marcada como agendada.',
+                                ),
+                              ),
+                            );
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(e.toString())),
+                              );
+                            }
+                          }
+                        }
+                      : null,
                 ),
               );
             },
@@ -712,18 +742,44 @@ class _VisitaCard extends StatelessWidget {
   const _VisitaCard({
     required this.visita,
     required this.podeEditar,
+    required this.podeAlterarStatusAgenda,
     required this.mostrarRotas,
     required this.onEdit,
     required this.onDelete,
     required this.onNotificar,
+    this.onDefinirStatusAgenda,
   });
 
   final Visita visita;
   final bool podeEditar;
+  final bool podeAlterarStatusAgenda;
   final bool mostrarRotas;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onNotificar;
+  final Future<void> Function(String agendaStatus)? onDefinirStatusAgenda;
+
+  Future<void> _menuAcao(BuildContext context, String v) async {
+    if (v == 'edit') {
+      onEdit();
+      return;
+    }
+    if (v == 'delete') {
+      onDelete();
+      return;
+    }
+    if (v == 'notify') {
+      onNotificar();
+      return;
+    }
+    if (v == 'status_realizada') {
+      await onDefinirStatusAgenda?.call(AgendaVisitaStatus.realizada);
+      return;
+    }
+    if (v == 'status_agendado') {
+      await onDefinirStatusAgenda?.call(AgendaVisitaStatus.agendado);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -802,6 +858,25 @@ class _VisitaCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 6),
                           ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: visita.isAgendaRealizada
+                                  ? theme.colorScheme.tertiaryContainer.withValues(alpha: 0.85)
+                                  : theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              visita.agendaStatusLabelPt,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: visita.isAgendaRealizada
+                                    ? theme.colorScheme.onTertiaryContainer
+                                    : theme.colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               visita.titulo,
@@ -877,12 +952,28 @@ class _VisitaCard extends StatelessWidget {
                 ),
                 if (podeEditar)
                   PopupMenuButton<String>(
-                    onSelected: (v) {
-                      if (v == 'edit') onEdit();
-                      if (v == 'delete') onDelete();
-                      if (v == 'notify') onNotificar();
-                    },
+                    onSelected: (v) => _menuAcao(context, v),
                     itemBuilder: (_) => [
+                      if (podeAlterarStatusAgenda && onDefinirStatusAgenda != null) ...[
+                        if (!visita.isAgendaRealizada)
+                          const PopupMenuItem(
+                            value: 'status_realizada',
+                            child: ListTile(
+                              leading: Icon(Icons.task_alt_outlined),
+                              title: Text('Marcar como realizada'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        if (visita.isAgendaRealizada)
+                          const PopupMenuItem(
+                            value: 'status_agendado',
+                            child: ListTile(
+                              leading: Icon(Icons.event_available_outlined),
+                              title: Text('Reabrir como agendada'),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                      ],
                       PopupMenuItem(
                         value: 'notify',
                         child: ListTile(
@@ -890,10 +981,25 @@ class _VisitaCard extends StatelessWidget {
                           title: Text(
                             visita.notificacaoProfileIds.isEmpty ? 'Notificar todos' : 'Notificar destinatários',
                           ),
+                          contentPadding: EdgeInsets.zero,
                         ),
                       ),
-                      const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'))),
-                      const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline), title: Text('Excluir'))),
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit_outlined),
+                          title: Text('Editar'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(Icons.delete_outline),
+                          title: Text('Excluir'),
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
                     ],
                   ),
               ],
@@ -1084,6 +1190,8 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
   double? _localLng;
   /// Se true, a visita não aparece para todos os apoiadores; só [destinatarios] recebem push e veem na agenda.
   bool _agendaPrivada = false;
+  /// Situação no calendário (só candidato / assessor grau 1 enviam ao servidor).
+  String _agendaStatus = AgendaVisitaStatus.agendado;
   /// Visita pública com cidade: ao agendar, push só para contas (apoiador/votante) neste município.
   bool _pushApenasMoradoresDaCidade = false;
   final Set<String> _destProfileIds = {};
@@ -1114,6 +1222,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     _municipioIdSelecionado = v?.municipioId;
     _agendaPrivada = v != null ? !v.visivelApoiadores : false;
     _pushApenasMoradoresDaCidade = false;
+    _agendaStatus = v?.agendaStatus ?? AgendaVisitaStatus.agendado;
     _destProfileIds
       ..clear()
       ..addAll(v?.notificacaoProfileIds ?? const []);
@@ -1227,6 +1336,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     }
     setState(() => _loading = true);
     try {
+      final podeGestao = ref.read(podeGestaoCampanhaCompletaProvider);
       final horaFimSalvar = dataFim != null ? _horaVisitaParaSalvar(_horaFimTd) : null;
       final params = NovaVisitaParams(
         titulo: _titulo.text.trim(),
@@ -1243,6 +1353,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
         notificacaoProfileIds: _agendaPrivada ? _destProfileIds.toList() : const [],
         pushApenasMoradoresDaCidade:
             !_agendaPrivada && _pushApenasMoradoresDaCidade && _municipioIdSelecionado != null,
+        agendaStatus: podeGestao ? _agendaStatus : null,
       );
       if (widget.existente != null) {
         await ref.read(atualizarVisitaProvider)(widget.existente!.id, params);
@@ -1563,6 +1674,7 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
     final theme = Theme.of(context);
     final munAsync = ref.watch(municipiosMTListProvider);
     final temPlacesKey = EnvConfig.googleMapsApiKey.trim().isNotEmpty;
+    final podeGestao = ref.watch(podeGestaoCampanhaCompletaProvider);
 
     return AlertDialog(
       title: Row(
@@ -1592,6 +1704,39 @@ class _VisitaFormDialogState extends ConsumerState<_VisitaFormDialog> {
                   textCapitalization: TextCapitalization.sentences,
                   validator: (v) => (v == null || v.trim().isEmpty) ? 'Obrigatório' : null,
                 ),
+                if (podeGestao) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    'Situação da visita',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Disponível para o candidato e para assessores de grau 1.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
+                  SegmentedButton<String>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment<String>(
+                        value: AgendaVisitaStatus.agendado,
+                        label: Text('Agendado'),
+                        icon: Icon(Icons.event_available_outlined),
+                      ),
+                      ButtonSegment<String>(
+                        value: AgendaVisitaStatus.realizada,
+                        label: Text('Agenda realizada'),
+                        icon: Icon(Icons.task_alt_outlined),
+                      ),
+                    ],
+                    selected: {_agendaStatus},
+                    onSelectionChanged: (Set<String> s) {
+                      final v = s.first;
+                      setState(() => _agendaStatus = v);
+                    },
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text('Início', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),

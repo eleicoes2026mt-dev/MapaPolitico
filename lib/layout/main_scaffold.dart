@@ -14,10 +14,12 @@ import '../core/data/candidato_campanha_public.dart';
 import '../core/services/realtime_notifications_service.dart';
 import '../core/supabase/supabase_provider.dart';
 import '../core/widgets/amigos_gilberto_qr_dialog.dart';
+import '../core/widgets/cadastro_instagram_campanha_dialog.dart';
 import '../core/widgets/pwa_onboarding_dialog.dart';
 import '../features/agenda/providers/agenda_provider.dart';
 import '../features/agenda/widgets/sidebar_aniversariantes_banner.dart';
 import '../features/auth/providers/auth_provider.dart';
+import '../features/auth/providers/meu_instagram_campanha_provider.dart';
 import '../features/assessores/providers/gestao_campanha_provider.dart';
 import '../models/profile.dart';
 import '../models/visita.dart';
@@ -83,6 +85,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> with WidgetsBinding
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _sidebarExpanded = true;
   Timer? _deployPollTimer;
+  bool _instagramLoginPromptShown = false;
 
   @override
   void initState() {
@@ -154,10 +157,38 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> with WidgetsBinding
     });
   }
 
+  Future<void> _tentarDialogInstagramPrompt(MeuInstagramCampanhaEstado st) async {
+    if (!mounted) return;
+    if (st != MeuInstagramCampanhaEstado.faltaCadastrar) return;
+    if (_instagramLoginPromptShown) return;
+    final p = ref.read(profileProvider).valueOrNull;
+    if (p == null || !perfilPodeCadastrarInstagramCampanha(p)) return;
+    final prefs = await SharedPreferences.getInstance();
+    final snooze = prefs.getString('$kInstagramPromptSnoozePrefix${p.id}');
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    if (snooze == today) return;
+    _instagramLoginPromptShown = true;
+    if (!mounted) return;
+    await showCadastroInstagramCampanhaDialog(context, ref);
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider).valueOrNull;
     final theme = Theme.of(context);
+
+    ref.listen<AsyncValue<Profile?>>(profileProvider, (prev, next) {
+      if (next.valueOrNull == null) _instagramLoginPromptShown = false;
+    });
+
+    ref.listen<AsyncValue<MeuInstagramCampanhaEstado>>(
+      meuInstagramCampanhaEstadoProvider,
+      (prev, next) {
+        next.whenData((st) {
+          Future(() => _tentarDialogInstagramPrompt(st));
+        });
+      },
+    );
 
     ref.listen<AsyncValue<List<Aniversariante>>>(aniversariantesHojeProvider, (prev, next) {
       Future<void> maybeSnack() async {
@@ -224,11 +255,17 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> with WidgetsBinding
                       onCollapse: () => setState(() => _sidebarExpanded = false),
                       expanded: true,
                       onOpenPwaOrientacao: abrirPwa,
+                      onCadastroInstagram: perfilPodeCadastrarInstagramCampanha(profile)
+                          ? () => showCadastroInstagramCampanhaDialog(context, ref)
+                          : null,
                     )
                   : _SidebarCollapsed(
                       onExpand: () => setState(() => _sidebarExpanded = true),
                       onOpenPwaOrientacao: abrirPwa,
                       profile: profile,
+                      onCadastroInstagram: perfilPodeCadastrarInstagramCampanha(profile)
+                          ? () => showCadastroInstagramCampanhaDialog(context, ref)
+                          : null,
                     ),
             ),
             Expanded(child: widget.child),
@@ -256,6 +293,12 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> with WidgetsBinding
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          if (perfilPodeCadastrarInstagramCampanha(profile))
+            IconButton(
+              icon: const InstagramGlyphIcon(),
+              tooltip: 'Cadastrar Instagram',
+              onPressed: () => showCadastroInstagramCampanhaDialog(context, ref),
+            ),
           if (_mostrarQrConviteAmigos(profile))
             IconButton(
               icon: const Icon(Icons.qr_code_2_rounded),
@@ -281,6 +324,9 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> with WidgetsBinding
           profile: profile,
           onSignOut: onSignOut,
           onOpenPwaOrientacao: abrirPwa,
+          onCadastroInstagram: perfilPodeCadastrarInstagramCampanha(profile)
+              ? () => showCadastroInstagramCampanhaDialog(context, ref)
+              : null,
         ),
       ),
       body: widget.child,
@@ -381,11 +427,13 @@ class _SidebarCollapsed extends StatelessWidget {
     required this.onExpand,
     this.onOpenPwaOrientacao,
     this.profile,
+    this.onCadastroInstagram,
   });
 
   final VoidCallback onExpand;
   final VoidCallback? onOpenPwaOrientacao;
   final Profile? profile;
+  final VoidCallback? onCadastroInstagram;
 
   @override
   Widget build(BuildContext context) {
@@ -409,6 +457,14 @@ class _SidebarCollapsed extends StatelessWidget {
                 icon: const Icon(Icons.add_to_home_screen_outlined),
                 onPressed: onOpenPwaOrientacao,
                 tooltip: 'Instalar app e notificações',
+              ),
+            ],
+            if (onCadastroInstagram != null) ...[
+              const SizedBox(height: 8),
+              IconButton(
+                icon: const InstagramGlyphIcon(),
+                onPressed: onCadastroInstagram,
+                tooltip: 'Cadastrar Instagram',
               ),
             ],
             if (showQr) ...[
@@ -441,6 +497,7 @@ class _Sidebar extends ConsumerWidget {
     this.onCollapse,
     this.expanded = false,
     this.onOpenPwaOrientacao,
+    this.onCadastroInstagram,
   });
 
   final Profile? profile;
@@ -448,6 +505,7 @@ class _Sidebar extends ConsumerWidget {
   final VoidCallback? onCollapse;
   final bool expanded;
   final VoidCallback? onOpenPwaOrientacao;
+  final VoidCallback? onCadastroInstagram;
 
   static const _items = [
     _NavItem('/apoiador-home', 'Início', Icons.home_outlined),
@@ -560,7 +618,7 @@ class _Sidebar extends ConsumerWidget {
                   ),
               ],
             ),
-            if (onOpenPwaOrientacao != null || _mostrarQrConviteAmigos(prof) || kIsWeb) ...[
+            if (onOpenPwaOrientacao != null || _mostrarQrConviteAmigos(prof) || onCadastroInstagram != null || kIsWeb) ...[
               const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -571,8 +629,16 @@ class _Sidebar extends ConsumerWidget {
                       icon: const Icon(Icons.add_to_home_screen_outlined),
                       tooltip: 'Instalar app e ativar notificações',
                     ),
-                  if (_mostrarQrConviteAmigos(prof)) ...[
+                  if (onCadastroInstagram != null) ...[
                     if (onOpenPwaOrientacao != null) const SizedBox(width: 4),
+                    IconButton.filledTonal(
+                      onPressed: onCadastroInstagram,
+                      icon: const InstagramGlyphIcon(),
+                      tooltip: 'Cadastrar Instagram',
+                    ),
+                  ],
+                  if (_mostrarQrConviteAmigos(prof)) ...[
+                    if (onOpenPwaOrientacao != null || onCadastroInstagram != null) const SizedBox(width: 4),
                     IconButton.filledTonal(
                       onPressed: () => _abrirDialogQrAmigos(context, prof!),
                       icon: const Icon(Icons.qr_code_2_rounded),
@@ -580,7 +646,7 @@ class _Sidebar extends ConsumerWidget {
                     ),
                   ],
                   if (kIsWeb) ...[
-                    if (onOpenPwaOrientacao != null || _mostrarQrConviteAmigos(prof))
+                    if (onOpenPwaOrientacao != null || _mostrarQrConviteAmigos(prof) || onCadastroInstagram != null)
                       const SizedBox(width: 4),
                     IconButton.filledTonal(
                       onPressed: () => reload_page.reloadPageIfWeb(),

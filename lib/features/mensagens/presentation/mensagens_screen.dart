@@ -20,14 +20,45 @@ import '../../votantes/providers/votantes_provider.dart' show municipiosMTListPr
 import '../../../models/municipio.dart';
 import '../providers/mensagens_provider.dart';
 
-class MensagensScreen extends ConsumerStatefulWidget {
+/// Apoiadores e votantes: só a lista de mensagens (sem aba de aniversariantes).
+class MensagensScreen extends ConsumerWidget {
   const MensagensScreen({super.key});
 
   @override
-  ConsumerState<MensagensScreen> createState() => _MensagensScreenState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider).valueOrNull;
+    if (profile == null) {
+      return const Column(
+        children: [
+          _Header(),
+          Expanded(child: Center(child: CircularProgressIndicator())),
+        ],
+      );
+    }
+    final ocultarAniversariantes = profile.role == 'apoiador' || profile.role == 'votante';
+
+    if (ocultarAniversariantes) {
+      return const Column(
+        children: [
+          _Header(),
+          Expanded(child: _MensagensTab()),
+        ],
+      );
+    }
+
+    return const _MensagensScreenComAbas();
+  }
 }
 
-class _MensagensScreenState extends ConsumerState<MensagensScreen>
+/// Candidato e assessor: abas Mensagens + Aniversariantes.
+class _MensagensScreenComAbas extends ConsumerStatefulWidget {
+  const _MensagensScreenComAbas();
+
+  @override
+  ConsumerState<_MensagensScreenComAbas> createState() => _MensagensScreenComAbasState();
+}
+
+class _MensagensScreenComAbasState extends ConsumerState<_MensagensScreenComAbas>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
@@ -211,14 +242,7 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
                         children: [
                           Icon(Icons.send, size: 64, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
                           const SizedBox(height: 16),
-                          Text('Nenhuma mensagem', style: theme.textTheme.titleMedium),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Crie mensagens globais, por polo, por cidade (apoiadores e $kAmigosGilbertoLabel) ou privadas para assessores/apoiadores. '
-                            'Use o campo de link para divulgar redes (ex.: Instagram) — o endereço vai na notificação e na lista.',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                            textAlign: TextAlign.center,
-                          ),
+                          Text('Sem mensagem ainda', style: theme.textTheme.titleMedium),
                         ],
                       ),
                     ),
@@ -446,7 +470,6 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   final _corpo = TextEditingController();
   final _link = TextEditingController();
   String _escopo = 'global';
-  String? _poloId;
   String? _municipioCidadeId;
   bool _enviarPush = false;
   bool _loading = false;
@@ -463,8 +486,6 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
     switch (_escopo) {
       case 'global':
         return 'Envia para todos com push ativado (broadcast). Texto e link opcional vão no corpo da notificação.';
-      case 'polo':
-        return 'Envia para todos com push (broadcast). Refine o polo abaixo.';
       case 'cidade':
         return 'Apenas apoiadores e $kAmigosGilbertoLabel com conta na cidade selecionada.';
       case 'privada_assessores':
@@ -478,10 +499,6 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
 
   Future<void> _salvar() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_escopo == 'polo' && (_poloId == null || _poloId!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione um polo regional.')));
-      return;
-    }
     if (_escopo == 'cidade' && (_municipioCidadeId == null || _municipioCidadeId!.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione o município.')));
       return;
@@ -494,7 +511,6 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
           corpo: _corpo.text.trim().isEmpty ? null : _corpo.text.trim(),
           linkUrl: _link.text.trim().isEmpty ? null : _link.text.trim(),
           escopo: _escopo,
-          poloId: _escopo == 'polo' ? _poloId : null,
           municipiosIds: _escopo == 'cidade' && _municipioCidadeId != null ? [_municipioCidadeId!] : const [],
           enviarPush: _enviarPush,
         ),
@@ -516,7 +532,6 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final polosAsync = ref.watch(polosRegioesListProvider);
     final munAsync = ref.watch(municipiosMTListProvider);
 
     final maxDialogW = min(480.0, MediaQuery.sizeOf(context).width - 48);
@@ -594,48 +609,12 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                         maxLines: 1,
                       ),
                     ),
-                    const DropdownMenuItem(
-                      value: 'polo',
-                      child: Text('Por polo regional', overflow: TextOverflow.ellipsis, maxLines: 1),
-                    ),
                   ],
                   onChanged: (v) => setState(() {
                     _escopo = v ?? 'global';
-                    _poloId = null;
                     _municipioCidadeId = null;
                   }),
                 ),
-                if (_escopo == 'polo') ...[
-                  const SizedBox(height: 12),
-                  polosAsync.when(
-                    data: (polos) {
-                      if (polos.isEmpty) {
-                        return Text(
-                          'Nenhum polo cadastrado.',
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
-                        );
-                      }
-                      return DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        value: _poloId != null && polos.any((p) => p.id == _poloId) ? _poloId : null,
-                        decoration: const InputDecoration(
-                          labelText: 'Polo regional *',
-                          prefixIcon: Icon(Icons.hub_outlined),
-                        ),
-                        items: [
-                          for (final p in polos)
-                            DropdownMenuItem(
-                              value: p.id,
-                              child: Text(p.nome, overflow: TextOverflow.ellipsis, maxLines: 1),
-                            ),
-                        ],
-                        onChanged: (v) => setState(() => _poloId = v),
-                      );
-                    },
-                    loading: () => const LinearProgressIndicator(),
-                    error: (e, _) => Text('Erro ao carregar polos: $e', style: TextStyle(color: theme.colorScheme.error)),
-                  ),
-                ],
                 if (_escopo == 'cidade') ...[
                   const SizedBox(height: 12),
                   munAsync.when(

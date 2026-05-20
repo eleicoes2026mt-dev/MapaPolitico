@@ -193,7 +193,7 @@ class ApoiadorHomeScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            'Nenhuma mensagem por enquanto.',
+                            'Sem mensagem ainda.',
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,

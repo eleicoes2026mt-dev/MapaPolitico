@@ -229,14 +229,12 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
   static const _forbiddenApoiador = {
     '/assessores',
     '/apoiadores',
-    '/mensagens',
     '/estrategia',
     '/painel-indicacoes',
     '/',
   };
 
   static String _redirectApoiador(String path) {
-    if (path == '/mensagens') return '/apoiador-home';
     return '/votantes';
   }
 

@@ -529,14 +529,13 @@ class _Sidebar extends ConsumerWidget {
     '/mapa',
   };
 
-  /// Apoiador: início (home), votantes, agenda e perfil. Mensagens só no bloco da tela Início.
+  /// Apoiador / votante: início, votantes (apoiador), agenda, mensagens e perfil.
   /// Dashboard e itens de gestão ficam ocultos.
   static const _pathsOcultosApoiador = {
     '/', // Dashboard do candidato
     '/assessores',
     '/apoiadores',
     '/configuracoes',
-    '/mensagens',
   };
 
   /// Candidato/assessor: /apoiador-home é exclusivo dos apoiadores.

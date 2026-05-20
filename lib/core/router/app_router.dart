@@ -18,6 +18,7 @@ import '../../features/mensagens/presentation/mensagens_screen.dart';
 import '../../features/estrategia/presentation/estrategia_screen.dart';
 import '../../features/mapa/presentation/mapa_screen.dart';
 import '../../features/perfil/presentation/meu_perfil_screen.dart';
+import '../../features/painel_indicacoes/presentation/painel_indicacoes_screen.dart';
 import '../../features/configuracoes/presentation/configuracoes_screen.dart';
 import '../../features/assessores/providers/gestao_campanha_provider.dart';
 import '../../layout/main_scaffold.dart';
@@ -114,12 +115,16 @@ GoRouter createAppRouter({String? initialLocation}) {
             '/configuracoes',
             '/estrategia',
             '/mapa',
+            '/painel-indicacoes',
           };
           if (gestaoCandidato.contains(path)) {
             return '/apoiador-home';
           }
         }
         if (role == 'assessor' && path == '/assessores') {
+          return homePathForUserId(session.user.id);
+        }
+        if (path == '/painel-indicacoes' && !gestaoCompleta) {
           return homePathForUserId(session.user.id);
         }
       }
@@ -169,6 +174,11 @@ GoRouter createAppRouter({String? initialLocation}) {
           GoRoute(
             path: '/votantes',
             pageBuilder: (_, state) => const NoTransitionPage(child: VotantesScreen()),
+          ),
+          GoRoute(
+            path: '/painel-indicacoes',
+            pageBuilder: (_, state) =>
+                const NoTransitionPage(child: PainelIndicacoesScreen()),
           ),
           GoRoute(
             path: '/apoiador-home',
@@ -221,6 +231,7 @@ class _RoleShellWrapperState extends ConsumerState<_RoleShellWrapper> {
     '/apoiadores',
     '/mensagens',
     '/estrategia',
+    '/painel-indicacoes',
     '/',
   };
 

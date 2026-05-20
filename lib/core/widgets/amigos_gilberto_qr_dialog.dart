@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
@@ -11,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config/env_config.dart';
 import '../constants/amigos_gilberto.dart';
+import 'invite_web_download_png.dart';
 import 'share_cartao_invite.dart';
 
 /// URL pública de cadastro com `?ref=<uuid do perfil convidador>` para rastrear a rede.
@@ -429,49 +431,72 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
     }
   }
 
+  /// Gera PNG do cartão e abre o diálogo de partilha com legenda (`share_plus`).
+  ///
+  /// No **WhatsApp móvel** (app nativo ou via menu Partilhar com ficheiros), WhatsApp agrupa imagem +
+  /// legenda quando o cliente o suporta. Abrir apenas `wa.me?text=` nunca envia a imagem.
   Future<void> _shareImageAndLink() async {
     if (_exportBusy) return;
+    Uint8List? pngBytes;
     setState(() => _exportBusy = true);
+    final caption = _legendaCompartilhamentoComLink(
+      url: widget.url,
+      inviterLabel: _inviterLabelForShare,
+    );
     try {
-      final bytes = await _captureCartaoPng();
+      pngBytes = await _captureCartaoPng();
       if (!mounted) return;
+      final bytes = pngBytes;
       if (bytes == null || bytes.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível gerar a imagem do cartão. Tente de novo.')),
+          const SnackBar(
+            content: Text(
+                'Não foi possível gerar a imagem do cartão. Tente de novo.'),
+          ),
         );
         return;
       }
-      final caption = _legendaCompartilhamentoComLink(
-        url: widget.url,
-        inviterLabel: _inviterLabelForShare,
-      );
       await shareInvitePngWithCaption(
         bytes: bytes,
         caption: caption,
         fileName: 'convite_amigos_gilberto.png',
       );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Compartilhamento: $e')),
-        );
+    } catch (e, st) {
+      debugPrintStack(label: 'shareInvite convite cartão falhou', stackTrace: st);
+      if (!mounted) return;
+      final b = pngBytes;
+      if (kIsWeb && b != null && b.isNotEmpty) {
+        try {
+          downloadInvitePngBlob(b, 'convite_amigos_gilberto.png');
+          await Clipboard.setData(ClipboardData(text: caption));
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Baixamos a imagem do cartão e copiamos a mensagem com o link. '
+                'No WhatsApp: anexe a foto (clip) e cole o texto como legenda, '
+                'ou envie a imagem primeiro e cole o texto logo a seguir — fica '
+                'no mesmo balão se usar a legenda (caption).',
+              ),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+          return;
+        } catch (_) {}
       }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Compartilhamento: $e')),
+      );
     } finally {
       if (mounted) setState(() => _exportBusy = false);
     }
   }
 
-  Future<void> _copyLink() async {
-    await Clipboard.setData(ClipboardData(text: widget.url));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Link de cadastro copiado.'),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
+  /// Dispara [_shareImageAndLink] sem aguardar (callbacks de botão).
+  void _enqueueShareInvite() => unawaited(_shareImageAndLink());
 
   @override
   Widget build(BuildContext context) {
@@ -523,12 +548,8 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
               ),
             ),
           IconButton(
-            tooltip: 'Copiar link de cadastro',
-            onPressed: _exportBusy ? null : _copyLink,
-            icon: const Icon(Icons.link_rounded),
-          ),
-          IconButton(
-            tooltip: 'Compartilhar cartão e link',
+            tooltip:
+                'Compartilhar cartão (imagem) com link — escolha WhatsApp na lista',
             onPressed: _exportBusy ? null : _shareImageAndLink,
             icon: const Icon(Icons.ios_share_rounded),
           ),
@@ -581,6 +602,8 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
                         layoutWidth: innerW,
                         isFullscreen: true,
                         onQrTap: onQrTap,
+                        onShareInviteTap:
+                            _exportBusy ? null : _enqueueShareInvite,
                       ),
                     ),
                   ),
@@ -624,6 +647,8 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
                                 isFullscreen: true,
                                 fullscreenDesktopSplit: true,
                                 onQrTap: onQrTap,
+                                onShareInviteTap:
+                                    _exportBusy ? null : _enqueueShareInvite,
                               ),
                             ),
                           ),
@@ -782,6 +807,7 @@ class _WideBody extends StatelessWidget {
     this.layoutWidth,
     this.fullscreenDesktopSplit = false,
     this.onQrTap,
+    this.onShareInviteTap,
   });
 
   final String url;
@@ -793,6 +819,9 @@ class _WideBody extends StatelessWidget {
   final double? layoutWidth;
   final bool fullscreenDesktopSplit;
   final VoidCallback? onQrTap;
+
+  /// Envia cartão PNG + texto (usa `share_plus` / WhatsApp como destino quando possível).
+  final VoidCallback? onShareInviteTap;
 
   static const Color _fsBlue = Color(0xFF0D47A1);
   static const Color _fsBlueMid = Color(0xFF0277BD);
@@ -900,7 +929,12 @@ class _WideBody extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  _LinkBlock(url: url, theme: theme, emphasize: true),
+                  _LinkBlock(
+                    url: url,
+                    theme: theme,
+                    emphasize: true,
+                    onShareInviteTap: onShareInviteTap,
+                  ),
                   const SizedBox(height: 10),
                   Text(
                     'O cadastro exige e-mail para acesso seguro ao painel.',
@@ -1013,7 +1047,12 @@ class _WideBody extends StatelessWidget {
                 ),
               ),
               SizedBox(height: fs ? 16 : 14),
-              _LinkBlock(url: url, theme: theme, emphasize: true),
+              _LinkBlock(
+                url: url,
+                theme: theme,
+                emphasize: true,
+                onShareInviteTap: onShareInviteTap,
+              ),
               SizedBox(height: fs ? 12 : 6),
               Text(
                 'O cadastro exige e-mail para acesso seguro ao painel.',
@@ -1075,6 +1114,7 @@ class _NarrowBody extends StatelessWidget {
     this.isFullscreen = false,
     this.layoutWidth,
     this.onQrTap,
+    this.onShareInviteTap,
   });
 
   final String url;
@@ -1085,6 +1125,7 @@ class _NarrowBody extends StatelessWidget {
   final bool isFullscreen;
   final double? layoutWidth;
   final VoidCallback? onQrTap;
+  final VoidCallback? onShareInviteTap;
 
   static const Color _fsBlue = Color(0xFF0D47A1);
   static const Color _fsBlueMid = Color(0xFF0277BD);
@@ -1229,7 +1270,12 @@ class _NarrowBody extends StatelessWidget {
           ),
         ),
         SizedBox(height: fs ? 18 : 14),
-        _LinkBlock(url: url, theme: theme, emphasize: true),
+        _LinkBlock(
+          url: url,
+          theme: theme,
+          emphasize: true,
+          onShareInviteTap: onShareInviteTap,
+        ),
         SizedBox(height: fs ? 10 : 8),
         Text(
           'O cadastro exige e-mail para acesso seguro ao painel.',
@@ -1538,11 +1584,15 @@ class _LinkBlock extends StatelessWidget {
     required this.url,
     required this.theme,
     this.emphasize = false,
+    this.onShareInviteTap,
   });
 
   final String url;
   final ThemeData theme;
   final bool emphasize;
+
+  /// `null`: sem botão (ex.: cartão apenas para rasterizar PNG na exportação).
+  final VoidCallback? onShareInviteTap;
 
   static const Color _linkBg = Color(0xFFE3F2FD);
   static const Color _linkText = Color(0xFF0D47A1);
@@ -1570,6 +1620,7 @@ class _LinkBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final fontSize = emphasize ? 16.5 : 11.0;
     final iconSize = emphasize ? 24.0 : 18.0;
+    final share = onShareInviteTap;
 
     return Material(
       color: _linkBg,
@@ -1582,43 +1633,76 @@ class _LinkBlock extends StatelessWidget {
       ),
       elevation: 0,
       shadowColor: Colors.transparent,
-      child: InkWell(
-        onTap: () => _open(context),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: emphasize ? 16 : 12,
-            vertical: emphasize ? 14 : 10,
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.link_rounded, size: iconSize, color: _linkAccent),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  url,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFamily: 'monospace',
-                    fontSize: fontSize,
-                    height: 1.3,
-                    color: _linkText,
-                    fontWeight: emphasize ? FontWeight.w600 : FontWeight.w500,
-                    decoration: TextDecoration.underline,
-                    decorationColor: _linkAccent.withValues(alpha: 0.75),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: emphasize ? 8 : 4,
+          vertical: emphasize ? 6 : 4,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.link_rounded, size: iconSize, color: _linkAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: InkWell(
+                onTap: () => _open(context),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      EdgeInsets.symmetric(vertical: emphasize ? 8 : 6, horizontal: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      url,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        fontSize: fontSize,
+                        height: 1.3,
+                        color: _linkText,
+                        fontWeight:
+                            emphasize ? FontWeight.w600 : FontWeight.w500,
+                        decoration: TextDecoration.underline,
+                        decorationColor: _linkAccent.withValues(alpha: 0.75),
+                      ),
+                      maxLines: emphasize ? 6 : 4,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  maxLines: emphasize ? 6 : 4,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Tooltip(
-                message: 'Abrir no navegador',
-                child: Icon(
-                  Icons.open_in_new_rounded,
-                  size: emphasize ? 22 : 18,
+            ),
+            if (share != null) ...[
+              IconButton(
+                splashRadius: 22,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 40,
+                  height: 40,
+                ),
+                tooltip:
+                    'Enviar cartão (imagem + texto). Escolha WhatsApp na lista — '
+                    'fica uma mensagem com foto e legenda quando o cliente permitir.',
+                onPressed: share,
+                icon: Icon(
+                  Icons.ios_share_rounded,
                   color: _linkAccent,
+                  size: emphasize ? 24 : 20,
                 ),
               ),
             ],
-          ),
+            IconButton(
+              splashRadius: 22,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+              tooltip: 'Abrir no navegador',
+              onPressed: () => _open(context),
+              icon: Icon(
+                Icons.open_in_new_rounded,
+                size: emphasize ? 22 : 18,
+                color: _linkAccent,
+              ),
+            ),
+          ],
         ),
       ),
     );

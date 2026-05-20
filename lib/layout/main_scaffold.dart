@@ -398,6 +398,7 @@ String _titleForRoute(String path) {
     '/': 'Dashboard',
     '/assessores': 'Assessores',
     '/apoiadores': 'Apoiadores',
+    '/painel-indicacoes': 'Rede de indicações',
     '/votantes': kAmigosGilbertoLabel,
     '/agenda': 'Agenda',
     '/mensagens': 'Mensagens',
@@ -512,6 +513,7 @@ class _Sidebar extends ConsumerWidget {
     _NavItem('/', 'Dashboard', Icons.dashboard_outlined),
     _NavItem('/assessores', 'Assessores', Icons.people_outline),
     _NavItem('/apoiadores', 'Apoiadores', Icons.person_add_alt_1_outlined),
+    _NavItem('/painel-indicacoes', 'Rede de indicações', Icons.account_tree_outlined),
     _NavItem('/votantes', kAmigosGilbertoLabel, Icons.checklist_outlined),
     _NavItem('/agenda', 'Agenda', Icons.event_outlined),
     _NavItem('/mensagens', 'Mensagens', Icons.chat_bubble_outline),
@@ -668,6 +670,7 @@ class _Sidebar extends ConsumerWidget {
                   children: [
                     ..._items.where((e) {
                       if (prof == null) return true;
+                      if (e.path == '/painel-indicacoes' && !gestaoCompleta) return false;
                       if (_pathsOcultosMenuGlobal.contains(e.path)) return false;
                       if (e.path == '/configuracoes' && !gestaoCompleta) return false;
                       if (prof.role == 'apoiador' || prof.role == 'votante') {

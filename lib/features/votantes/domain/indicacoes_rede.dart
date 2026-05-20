@@ -10,11 +10,6 @@ String normalizarChaveIndicacao(String raw) {
 
 /// Índices para análise de indicações a partir dos votantes já carregados.
 class IndicacoesRede {
-  IndicacoesRede._({
-    required this.rotuloPorChaveConvidador,
-    required Map<String, List<Votante>> indicadosPorChaveConvidador,
-  }) : _indicadosPorChaveConvidador = indicadosPorChaveConvidador;
-
   factory IndicacoesRede.fromVotantes(List<Votante> votantes) {
     final rotulo = <String, String>{};
 
@@ -48,22 +43,59 @@ class IndicacoesRede {
       }
     }
 
+    final keys = porConvidador.keys.toSet();
+    final somenteRamificacao = _chavesIndicadoresSomenteSubarvoreListaLateral(votantes, keys);
+    var prioritarias = keys.difference(somenteRamificacao);
+    // Se toda rede encadeia em indicadores já listados como pai, volta a mostrar todas.
+    if (prioritarias.isEmpty && keys.isNotEmpty) {
+      prioritarias = Set<String>.from(keys);
+    }
+
     return IndicacoesRede._(
       rotuloPorChaveConvidador: rotulo,
       indicadosPorChaveConvidador: porConvidador,
+      chavesPrioritariasRankingLateral: prioritarias,
     );
   }
+
+  /// Indica quem aparece só como parte da sub-red de outro indicador (lista da esquerda).
+  static Set<String> _chavesIndicadoresSomenteSubarvoreListaLateral(
+    List<Votante> votantes,
+    Set<String> chavesConvidadoresNaBase,
+  ) {
+    final esconder = <String>{};
+    for (final v in votantes) {
+      final nk = normalizarChaveIndicacao(v.nome);
+      if (nk.isEmpty || !chavesConvidadoresNaBase.contains(nk)) continue;
+      final raw = v.convitePorNome?.trim();
+      if (raw == null || raw.isEmpty) continue;
+      final pk = normalizarChaveIndicacao(raw);
+      if (pk.isEmpty || pk == nk || !chavesConvidadoresNaBase.contains(pk)) continue;
+      esconder.add(nk);
+    }
+    return esconder;
+  }
+
+  IndicacoesRede._({
+    required this.rotuloPorChaveConvidador,
+    required Map<String, List<Votante>> indicadosPorChaveConvidador,
+    required Set<String> chavesPrioritariasRankingLateral,
+  })  : _indicadosPorChaveConvidador = indicadosPorChaveConvidador,
+        _chavesPrioritariasRankingLateral = chavesPrioritariasRankingLateral;
 
   /// Rótulos para exibir (forma mais completa vista nos cadastros).
   final Map<String, String> rotuloPorChaveConvidador;
 
   final Map<String, List<Votante>> _indicadosPorChaveConvidador;
 
-  /// Convidadores que aparecem na coluna Indicação (ao menos uma pessoa ligada).
-  Iterable<String> get chavesConvidadoresComIndicados =>
-      _indicadosPorChaveConvidador.keys;
+  /// Chaves exibidas na lista «quem mais indica» — raízes relativas aos dados (evita repetir ramos já sob outro pai).
+  final Set<String> _chavesPrioritariasRankingLateral;
 
+  /// Total de nomes distintos que apareceram na coluna Indicação.
   int get totalConvidadoresComIndicacoesRegistradas => _indicadosPorChaveConvidador.length;
+
+  int get quantidadeIndicadoresNaListaPrioritariaRaiz =>
+      _chavesPrioritariasRankingLateral.length;
 
   /// Cópia mutável dos votantes cuja «Indicação» corresponde a [chaveConvidador].
   List<Votante> indicadosDiretosDe(String chaveConvidador) =>
@@ -119,7 +151,7 @@ class IndicacoesRede {
 
   List<String> rankingConvidadores({String filtroNome = ''}) {
     final q = normalizarChaveIndicacao(filtroNome);
-    final keys = chavesConvidadoresComIndicados.toList();
+    final keys = _chavesPrioritariasRankingLateral.toList();
     keys.sort((a, b) {
       final cmp = contagemIndicacaoDireta(b).compareTo(contagemIndicacaoDireta(a));
       if (cmp != 0) return cmp;

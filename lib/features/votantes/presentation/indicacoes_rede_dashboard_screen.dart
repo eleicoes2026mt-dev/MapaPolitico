@@ -71,7 +71,9 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
               setState(() => _filtro = t);
             },
             rankingKeys: rankingKeys,
-            rankingBaseTotal: rede.totalConvidadoresComIndicacoesRegistradas,
+            nomesDistinctComConviteNaBase: rede.totalConvidadoresComIndicacoesRegistradas,
+            entradasNaListaRaizes: rede.quantidadeIndicadoresNaListaPrioritariaRaiz,
+            filtroRankingAtivo: _filtro.isNotEmpty,
             selecionado: _convidadorSelecionado,
             onSelecionar: (k) => setState(() => _convidadorSelecionado = k),
           );
@@ -153,7 +155,9 @@ class _PainelRanking extends StatelessWidget {
     required this.onFiltroChanged,
     required this.onFiltroSubmitted,
     required this.rankingKeys,
-    required this.rankingBaseTotal,
+    required this.nomesDistinctComConviteNaBase,
+    required this.entradasNaListaRaizes,
+    required this.filtroRankingAtivo,
     required this.selecionado,
     required this.onSelecionar,
   });
@@ -165,7 +169,9 @@ class _PainelRanking extends StatelessWidget {
   final void Function(String) onFiltroChanged;
   final void Function(String) onFiltroSubmitted;
   final List<String> rankingKeys;
-  final int rankingBaseTotal;
+  final int nomesDistinctComConviteNaBase;
+  final int entradasNaListaRaizes;
+  final bool filtroRankingAtivo;
   final String? selecionado;
   final void Function(String?) onSelecionar;
 
@@ -185,7 +191,8 @@ class _PainelRanking extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Baseado na coluna «Indicação»: cada nível seguinte conta quem aquele cadastro indicou usando o próprio nome dele.',
+            'A lista mostra apenas quem inicia redes «próprias»: quem entrou na rede por '
+            'indicação de alguém que também está na lista fica apenas na árvore desse indicador.',
             style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
@@ -196,9 +203,11 @@ class _PainelRanking extends StatelessWidget {
               _StatChip(icon: Icons.people_outline, label: '${votantesTodos.length} cadastrados'),
               _StatChip(
                 icon: Icons.person_search_outlined,
-                label: rankingKeys.length != rankingBaseTotal
-                    ? '$rankingKeys.length no resultado · $rankingBaseTotal na base'
-                    : '$rankingBaseTotal nomes únicos como indicação',
+                label: filtroRankingAtivo
+                    ? '$rankingKeys.length resultado(s) · $entradasNaListaRaizes prioritários na lista (${nomesDistinctComConviteNaBase} como indicação distinta)'
+                    : (entradasNaListaRaizes < nomesDistinctComConviteNaBase
+                          ? '${entradasNaListaRaizes} na lista (${nomesDistinctComConviteNaBase} distinto(s) na coluna)'
+                          : '$entradasNaListaRaizes indicadores'),
               ),
               _StatChip(icon: Icons.share_outlined, label: '${comInd.length} com indicação'),
               _StatChip(icon: Icons.person_off_outlined, label: '${semInd.length} sem indicação'),
@@ -222,7 +231,7 @@ class _PainelRanking extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
                 child: Text(
-                  rankingBaseTotal == 0
+                  nomesDistinctComConviteNaBase == 0
                       ? 'Ainda não há indicações preenchidas na base.'
                       : 'Nenhum resultado para o filtro.',
                   textAlign: TextAlign.center,

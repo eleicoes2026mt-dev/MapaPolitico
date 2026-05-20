@@ -2,7 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/supabase/supabase_provider.dart';
 import '../../../models/mensagem.dart';
+import '../../../models/votante.dart';
+import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../votantes/providers/votantes_provider.dart';
 
 // ── Listagem ──────────────────────────────────────────────────────────────────
 
@@ -14,8 +17,87 @@ final mensagensListProvider = FutureProvider<List<Mensagem>>((ref) async {
   return (res as List<dynamic>).map((e) => Mensagem.fromJson(e as Map<String, dynamic>)).toList();
 });
 
+/// Espelha abrangência para apoiador/votante. Candidato e assessores veem sempre
+/// toda a lista devolvida pela API (equipe da campanha). Quem não é gestor
+/// continua a ver o que criou (`criado_por`), mesmo que o escopo não inclua o papel.
+final mensagensVisiveisParaUsuarioProvider = FutureProvider<List<Mensagem>>((ref) async {
+  final profile = await ref.watch(profileProvider.future);
+  final todas = await ref.watch(mensagensListProvider.future);
+  if (profile == null) return [];
+
+  if (profile.isCandidato || profile.isAssessor) {
+    return todas;
+  }
+
+  final role = profile.role.trim().toLowerCase();
+
+  bool enviadaPorMim(Mensagem m) =>
+      m.criadoPor != null && m.criadoPor!.trim().isNotEmpty && m.criadoPor == profile.id;
+
+  if (role == 'apoiador') {
+    final ap = await ref.watch(meuApoiadorProvider.future);
+    final municipioId = ap?.municipioId;
+    return todas
+        .where((m) => enviadaPorMim(m) || mensagemVisivelParaApoiador(m, municipioId))
+        .toList();
+  }
+  if (role == 'votante') {
+    final vts = await ref.watch(votantesListProvider.future);
+    return todas
+        .where((m) => enviadaPorMim(m) || mensagemVisivelParaVotante(m, vts))
+        .toList();
+  }
+
+  // Papel inesperado: não esconder no cliente (RLS é a fonte de verdade).
+  return todas;
+});
+
+/// Critério alinhado a `mensagens_apoiador_read` (Supabase).
+bool mensagemVisivelParaApoiador(Mensagem m, String? municipioIdUsuario) {
+  switch (m.escopo) {
+    case 'global':
+    case 'polo':
+    case 'performance':
+    case 'reuniao':
+    case 'privada_apoiadores':
+      return true;
+    case 'cidade':
+      if (municipioIdUsuario == null || municipioIdUsuario.isEmpty) return false;
+      if (m.municipiosIds.isEmpty) return false;
+      return m.municipiosIds.contains(municipioIdUsuario);
+    case 'privada_assessores':
+    default:
+      return false;
+  }
+}
+
+/// Critério alinhado a `mensagens_votante_read` (Supabase).
+bool mensagemVisivelParaVotante(Mensagem m, List<Votante> vtsDoPerfil) {
+  switch (m.escopo) {
+    case 'global':
+    case 'polo':
+    case 'performance':
+    case 'reuniao':
+      return true;
+    case 'cidade':
+      if (m.municipiosIds.isEmpty) return false;
+      for (final v in vtsDoPerfil) {
+        final mid = v.municipioId;
+        if (mid != null && mid.isNotEmpty && m.municipiosIds.contains(mid)) {
+          return true;
+        }
+      }
+      return false;
+    case 'privada_apoiadores':
+    case 'privada_assessores':
+    default:
+      return false;
+  }
+}
+
 final mensagensCountProvider = FutureProvider<int>((ref) async {
-  return ref.watch(mensagensListProvider).whenData((l) => l.length).valueOrNull ?? 0;
+  final l = await ref.watch(mensagensVisiveisParaUsuarioProvider.future);
+  return l.length;
 });
 
 /// Polos regionais (abrangência «por polo»).
@@ -50,9 +132,20 @@ Future<List<String>> profileIdsParaNovaMensagem(NovaMensagemParams p) async {
       final r = await supabase.from('assessores').select('profile_id').eq('ativo', true);
       return _uniqProfileIds(r as List, 'profile_id');
     case 'privada_apoiadores':
-      final r = await supabase.from('apoiadores').select('profile_id, excluido_em').not('profile_id', 'is', null);
-      final rows = (r as List).where((e) => e is Map && e['excluido_em'] == null).toList();
-      return _uniqProfileIds(rows, 'profile_id');
+      final rAp = await supabase
+          .from('apoiadores')
+          .select('profile_id, excluido_em')
+          .not('profile_id', 'is', null);
+      final apRows = (rAp as List).where((e) => e is Map && e['excluido_em'] == null).toList();
+      final rAs = await supabase
+          .from('assessores')
+          .select('profile_id')
+          .eq('ativo', true)
+          .not('profile_id', 'is', null);
+      final set = <String>{}
+        ..addAll(_uniqProfileIds(apRows, 'profile_id'))
+        ..addAll(_uniqProfileIds(rAs as List, 'profile_id'));
+      return set.toList();
     case 'cidade':
       if (p.municipiosIds.isEmpty) return [];
       final ap = await supabase

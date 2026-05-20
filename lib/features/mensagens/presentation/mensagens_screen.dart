@@ -201,7 +201,7 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
-    final listAsync = ref.watch(mensagensListProvider);
+    final listAsync = ref.watch(mensagensVisiveisParaUsuarioProvider);
 
     return RefreshIndicator(
       onRefresh: () async {

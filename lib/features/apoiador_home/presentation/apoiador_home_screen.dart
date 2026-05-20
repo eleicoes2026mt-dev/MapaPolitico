@@ -21,7 +21,7 @@ class ApoiadorHomeScreen extends ConsumerWidget {
     final profile = ref.watch(profileProvider).valueOrNull;
     final apoiadorAsync = ref.watch(meuApoiadorProvider);
     final visitasAsync = ref.watch(visitasProvider);
-    final mensagensAsync = ref.watch(mensagensListProvider);
+    final mensagensAsync = ref.watch(mensagensVisiveisParaUsuarioProvider);
 
     final apoiador = apoiadorAsync.valueOrNull;
     final mensagens = mensagensAsync.valueOrNull ?? [];

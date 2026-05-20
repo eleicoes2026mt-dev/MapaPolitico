@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/utils/municipio_resolver.dart'
@@ -160,34 +161,53 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Buscar em $kAmigosGilbertoLabel...',
-                    prefixIcon: const Icon(Icons.search),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Buscar em $kAmigosGilbertoLabel...',
+                        prefixIcon: const Icon(Icons.search),
+                      ),
+                      onChanged: (v) => setState(() => _query = v),
+                    ),
                   ),
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  decoration: const InputDecoration(
-                    hintText: 'Filtrar por cidade...',
-                    prefixIcon: Icon(Icons.filter_list),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Filtrar por cidade...',
+                        prefixIcon: Icon(Icons.filter_list),
+                      ),
+                      onChanged: (v) => setState(() => _cidadeFilter = v),
+                    ),
                   ),
-                  onChanged: (v) => setState(() => _cidadeFilter = v),
-                ),
+                ],
               ),
-              const SizedBox(width: 12),
-              if (podeCadastrar)
-                FilledButton.icon(
-                  onPressed: () => _abrirNovoOuEditar(),
-                  icon: const Icon(Icons.add),
-                  label: Text('Novo — $kAmigosGilbertoLabel'),
-                ),
+              const SizedBox(height: 10),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  IconButton.outlined(
+                    tooltip:
+                        'Dashboard da rede de indicações — quem indicou a quem e pirâmide',
+                    icon: const Icon(Icons.hub_rounded),
+                    onPressed: () => context.push('/dashboard-indicacoes-amigos'),
+                  ),
+                  if (podeCadastrar)
+                    FilledButton.icon(
+                      onPressed: () => _abrirNovoOuEditar(),
+                      icon: const Icon(Icons.add),
+                      label: Text('Novo — $kAmigosGilbertoLabel'),
+                    ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),

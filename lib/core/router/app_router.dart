@@ -12,6 +12,7 @@ import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/assessores/presentation/assessores_screen.dart';
 import '../../features/apoiadores/presentation/apoiadores_screen.dart';
 import '../../features/votantes/presentation/votantes_screen.dart';
+import '../../features/votantes/presentation/indicacoes_rede_dashboard_screen.dart';
 import '../../features/agenda/presentation/agenda_screen.dart';
 import '../../features/apoiador_home/presentation/apoiador_home_screen.dart';
 import '../../features/mensagens/presentation/mensagens_screen.dart';
@@ -174,6 +175,11 @@ GoRouter createAppRouter({String? initialLocation}) {
           GoRoute(
             path: '/votantes',
             pageBuilder: (_, state) => const NoTransitionPage(child: VotantesScreen()),
+          ),
+          GoRoute(
+            path: '/dashboard-indicacoes-amigos',
+            pageBuilder: (_, __) =>
+                const NoTransitionPage(child: IndicacoesRedeDashboardScreen()),
           ),
           GoRoute(
             path: '/painel-indicacoes',

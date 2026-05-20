@@ -149,9 +149,15 @@ class IndicacoesRede {
     return (pessoasNaRede: pessoas, votosNaRede: votos);
   }
 
-  List<String> rankingConvidadores({String filtroNome = ''}) {
+  List<String> rankingConvidadores({
+    String filtroNome = '',
+    bool listarTodosIndicadoresDaColuna = false,
+  }) {
     final q = normalizarChaveIndicacao(filtroNome);
-    final keys = _chavesPrioritariasRankingLateral.toList();
+    final origemKeys = listarTodosIndicadoresDaColuna
+        ? _indicadosPorChaveConvidador.keys
+        : _chavesPrioritariasRankingLateral;
+    final keys = origemKeys.toList();
     keys.sort((a, b) {
       final cmp = contagemIndicacaoDireta(b).compareTo(contagemIndicacaoDireta(a));
       if (cmp != 0) return cmp;

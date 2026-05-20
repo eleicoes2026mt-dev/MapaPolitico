@@ -21,6 +21,7 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
   final _filtroRanking = TextEditingController();
   String _filtro = '';
   String? _convidadorSelecionado;
+  bool _listarTodosIndicadoresNaLateral = false;
 
   @override
   void dispose() {
@@ -49,7 +50,10 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (votantes) {
           final rede = IndicacoesRede.fromVotantes(votantes);
-          final rankingKeys = rede.rankingConvidadores(filtroNome: _filtro);
+          final rankingKeys = rede.rankingConvidadores(
+            filtroNome: _filtro,
+            listarTodosIndicadoresDaColuna: _listarTodosIndicadoresNaLateral,
+          );
 
           if (_convidadorSelecionado != null && !rankingKeys.contains(_convidadorSelecionado)) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -74,6 +78,9 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
             nomesDistinctComConviteNaBase: rede.totalConvidadoresComIndicacoesRegistradas,
             entradasNaListaRaizes: rede.quantidadeIndicadoresNaListaPrioritariaRaiz,
             filtroRankingAtivo: _filtro.isNotEmpty,
+            listarTodosNaLateral: _listarTodosIndicadoresNaLateral,
+            onListarTodosNaLateralChanged: (sim) =>
+                setState(() => _listarTodosIndicadoresNaLateral = sim),
             selecionado: _convidadorSelecionado,
             onSelecionar: (k) => setState(() => _convidadorSelecionado = k),
           );
@@ -158,6 +165,8 @@ class _PainelRanking extends StatelessWidget {
     required this.nomesDistinctComConviteNaBase,
     required this.entradasNaListaRaizes,
     required this.filtroRankingAtivo,
+    required this.listarTodosNaLateral,
+    required this.onListarTodosNaLateralChanged,
     required this.selecionado,
     required this.onSelecionar,
   });
@@ -172,8 +181,25 @@ class _PainelRanking extends StatelessWidget {
   final int nomesDistinctComConviteNaBase;
   final int entradasNaListaRaizes;
   final bool filtroRankingAtivo;
+  final bool listarTodosNaLateral;
+  final ValueChanged<bool> onListarTodosNaLateralChanged;
   final String? selecionado;
   final void Function(String?) onSelecionar;
+
+  String _chipContagemLista() {
+    if (filtroRankingAtivo) {
+      final modo =
+          listarTodosNaLateral ? 'lista completa' : '${entradasNaListaRaizes} prioritários';
+      return '$rankingKeys.length resultado(s) · $modo (${nomesDistinctComConviteNaBase} distinto(s) na coluna)';
+    }
+    if (listarTodosNaLateral) {
+      return '$rankingKeys.length todos os indicadores (coluna)';
+    }
+    if (entradasNaListaRaizes < nomesDistinctComConviteNaBase) {
+      return '${entradasNaListaRaizes} na lista (${nomesDistinctComConviteNaBase} distinto(s) na coluna)';
+    }
+    return '${entradasNaListaRaizes} indicadores';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,9 +217,40 @@ class _PainelRanking extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'A lista mostra apenas quem inicia redes «próprias»: quem entrou na rede por '
-            'indicação de alguém que também está na lista fica apenas na árvore desse indicador.',
+            listarTodosNaLateral
+                ? 'A lista inclui cada nome que apareceu como indicação na base '
+                    '(interruptor «lista completa» está ligado).'
+                : 'Por padrão só aparecem indicadores prioritários: quem entrou pela rede '
+                    'de outro nome também listado fica apenas na árvore desse indicador.',
             style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: tema.colorScheme.surface.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(14),
+            child: SwitchListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+              dense: true,
+              title: Text(
+                'Lista completa de indicadores',
+                style: tema.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                listarTodosNaLateral
+                    ? 'Desligue para ocultar de novo ramos já ligados à árvore de outro pai (lista mais limpa).'
+                    : 'Ligue para listar todas as pessoas que constam como indicação, inclusive dentro da rede de outros.',
+                style: tema.textTheme.bodySmall?.copyWith(
+                  color: tema.colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                ),
+              ),
+              value: listarTodosNaLateral,
+              onChanged: onListarTodosNaLateralChanged,
+              secondary: Icon(
+                listarTodosNaLateral ? Icons.list_alt_rounded : Icons.manage_search_rounded,
+                color: tema.colorScheme.primary,
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -201,14 +258,7 @@ class _PainelRanking extends StatelessWidget {
             runSpacing: 8,
             children: [
               _StatChip(icon: Icons.people_outline, label: '${votantesTodos.length} cadastrados'),
-              _StatChip(
-                icon: Icons.person_search_outlined,
-                label: filtroRankingAtivo
-                    ? '$rankingKeys.length resultado(s) · $entradasNaListaRaizes prioritários na lista (${nomesDistinctComConviteNaBase} como indicação distinta)'
-                    : (entradasNaListaRaizes < nomesDistinctComConviteNaBase
-                          ? '${entradasNaListaRaizes} na lista (${nomesDistinctComConviteNaBase} distinto(s) na coluna)'
-                          : '$entradasNaListaRaizes indicadores'),
-              ),
+              _StatChip(icon: Icons.person_search_outlined, label: _chipContagemLista()),
               _StatChip(icon: Icons.share_outlined, label: '${comInd.length} com indicação'),
               _StatChip(icon: Icons.person_off_outlined, label: '${semInd.length} sem indicação'),
             ],
@@ -463,9 +513,10 @@ class _NoPiramideTile extends StatelessWidget {
         filhos.isEmpty ? 'Nenhum próximo nível registrado sob este nome' : 'expandir próximo nível (${filhos.length})';
 
     final traco = _corTracoGalho(context);
+    final temNovaRedeFilha = filhos.isNotEmpty;
 
     Widget conteudo;
-    if (filhos.isEmpty) {
+    if (!temNovaRedeFilha) {
       conteudo = ListTile(
         dense: true,
         visualDensity: VisualDensity.compact,
@@ -486,19 +537,24 @@ class _NoPiramideTile extends StatelessWidget {
         tilePadding: const EdgeInsets.only(left: 4, right: 8),
         title: Text(
           votante.nome,
-          style: tema.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          style: tema.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: tema.colorScheme.onPrimaryContainer,
+          ),
         ),
         subtitle: Text(
           '$detalheLinha · $textoRamoFilhos',
-          style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+          style: tema.textTheme.bodySmall?.copyWith(
+            color: tema.colorScheme.onPrimaryContainer.withValues(alpha: 0.92),
+          ),
           maxLines: 3,
         ),
         initiallyExpanded: false,
         maintainState: true,
         shape: const RoundedRectangleBorder(),
         collapsedShape: const RoundedRectangleBorder(),
-        iconColor: traco,
-        collapsedIconColor: traco,
+        iconColor: tema.colorScheme.primary,
+        collapsedIconColor: tema.colorScheme.primary,
         children: [
           Padding(
             padding: const EdgeInsets.only(left: 6, bottom: 4),
@@ -516,13 +572,27 @@ class _NoPiramideTile extends StatelessWidget {
       );
     }
 
+    final corCartao = temNovaRedeFilha
+        ? tema.colorScheme.primaryContainer.withValues(alpha: nivel == 0 ? 0.62 : 0.48)
+        : tema.colorScheme.surface.withValues(alpha: nivel == 0 ? 1.0 : 0.74);
+
+    final bordaCartao = temNovaRedeFilha
+        ? BorderSide(
+            color: tema.colorScheme.primary.withValues(alpha: 0.52),
+            width: 1.5,
+          )
+        : BorderSide(color: tema.colorScheme.outlineVariant.withValues(alpha: 0.35));
+
     return Padding(
       padding: EdgeInsets.only(left: 6.0 + nivel * 18, bottom: 6),
       child: Theme(
         data: tema.copyWith(dividerColor: Colors.transparent),
         child: Material(
-          color: tema.colorScheme.surface.withValues(alpha: nivel == 0 ? 1.0 : 0.74),
-          borderRadius: BorderRadius.circular(12),
+          color: corCartao,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: bordaCartao,
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: conteudo,

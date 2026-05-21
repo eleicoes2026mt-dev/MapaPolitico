@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
+import '../../../models/apoiador.dart';
 import '../../../models/votante.dart';
-import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart' show formatTelefoneBrFromDigits;
+import '../../auth/providers/auth_provider.dart';
+import '../../apoiadores/providers/apoiadores_provider.dart';
+import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
+    show formatTelefoneBrFromDigits;
 import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
 import '../domain/indicacoes_rede.dart';
 import '../providers/votantes_provider.dart';
@@ -14,10 +18,12 @@ class IndicacoesRedeDashboardScreen extends ConsumerStatefulWidget {
   const IndicacoesRedeDashboardScreen({super.key});
 
   @override
-  ConsumerState<IndicacoesRedeDashboardScreen> createState() => _IndicacoesRedeDashboardScreenState();
+  ConsumerState<IndicacoesRedeDashboardScreen> createState() =>
+      _IndicacoesRedeDashboardScreenState();
 }
 
-class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDashboardScreen> {
+class _IndicacoesRedeDashboardScreenState
+    extends ConsumerState<IndicacoesRedeDashboardScreen> {
   final _filtroRanking = TextEditingController();
   String _filtro = '';
   String? _convidadorSelecionado;
@@ -32,16 +38,34 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final profile = ref.watch(profileProvider).valueOrNull;
+
+    /// Só conta com [meuApoiadorProvider]; fora desse papel devolve dados vazios.
+    final AsyncValue<Apoiador?> estadoCadastroMeuPerfil =
+        profile?.role == 'apoiador'
+            ? ref.watch(meuApoiadorProvider)
+            : const AsyncValue.data(null);
+
+    final modoSubRedeSozinhaVotantePub = profile?.role == 'votante';
+
     final async = ref.watch(votantesListProvider);
+
+    final appTitulo = modoSubRedeSozinhaVotantePub
+        ? 'Minhas indicações'
+        : 'Rede de indicações';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Rede de indicações'),
+        title: Text(appTitulo),
         actions: [
           IconButton(
             tooltip: 'Atualizar lista',
             icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => ref.invalidate(votantesListProvider),
+            onPressed: () {
+              ref.invalidate(votantesListProvider);
+              ref.invalidate(apoiadoresListProvider);
+              ref.invalidate(meuApoiadorProvider);
+            },
           ),
         ],
       ),
@@ -49,17 +73,218 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (votantes) {
-          final rede = IndicacoesRede.fromVotantes(votantes);
-          final rankingKeys = rede.rankingConvidadores(
-            filtroNome: _filtro,
-            listarTodosIndicadoresDaColuna: _listarTodosIndicadoresNaLateral,
+          if (profile?.role == 'apoiador') {
+            if (estadoCadastroMeuPerfil.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (estadoCadastroMeuPerfil.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Erro ao carregar o seu cadastro de apoiador. Toque em «Atualizar» no topo '
+                    'e verifique se a conta ficou bem vinculada.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
+          }
+
+          final cadastroUsuarioApoiador = profile?.role == 'apoiador'
+              ? estadoCadastroMeuPerfil.valueOrNull
+              : null;
+          final nomeNormalizadoCadastro =
+              cadastroUsuarioApoiador?.nome.trim() ?? '';
+
+          if (profile?.role == 'apoiador') {
+            if (cadastroUsuarioApoiador == null ||
+                nomeNormalizadoCadastro.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Conta reconhecida como apoiador, mas não há linha em «apoiadores» com nome válido ligada '
+                    'a este login. Solicite ao candidato/assessor o reenvio do convite ou peça revisão ao apoio.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyLarge
+                        ?.copyWith(color: theme.colorScheme.error),
+                  ),
+                ),
+              );
+            }
+          }
+
+          final apoiadores =
+              ref.watch(apoiadoresListProvider).valueOrNull ?? [];
+          final apoiadorIdParaNome = Map<String, String>.fromEntries(
+            apoiadores.map((a) => MapEntry(a.id, a.nome)),
+          );
+          if (cadastroUsuarioApoiador != null &&
+              nomeNormalizadoCadastro.isNotEmpty) {
+            apoiadorIdParaNome[cadastroUsuarioApoiador.id] =
+                nomeNormalizadoCadastro;
+          }
+
+          final rede = IndicacoesRede.fromVotantes(
+            votantes,
+            apoiadorIdParaNome: apoiadorIdParaNome,
           );
 
-          if (_convidadorSelecionado != null && !rankingKeys.contains(_convidadorSelecionado)) {
+          /// Quem faz login como apoiador vê apenas os registos já filtrados no provider;
+          /// a lista à esquerda continua igual (indicadores **nesta mesma vista** da rede).
+          Votante? meuCadastroVotante;
+          String nomeParaChaveSubRedePub = '';
+          if (modoSubRedeSozinhaVotantePub && profile != null) {
+            for (final v in votantes) {
+              if (v.profileId != null && v.profileId == profile.id) {
+                meuCadastroVotante = v;
+                break;
+              }
+            }
+            final nLinha = meuCadastroVotante?.nome.trim() ?? '';
+            final nPerfil = profile.fullName?.trim() ?? '';
+            nomeParaChaveSubRedePub = nLinha.isNotEmpty
+                ? nLinha
+                : (nPerfil.isNotEmpty ? nPerfil : '');
+          }
+
+          final chaveRaizVotante = nomeParaChaveSubRedePub.isEmpty
+              ? ''
+              : normalizarChaveIndicacao(nomeParaChaveSubRedePub);
+
+          final chaveRaizPreferidaApoiador = nomeNormalizadoCadastro.isEmpty
+              ? ''
+              : normalizarChaveIndicacao(nomeNormalizadoCadastro);
+
+          final rankingKeys = modoSubRedeSozinhaVotantePub
+              ? (chaveRaizVotante.isEmpty ? <String>[] : [chaveRaizVotante])
+              : rede.rankingConvidadores(
+                  filtroNome: _filtro,
+                  listarTodosIndicadoresDaColuna:
+                      _listarTodosIndicadoresNaLateral,
+                );
+
+          if (!modoSubRedeSozinhaVotantePub &&
+              _convidadorSelecionado != null &&
+              !rankingKeys.contains(_convidadorSelecionado)) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
               setState(() => _convidadorSelecionado = null);
             });
+          }
+
+          Future<void> onPull() async {
+            ref.invalidate(votantesListProvider);
+            ref.invalidate(apoiadoresListProvider);
+            ref.invalidate(meuApoiadorProvider);
+            await ref
+                .read(votantesListProvider.future)
+                .then((_) {})
+                .onError((_, __) {});
+            await ref
+                .read(apoiadoresListProvider.future)
+                .then((_) {})
+                .onError((_, __) {});
+          }
+
+          final tituloExibirRaizVotPub = nomeParaChaveSubRedePub.isNotEmpty
+              ? nomeParaChaveSubRedePub
+              : (profile?.fullName ?? '');
+
+          /// Lista + painel de árvore quando o utilizador **não** é [votante] público só.
+          /// Inclui seleção preferida do apoiador pela chave do próprio nome cadastrado.
+          String? chavePainelRedePreferida() {
+            final manual = _convidadorSelecionado;
+            if (manual != null && rankingKeys.contains(manual)) return manual;
+            if (chaveRaizPreferidaApoiador.isNotEmpty &&
+                rankingKeys.contains(chaveRaizPreferidaApoiador)) {
+              return chaveRaizPreferidaApoiador;
+            }
+            return rankingKeys.isNotEmpty ? rankingKeys.first : null;
+          }
+
+          /// Detalhes da árvore (painel direito / em baixo na vista estreita).
+          Widget detalheBody() {
+            if (modoSubRedeSozinhaVotantePub) {
+              if (profile == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (chaveRaizVotante.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Não encontramos um cadastro de $kAmigosGilbertoLabel ligado ao seu utilizador '
+                      'ou falta o nome no perfil. Complete o nome em «Meu perfil» ou contacte o apoio '
+                      'se o cadastro estiver incompleto.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                );
+              }
+              return _PainelDetalhe(
+                tema: theme,
+                rede: rede,
+                chaveConvidador: chaveRaizVotante,
+                tituloTopoOverride: tituloExibirRaizVotPub.trim().isNotEmpty
+                    ? tituloExibirRaizVotPub.trim()
+                    : null,
+                rotuloArvoreRaiz: tituloExibirRaizVotPub.trim().isNotEmpty
+                    ? tituloExibirRaizVotPub.trim()
+                    : null,
+                modoMinhaSubRedeVotante: true,
+              );
+            }
+
+            return _PainelDetalhe(
+              tema: theme,
+              rede: rede,
+              chaveConvidador: chavePainelRedePreferida(),
+            );
+          }
+
+          /// Perfil público [votante]: só esta sub-rede.
+          if (modoSubRedeSozinhaVotantePub) {
+            return RefreshIndicator(
+              onRefresh: onPull,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 92),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Material(
+                      color: theme.colorScheme.primaryContainer
+                          .withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.info_outline_rounded,
+                                color: theme.colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Aqui só conta a sua sub-rede: pessoas que se cadastraram com o seu nome '
+                                'na coluna Indicação (e os níveis seguintes quando estiverem indicados pelo nome).',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    detalheBody(),
+                  ],
+                ),
+              ),
+            );
           }
 
           final twoPane = MediaQuery.sizeOf(context).width >= 980;
@@ -69,32 +294,24 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
             rede: rede,
             votantesTodos: votantes,
             filtroController: _filtroRanking,
-            onFiltroSubmitted: (_) => setState(() => _filtro = _filtroRanking.text.trim()),
+            onFiltroSubmitted: (_) =>
+                setState(() => _filtro = _filtroRanking.text.trim()),
             onFiltroChanged: (_) {
               final t = _filtroRanking.text.trim();
               setState(() => _filtro = t);
             },
             rankingKeys: rankingKeys,
-            nomesDistinctComConviteNaBase: rede.totalConvidadoresComIndicacoesRegistradas,
-            entradasNaListaRaizes: rede.quantidadeIndicadoresNaListaPrioritariaRaiz,
+            nomesDistinctComConviteNaBase:
+                rede.totalConvidadoresComIndicacoesRegistradas,
+            entradasNaListaRaizes:
+                rede.quantidadeIndicadoresNaListaPrioritariaRaiz,
             filtroRankingAtivo: _filtro.isNotEmpty,
             listarTodosNaLateral: _listarTodosIndicadoresNaLateral,
             onListarTodosNaLateralChanged: (sim) =>
                 setState(() => _listarTodosIndicadoresNaLateral = sim),
-            selecionado: _convidadorSelecionado,
+            selecionado: chavePainelRedePreferida(),
             onSelecionar: (k) => setState(() => _convidadorSelecionado = k),
           );
-
-          Widget detalheBody() {
-            final sel = _convidadorSelecionado ??
-                (rankingKeys.isNotEmpty ? rankingKeys.first : null);
-            return _PainelDetalhe(tema: theme, rede: rede, chaveConvidador: sel);
-          }
-
-          Future<void> onPull() async {
-            ref.invalidate(votantesListProvider);
-            await ref.read(votantesListProvider.future).then((_) {}).onError((_, __) {});
-          }
 
           if (twoPane) {
             return Row(
@@ -103,7 +320,8 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
                 SizedBox(
                   width: 392,
                   child: Material(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.35),
                     child: SingleChildScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       child: Padding(
@@ -145,9 +363,13 @@ class _IndicacoesRedeDashboardScreenState extends ConsumerState<IndicacoesRedeDa
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/votantes'),
-        icon: const Icon(Icons.checklist_rounded),
-        label: Text(kAmigosGilbertoLabel),
+        onPressed: () => context
+            .go(modoSubRedeSozinhaVotantePub ? '/apoiador-home' : '/votantes'),
+        icon: Icon(modoSubRedeSozinhaVotantePub
+            ? Icons.home_rounded
+            : Icons.checklist_rounded),
+        label: Text(
+            modoSubRedeSozinhaVotantePub ? 'Início' : kAmigosGilbertoLabel),
       ),
     );
   }
@@ -188,17 +410,18 @@ class _PainelRanking extends StatelessWidget {
 
   String _chipContagemLista() {
     if (filtroRankingAtivo) {
-      final modo =
-          listarTodosNaLateral ? 'lista completa' : '${entradasNaListaRaizes} prioritários';
-      return '$rankingKeys.length resultado(s) · $modo (${nomesDistinctComConviteNaBase} distinto(s) na coluna)';
+      final modo = listarTodosNaLateral
+          ? 'lista completa'
+          : '$entradasNaListaRaizes prioritários';
+      return '$rankingKeys.length resultado(s) · $modo ($nomesDistinctComConviteNaBase distinto(s) na coluna)';
     }
     if (listarTodosNaLateral) {
       return '$rankingKeys.length todos os indicadores (coluna)';
     }
     if (entradasNaListaRaizes < nomesDistinctComConviteNaBase) {
-      return '${entradasNaListaRaizes} na lista (${nomesDistinctComConviteNaBase} distinto(s) na coluna)';
+      return '$entradasNaListaRaizes na lista ($nomesDistinctComConviteNaBase distinto(s) na coluna)';
     }
-    return '${entradasNaListaRaizes} indicadores';
+    return '$entradasNaListaRaizes indicadores';
   }
 
   @override
@@ -213,7 +436,8 @@ class _PainelRanking extends StatelessWidget {
         children: [
           Text(
             '$kAmigosGilbertoLabel — quem mais indica?',
-            style: tema.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: tema.textTheme.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
@@ -222,7 +446,8 @@ class _PainelRanking extends StatelessWidget {
                     '(interruptor «lista completa» está ligado).'
                 : 'Por padrão só aparecem indicadores prioritários: quem entrou pela rede '
                     'de outro nome também listado fica apenas na árvore desse indicador.',
-            style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+            style: tema.textTheme.bodySmall
+                ?.copyWith(color: tema.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 12),
           Material(
@@ -233,7 +458,8 @@ class _PainelRanking extends StatelessWidget {
               dense: true,
               title: Text(
                 'Lista completa de indicadores',
-                style: tema.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                style: tema.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
                 listarTodosNaLateral
@@ -247,7 +473,9 @@ class _PainelRanking extends StatelessWidget {
               value: listarTodosNaLateral,
               onChanged: onListarTodosNaLateralChanged,
               secondary: Icon(
-                listarTodosNaLateral ? Icons.list_alt_rounded : Icons.manage_search_rounded,
+                listarTodosNaLateral
+                    ? Icons.list_alt_rounded
+                    : Icons.manage_search_rounded,
                 color: tema.colorScheme.primary,
               ),
             ),
@@ -257,10 +485,18 @@ class _PainelRanking extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _StatChip(icon: Icons.people_outline, label: '${votantesTodos.length} cadastrados'),
-              _StatChip(icon: Icons.person_search_outlined, label: _chipContagemLista()),
-              _StatChip(icon: Icons.share_outlined, label: '${comInd.length} com indicação'),
-              _StatChip(icon: Icons.person_off_outlined, label: '${semInd.length} sem indicação'),
+              _StatChip(
+                  icon: Icons.people_outline,
+                  label: '${votantesTodos.length} cadastrados'),
+              _StatChip(
+                  icon: Icons.person_search_outlined,
+                  label: _chipContagemLista()),
+              _StatChip(
+                  icon: Icons.share_outlined,
+                  label: '${comInd.length} com indicação'),
+              _StatChip(
+                  icon: Icons.person_off_outlined,
+                  label: '${semInd.length} sem indicação'),
             ],
           ),
           const SizedBox(height: 16),
@@ -269,7 +505,8 @@ class _PainelRanking extends StatelessWidget {
             decoration: InputDecoration(
               hintText: 'Buscar nome do indicador...',
               prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               isDense: true,
             ),
             onChanged: onFiltroChanged,
@@ -298,11 +535,15 @@ class _PainelRanking extends StatelessWidget {
                 final alcance = rede.alcanceSubarvore(key);
                 final diretos = rede.contagemIndicacaoDireta(key);
                 final votDir = rede.votosIndicacaoDireta(key);
-                final ativo = selecionado == key || (selecionado == null && i == 0);
+                final ativo =
+                    selecionado == key || (selecionado == null && i == 0);
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Material(
-                    color: ativo ? tema.colorScheme.primaryContainer.withValues(alpha: 0.45) : null,
+                    color: ativo
+                        ? tema.colorScheme.primaryContainer
+                            .withValues(alpha: 0.45)
+                        : null,
                     borderRadius: BorderRadius.circular(12),
                     child: ListTile(
                       title: Text(
@@ -334,7 +575,8 @@ class _PainelRanking extends StatelessWidget {
               padding: const EdgeInsets.only(top: 12),
               child: Text(
                 'Toque num nome: a árvore abre ao lado ou abaixo — expanda cada ramo para o próximo nível.',
-                style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+                style: tema.textTheme.bodySmall
+                    ?.copyWith(color: tema.colorScheme.onSurfaceVariant),
               ),
             ),
         ],
@@ -348,11 +590,23 @@ class _PainelDetalhe extends StatelessWidget {
     required this.tema,
     required this.rede,
     required this.chaveConvidador,
+    this.tituloTopoOverride,
+    this.rotuloArvoreRaiz,
+    this.modoMinhaSubRedeVotante = false,
   });
 
   final ThemeData tema;
   final IndicacoesRede rede;
   final String? chaveConvidador;
+
+  /// Nome grande no topo (ex.: «votante» sem aparecer só como pai na lista).
+  final String? tituloTopoOverride;
+
+  /// Título literal na primeira linha da [ExpansionTile] da raíz.
+  final String? rotuloArvoreRaiz;
+
+  /// Textos curtos só para utilizadores `[role=votante]`.
+  final bool modoMinhaSubRedeVotante;
 
   @override
   Widget build(BuildContext context) {
@@ -360,52 +614,75 @@ class _PainelDetalhe extends StatelessWidget {
       return Center(
         child: Text(
           'Selecione um indicador na lista para ver os detalhes.',
-          style: tema.textTheme.bodyLarge?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+          style: tema.textTheme.bodyLarge
+              ?.copyWith(color: tema.colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
       );
     }
 
     final key = chaveConvidador!;
-    final diretos = rede.indicadosDiretosDe(key);
-    diretos.sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+    final diretos = rede.indicadosDiretosDe(key)
+      ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
     final alcance = rede.alcanceSubarvore(key);
+    final cabeca = tituloTopoOverride ?? rede.rotuloExibir(key);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          rede.rotuloExibir(key),
-          style: tema.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+          cabeca,
+          style: tema.textTheme.headlineSmall
+              ?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 6),
         Text(
           '${diretos.length} pessoa(s) no primeiro ramo (${diretos.length == 1 ? 'indicado' : 'indicadas'} diretamente) · '
           '${alcance.pessoasNaRede - diretos.length} nos ramos seguintes · '
           '${alcance.votosNaRede} votos estimados em toda a árvore.',
-          style: tema.textTheme.bodyMedium?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+          style: tema.textTheme.bodyMedium
+              ?.copyWith(color: tema.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
         Text(
-          'Árvore de indicações',
-          style: tema.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          modoMinhaSubRedeVotante ? 'A sua rede' : 'Árvore de indicações',
+          style:
+              tema.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
         Text(
-          'O indicador fica na raíz. Cada pessoa aparece apenas no ramo de quem a indicou; '
-          'expanda um nome para ver quem ele indicou a seguir.',
-          style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+          modoMinhaSubRedeVotante
+              ? 'Começa pelo seu nome. Expanda cada linha para ver quem cada pessoa trouxe quando indicou pelo nome na rede.'
+              : 'O indicador fica na raíz. Cada pessoa aparece apenas no ramo de quem a indicou; '
+                  'expanda um nome para ver quem ele indicou a seguir.',
+          style: tema.textTheme.bodySmall
+              ?.copyWith(color: tema.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 12),
-        _ArvoreIndicacaoRaiz(rede: rede, chaveConvidador: key),
+        _ArvoreIndicacaoRaiz(
+          rede: rede,
+          chaveConvidador: key,
+          rotuloRaizExplicito: rotuloArvoreRaiz,
+          legendaPorBaixoTituloRaiz: modoMinhaSubRedeVotante
+              ? 'Você na raíz — só estes fluxos aparecem'
+              : 'Raiz — nível anterior da rede',
+          textoSemFilhosExplicito: modoMinhaSubRedeVotante
+              ? 'Ainda não há cadastros com o seu nome em Indicação. Quando alguém se inscrever assim, '
+                  'a pessoa aparece aqui; se ela também indicar outras pelo nome dela, aparecem nos níveis abaixo ao expandir.'
+              : null,
+        ),
       ],
     );
   }
 }
 
 String _linhaDetalhesVotante(Votante v) {
-  final cid = v.cidadeDisplay.trim().isEmpty ? '—' : displayNomeCidadeMT(v.cidadeDisplay);
-  final tel = v.telefone == null || v.telefone!.isEmpty ? '—' : formatTelefoneBrFromDigits(v.telefone);
+  final cid = v.cidadeDisplay.trim().isEmpty
+      ? '—'
+      : displayNomeCidadeMT(v.cidadeDisplay);
+  final tel = v.telefone == null || v.telefone!.isEmpty
+      ? '—'
+      : formatTelefoneBrFromDigits(v.telefone);
   return '$tel · $cid · ${v.qtdVotosFamilia} voto(s) · ${v.abrangencia}';
 }
 
@@ -413,26 +690,28 @@ class _ArvoreIndicacaoRaiz extends StatelessWidget {
   const _ArvoreIndicacaoRaiz({
     required this.rede,
     required this.chaveConvidador,
+    this.rotuloRaizExplicito,
+    this.legendaPorBaixoTituloRaiz = 'Raiz — nível anterior da rede',
+    this.textoSemFilhosExplicito,
   });
 
   final IndicacoesRede rede;
   final String chaveConvidador;
+  final String? rotuloRaizExplicito;
+  final String legendaPorBaixoTituloRaiz;
+  final String? textoSemFilhosExplicito;
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
-    final rotulo = rede.rotuloExibir(chaveConvidador);
+    final rotulo = rotuloRaizExplicito ?? rede.rotuloExibir(chaveConvidador);
     final diretos = rede.indicadosDiretosDe(chaveConvidador)
       ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
 
-    if (diretos.isEmpty) {
-      return Text(
-        'Nenhum cadastro tem «Indicação» igual a este nome — não há ramos.',
-        style: tema.textTheme.bodyMedium,
-      );
-    }
-
     final alcance = rede.alcanceSubarvore(chaveConvidador);
+
+    final msgSemRamificacao = textoSemFilhosExplicito ??
+        'Nenhum cadastro tem «Indicação» igual a este nome — não há ramos.';
 
     return Material(
       color: tema.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
@@ -446,7 +725,8 @@ class _ArvoreIndicacaoRaiz extends StatelessWidget {
           title: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.account_tree_rounded, color: tema.colorScheme.primary, size: 26),
+              Icon(Icons.account_tree_rounded,
+                  color: tema.colorScheme.primary, size: 26),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -454,11 +734,12 @@ class _ArvoreIndicacaoRaiz extends StatelessWidget {
                   children: [
                     Text(
                       rotulo,
-                      style: tema.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      style: tema.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Raiz — nível anterior da rede',
+                      legendaPorBaixoTituloRaiz,
                       style: tema.textTheme.labelMedium?.copyWith(
                         color: tema.colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w500,
@@ -474,11 +755,27 @@ class _ArvoreIndicacaoRaiz extends StatelessWidget {
             child: Text(
               '${diretos.length} ${diretos.length == 1 ? 'ramo fixado neste primeiro nível' : 'ramos neste primeiro nível'} · '
               '${alcance.pessoasNaRede} pessoa(s) na árvore · ${alcance.votosNaRede} votos na sub-rede',
-              style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+              style: tema.textTheme.bodySmall
+                  ?.copyWith(color: tema.colorScheme.onSurfaceVariant),
             ),
           ),
           childrenPadding: EdgeInsets.zero,
-          children: diretos.map((v) => _NoPiramideTile(rede: rede, votante: v, nivel: 0)).toList(),
+          children: diretos.isEmpty
+              ? [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        msgSemRamificacao,
+                        style: tema.textTheme.bodyMedium,
+                      ),
+                    ),
+                  ),
+                ]
+              : diretos
+                  .map((v) => _NoPiramideTile(rede: rede, votante: v, nivel: 0))
+                  .toList(),
         ),
       ),
     );
@@ -498,19 +795,19 @@ class _NoPiramideTile extends StatelessWidget {
 
   Color _corTracoGalho(BuildContext context) {
     final base = Theme.of(context).colorScheme.outlineVariant;
-    return Color.lerp(base, Theme.of(context).colorScheme.primary, (nivel * 0.12).clamp(0.0, 0.55))!;
+    return Color.lerp(base, Theme.of(context).colorScheme.primary,
+        (nivel * 0.12).clamp(0.0, 0.55))!;
   }
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
-    final ck = normalizarChaveIndicacao(votante.nome);
-    final filhos = rede.indicadosDiretosDe(ck)
-      ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+    final filhos = rede.indicadosDiretosApartirCadastro(votante);
 
     final detalheLinha = _linhaDetalhesVotante(votante);
-    final textoRamoFilhos =
-        filhos.isEmpty ? 'Nenhum próximo nível registrado sob este nome' : 'expandir próximo nível (${filhos.length})';
+    final textoRamoFilhos = filhos.isEmpty
+        ? 'Nenhum próximo nível registrado sob este nome'
+        : 'expandir próximo nível (${filhos.length})';
 
     final traco = _corTracoGalho(context);
     final temNovaRedeFilha = filhos.isNotEmpty;
@@ -521,14 +818,17 @@ class _NoPiramideTile extends StatelessWidget {
         dense: true,
         visualDensity: VisualDensity.compact,
         horizontalTitleGap: 8,
-        leading: Icon(Icons.subdirectory_arrow_right_rounded, size: 22, color: traco),
+        leading: Icon(Icons.subdirectory_arrow_right_rounded,
+            size: 22, color: traco),
         title: Text(
           votante.nome,
-          style: tema.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          style:
+              tema.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
           '$detalheLinha\n$textoRamoFilhos',
-          style: tema.textTheme.bodySmall?.copyWith(color: tema.colorScheme.onSurfaceVariant),
+          style: tema.textTheme.bodySmall
+              ?.copyWith(color: tema.colorScheme.onSurfaceVariant),
         ),
       );
     } else {
@@ -564,7 +864,10 @@ class _NoPiramideTile extends StatelessWidget {
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: filhos.map((f) => _NoPiramideTile(rede: rede, votante: f, nivel: nivel + 1)).toList(),
+                children: filhos
+                    .map((f) => _NoPiramideTile(
+                        rede: rede, votante: f, nivel: nivel + 1))
+                    .toList(),
               ),
             ),
           ),
@@ -573,7 +876,8 @@ class _NoPiramideTile extends StatelessWidget {
     }
 
     final corCartao = temNovaRedeFilha
-        ? tema.colorScheme.primaryContainer.withValues(alpha: nivel == 0 ? 0.62 : 0.48)
+        ? tema.colorScheme.primaryContainer
+            .withValues(alpha: nivel == 0 ? 0.62 : 0.48)
         : tema.colorScheme.surface.withValues(alpha: nivel == 0 ? 1.0 : 0.74);
 
     final bordaCartao = temNovaRedeFilha
@@ -581,7 +885,8 @@ class _NoPiramideTile extends StatelessWidget {
             color: tema.colorScheme.primary.withValues(alpha: 0.52),
             width: 1.5,
           )
-        : BorderSide(color: tema.colorScheme.outlineVariant.withValues(alpha: 0.35));
+        : BorderSide(
+            color: tema.colorScheme.outlineVariant.withValues(alpha: 0.35));
 
     return Padding(
       padding: EdgeInsets.only(left: 6.0 + nivel * 18, bottom: 6),

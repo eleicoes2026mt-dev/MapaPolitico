@@ -46,7 +46,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.nomesCustomizados,
     this.coresCustomizadas,
     this.onSaveNomeRegiao,
-    this.onRemoverDaFusao = null,
+    this.onRemoverDaFusao,
     this.onSaveCorRegiao,
     this.onRegionTap,
     this.onCityTap,
@@ -83,8 +83,10 @@ class MapaRegionalWidget extends StatefulWidget {
   final void Function(String cdRgint, String hexCor)? onSaveCorRegiao;
   final bool Function(String id, String nome, String? cdRgint)? onRegionTap;
   final void Function(String nomeMunicipio)? onCityTap;
+
   /// Na web, exibido dentro do painel ranking; em mobile ignorado.
   final Widget? locaisVotacaoContent;
+
   /// Na web, evidencia a linha da cidade no ranking; em mobile ignorado.
   final String? selectedMunicipioKey;
   final bool embedRankingBelowMap;
@@ -92,6 +94,7 @@ class MapaRegionalWidget extends StatefulWidget {
   final void Function(bool)? onMostrarMarcadores;
   final bool mostrarTSE;
   final bool mostrarMarcadores;
+
   /// Ignorado no ArcGIS — só a versão web usa ranking de benfeitorias.
   final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
   final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
@@ -104,6 +107,7 @@ class MapaRegionalWidget extends StatefulWidget {
   final Map<String, int>? metasPorRegiao;
   final Future<void> Function(Map<String, int> metas)? onSalvarMetas;
   final String painelRankingModo;
+
   /// Só web; ignorado no ArcGIS.
   final ValueNotifier<String>? painelRankingModoNotifier;
 
@@ -128,6 +132,7 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
   Offset? _hoverPosition;
   Map<String, String> _customRegionNames = {};
   String? _editingRegionId;
+
   /// Drill-down: destaca a região no mapa; bolhas TSE só nos municípios da região (toque sem admin).
   String? _regiaoDrillDownId;
   bool _geoLoaded = false;
@@ -148,7 +153,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     if (reg == null) return true;
     final coords = getCoordsMunicipioMT(municipioKey);
     if (coords == null) return false;
-    return pointInRegion(LatLng(coords.latitude, coords.longitude), reg.polygons);
+    return pointInRegion(
+        LatLng(coords.latitude, coords.longitude), reg.polygons);
   }
 
   static SpatialReference get _wgs84 => SpatialReference.wgs84;
@@ -180,7 +186,10 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       if (cross) {
         final slope = (vj.latitude - vi.latitude).abs() < 1e-10
             ? null
-            : (vj.longitude - vi.longitude) * (p.latitude - vi.latitude) / (vj.latitude - vi.latitude) + vi.longitude;
+            : (vj.longitude - vi.longitude) *
+                    (p.latitude - vi.latitude) /
+                    (vj.latitude - vi.latitude) +
+                vi.longitude;
         if (slope != null && p.longitude < slope) inside = !inside;
       }
     }
@@ -200,7 +209,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     if (list == null) return null;
     for (final regiao in list) {
       for (final geo in regiao.polygons) {
-        if (_pointInGeoPolygon(p, geo)) return (regiao.id, regiao.nome, regiao.cdRgint);
+        if (_pointInGeoPolygon(p, geo))
+          return (regiao.id, regiao.nome, regiao.cdRgint);
       }
     }
     return null;
@@ -216,15 +226,44 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     // No mapa só o nome oficial do GeoJSON no campo inicial.
     final nomeController = TextEditingController(text: nomeOriginal);
     const coresOpcoes = [
-      '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#F44336', '#009688', '#FFC107', '#3F51B5', '#FF5722', '#9E9E9E',
-      '#E91E63', '#00BCD4', '#8BC34A', '#795548', '#607D8B', '#673AB7', '#CDDC39', '#FF4081', '#FF6F00', '#00695C',
-      '#37474F', '#7B1FA2', '#C2185B', '#1976D2', '#388E3C', '#F9A825', '#D32F2F', '#5D4037',
+      '#2196F3',
+      '#4CAF50',
+      '#FF9800',
+      '#9C27B0',
+      '#F44336',
+      '#009688',
+      '#FFC107',
+      '#3F51B5',
+      '#FF5722',
+      '#9E9E9E',
+      '#E91E63',
+      '#00BCD4',
+      '#8BC34A',
+      '#795548',
+      '#607D8B',
+      '#673AB7',
+      '#CDDC39',
+      '#FF4081',
+      '#FF6F00',
+      '#00695C',
+      '#37474F',
+      '#7B1FA2',
+      '#C2185B',
+      '#1976D2',
+      '#388E3C',
+      '#F9A825',
+      '#D32F2F',
+      '#5D4037',
     ];
-    String? corSelecionada = cdRgint != null ? (widget.coresCustomizadas?[cdRgint] ?? _coresPadrao[cdRgint]) : null;
-    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada)) corSelecionada = coresOpcoes.first;
+    String? corSelecionada = cdRgint != null
+        ? (widget.coresCustomizadas?[cdRgint] ?? _coresPadrao[cdRgint])
+        : null;
+    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada))
+      corSelecionada = coresOpcoes.first;
 
     final fundidas = widget.regioesFundidas ?? [];
-    final estaEmFusao = cdRgint != null && fundidas.any((f) => f.ids.contains(cdRgint) && f.ids.length > 1);
+    final estaEmFusao = cdRgint != null &&
+        fundidas.any((f) => f.ids.contains(cdRgint) && f.ids.length > 1);
     bool aplicarSoNestaRegiao = false;
 
     final saved = await showDialog<bool>(
@@ -251,7 +290,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     value: aplicarSoNestaRegiao,
-                    onChanged: (v) => setDialogState(() => aplicarSoNestaRegiao = v ?? false),
+                    onChanged: (v) =>
+                        setDialogState(() => aplicarSoNestaRegiao = v ?? false),
                     title: Text(
                       'Aplicar nome e cor só nesta região (remover da fusão)',
                       style: Theme.of(ctx2).textTheme.bodySmall,
@@ -262,12 +302,13 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                   Text(
                     'Esta região faz parte de uma fusão. Marque acima para que só esta região receba o novo nome.',
                     style: Theme.of(ctx2).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(ctx2).colorScheme.onSurfaceVariant,
-                    ),
+                          color: Theme.of(ctx2).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ],
                 const SizedBox(height: 16),
-                Text('Cor da região', style: Theme.of(ctx2).textTheme.labelLarge),
+                Text('Cor da região',
+                    style: Theme.of(ctx2).textTheme.labelLarge),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -283,8 +324,15 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                         decoration: BoxDecoration(
                           color: cor,
                           shape: BoxShape.circle,
-                          border: Border.all(color: selected ? Colors.white : Colors.transparent, width: 3),
-                          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: selected ? 4 : 1)],
+                          border: Border.all(
+                              color:
+                                  selected ? Colors.white : Colors.transparent,
+                              width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: selected ? 4 : 1)
+                          ],
                         ),
                       ),
                     );
@@ -308,7 +356,9 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     );
     _setEditingRegion(null);
     if (saved != true || !mounted) return;
-    if (aplicarSoNestaRegiao && widget.onRemoverDaFusao != null && cdRgint != null) {
+    if (aplicarSoNestaRegiao &&
+        widget.onRemoverDaFusao != null &&
+        cdRgint != null) {
       widget.onRemoverDaFusao!(cdRgint);
     }
     final nome = nomeController.text.trim();
@@ -318,9 +368,12 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     } else {
       setState(() => _customRegionNames[regionId] = nome);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefsKeyRegionNames, jsonEncode(_customRegionNames));
+      await prefs.setString(
+          _prefsKeyRegionNames, jsonEncode(_customRegionNames));
     }
-    if (widget.onSaveCorRegiao != null && cdRgint != null && corSelecionada != null) {
+    if (widget.onSaveCorRegiao != null &&
+        cdRgint != null &&
+        corSelecionada != null) {
       widget.onSaveCorRegiao!(cdRgint, corSelecionada!);
     }
   }
@@ -336,8 +389,11 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       }
       parts.addPart(part);
     }
+
     addRing(geo.points);
-    for (final hole in geo.holes) addRing(hole);
+    for (final hole in geo.holes) {
+      addRing(hole);
+    }
     if (parts.isEmpty) return null;
     final builder = PolygonBuilder(spatialReference: sr);
     builder.parts = parts;
@@ -366,7 +422,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
   }
 
   Future<void> _loadGeo() async {
-    final regioesMT = await loadRegioesImediatasMTFromAsset(kMTRegioesImediatas2024Asset);
+    final regioesMT =
+        await loadRegioesImediatasMTFromAsset(kMTRegioesImediatas2024Asset);
 
     if (!mounted) return;
     final theme = Theme.of(context);
@@ -380,10 +437,13 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       final regionId = regiao.id;
       final nomeOriginal = regiao.nome;
       final cdRgint = regiao.cdRgint;
-      final isFocused = _regiaoDrillDownId != null && regionId == _regiaoDrillDownId;
+      final isFocused =
+          _regiaoDrillDownId != null && regionId == _regiaoDrillDownId;
       final largestIdx = indexOfLargestGeoPolygon(regiao.polygons);
 
-      for (var polygonIndex = 0; polygonIndex < regiao.polygons.length; polygonIndex++) {
+      for (var polygonIndex = 0;
+          polygonIndex < regiao.polygons.length;
+          polygonIndex++) {
         final geo = regiao.polygons[polygonIndex];
         final g = _geoPolygonToArcGIS(geo);
         if (g != null) {
@@ -410,7 +470,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
           }
           final sym = SimpleFillSymbol(color: fillColor);
           if (outlineWidth > 0) {
-            sym.outline = SimpleLineSymbol(color: outlineColor, width: outlineWidth);
+            sym.outline =
+                SimpleLineSymbol(color: outlineColor, width: outlineWidth);
           }
           overlayRegioesMT.graphics.add(
             Graphic(
@@ -437,10 +498,12 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
         color: Colors.red,
         size: (12 * s).clamp(6.0, 28.0),
       );
-      markerSym.outline = SimpleLineSymbol(color: Colors.white, width: (2 * s).clamp(1.0, 4.0));
+      markerSym.outline =
+          SimpleLineSymbol(color: Colors.white, width: (2 * s).clamp(1.0, 4.0));
       overlayMarkers.graphics.add(
         Graphic(
-          geometry: ArcGISPoint(x: p.$2.longitude, y: p.$2.latitude, spatialReference: _wgs84),
+          geometry: ArcGISPoint(
+              x: p.$2.longitude, y: p.$2.latitude, spatialReference: _wgs84),
           symbol: markerSym,
           attributes: {'title': p.$1, 'type': 'polo'},
         ),
@@ -450,7 +513,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     final votos = widget.votosPorMunicipio;
     if (votos != null && votos.isNotEmpty) {
       final votosList = votos.entries
-          .map((e) => (key: e.key, v: e.value, coords: getCoordsMunicipioMT(e.key)))
+          .map((e) =>
+              (key: e.key, v: e.value, coords: getCoordsMunicipioMT(e.key)))
           .where((e) => e.coords != null)
           .where((e) => _municipioVisivelNoDrill(e.key))
           .toList();
@@ -476,7 +540,10 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
           );
           overlayMarkers.graphics.add(
             Graphic(
-              geometry: ArcGISPoint(x: e.coords!.longitude, y: e.coords!.latitude, spatialReference: _wgs84),
+              geometry: ArcGISPoint(
+                  x: e.coords!.longitude,
+                  y: e.coords!.latitude,
+                  spatialReference: _wgs84),
               symbol: tseSym,
               attributes: {
                 'title': e.key,
@@ -508,16 +575,23 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
         final coords = getCoordsMunicipioMT(e.key);
         if (coords != null) {
           final m = e.value;
-          final baseAp = m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty ? 12.0 : 10.0;
+          final baseAp =
+              m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
+                  ? 12.0
+                  : 10.0;
           final apSym = SimpleMarkerSymbol(
             style: SimpleMarkerSymbolStyle.circle,
             color: marcadorCor(m),
             size: (baseAp * s).clamp(6.0, 28.0),
           );
-          apSym.outline = SimpleLineSymbol(color: Colors.white, width: (1 * s).clamp(0.5, 3.0));
+          apSym.outline = SimpleLineSymbol(
+              color: Colors.white, width: (1 * s).clamp(0.5, 3.0));
           overlayMarkers.graphics.add(
             Graphic(
-              geometry: ArcGISPoint(x: coords.longitude, y: coords.latitude, spatialReference: _wgs84),
+              geometry: ArcGISPoint(
+                  x: coords.longitude,
+                  y: coords.latitude,
+                  spatialReference: _wgs84),
               symbol: apSym,
               attributes: {
                 'title': e.key,
@@ -549,7 +623,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
       final portal = Portal.arcGISOnline();
       await portal.load();
       if (!mounted) return;
-      final item = PortalItem.withPortalAndItemId(portal: portal, itemId: arcGisMapItemId);
+      final item = PortalItem.withPortalAndItemId(
+          portal: portal, itemId: arcGisMapItemId);
       await item.load();
       if (!mounted) return;
       if (item.type == PortalItemType.webMap) {
@@ -571,7 +646,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     try {
       final map = jsonDecode(json) as Map<String, dynamic>?;
       if (map != null && mounted) {
-        setState(() => _customRegionNames = map.map((k, v) => MapEntry(k.toString(), v is String ? v : v.toString())));
+        setState(() => _customRegionNames = map.map(
+            (k, v) => MapEntry(k.toString(), v is String ? v : v.toString())));
       }
     } catch (_) {}
   }
@@ -622,7 +698,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
             ArcGISMapView(
               controllerProvider: () {
                 final ctrl = ArcGISMapView.createController();
-                final map = ArcGISMap.withBasemapStyle(BasemapStyle.arcGISTopographic);
+                final map =
+                    ArcGISMap.withBasemapStyle(BasemapStyle.arcGISTopographic);
                 map.initialViewpoint = Viewpoint.withLatLongScale(
                   latitude: _brasilCenterLatLng.latitude,
                   longitude: _brasilCenterLatLng.longitude,
@@ -662,15 +739,20 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                       final nome = att['nome'] as String?;
                       final cdRgint = att['cdRgint'] as String?;
                       if (regionId != null && nome != null && mounted) {
-                        if (widget.onRegionTap != null && widget.onRegionTap!(regionId, nome, cdRgint)) return;
+                        if (widget.onRegionTap != null &&
+                            widget.onRegionTap!(regionId, nome, cdRgint))
+                          return;
                         if (widget.onSaveNomeRegiao == null) {
                           setState(() {
-                            _regiaoDrillDownId = _regiaoDrillDownId == regionId ? null : regionId;
+                            _regiaoDrillDownId = _regiaoDrillDownId == regionId
+                                ? null
+                                : regionId;
                           });
                           _loadGeo();
                           return;
                         }
-                        _showEditRegionNameDialog(context, regionId, nome, cdRgint);
+                        _showEditRegionNameDialog(
+                            context, regionId, nome, cdRgint);
                       }
                       return;
                     }
@@ -686,13 +768,16 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                 child: Center(
                   child: Card(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       child: Text('Carregando demarcações...'),
                     ),
                   ),
                 ),
               ),
-            if (_hoveredRegionId != null && _hoveredRegionName != null && _hoverPosition != null)
+            if (_hoveredRegionId != null &&
+                _hoveredRegionName != null &&
+                _hoverPosition != null)
               Positioned(
                 left: _hoverPosition!.dx + 12,
                 top: _hoverPosition!.dy + 8,
@@ -700,7 +785,8 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                   elevation: 4,
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: Text(
                       'Região: $_hoveredRegionName',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(

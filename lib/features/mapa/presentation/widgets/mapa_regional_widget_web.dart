@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
@@ -27,7 +28,8 @@ double _rankingListaSlackExtraPorItem({
   required double approxItemHeight,
   double baseVerticalMargin = 3.0,
 }) {
-  if (itemCount <= 0 || !viewportHeight.isFinite || viewportHeight <= 0) return 0;
+  if (itemCount <= 0 || !viewportHeight.isFinite || viewportHeight <= 0)
+    return 0;
   final totalBase = itemCount * (approxItemHeight + 2 * baseVerticalMargin);
   final slack = viewportHeight - totalBase;
   if (slack <= 0) return 0;
@@ -47,7 +49,7 @@ class MapaRegionalWidget extends StatefulWidget {
     this.nomesCustomizados,
     this.coresCustomizadas,
     this.onSaveNomeRegiao,
-    this.onRemoverDaFusao = null,
+    this.onRemoverDaFusao,
     this.onSaveCorRegiao,
     this.onRegionTap,
     this.onCityTap,
@@ -86,6 +88,7 @@ class MapaRegionalWidget extends StatefulWidget {
   final Widget? locaisVotacaoContent;
   final String? selectedMunicipioKey;
   final bool embedRankingBelowMap;
+
   /// Callbacks chamados pelo ranking quando o usuário troca de tab (TSE / Minha Rede / Comparativo).
   final void Function(bool)? onMostrarTSE;
   final void Function(bool)? onMostrarMarcadores;
@@ -96,18 +99,25 @@ class MapaRegionalWidget extends StatefulWidget {
     Map<String, double>? ratios,
     bool incluirLabelsZero,
   })? onComparativoColors;
+
   /// Quando não nulo, o painel de ranking pode ativar a camada “Benfeitorias” no mapa.
   final List<BenfeitoriaRegiaoRanking>? benfeitoriasRanking;
+
   /// Igual a [onComparativoColors], para a camada de benfeitorias (só web).
   final void Function(BenfeitoriasMapaPayload? payload)? onBenfeitoriasMapa;
+
   /// Só web: `nenhum` | `tse` | `rede` | `comparativo` | `metas` | `benfeitorias` — para legenda no painel pai.
   final ValueChanged<String>? onPainelRankingModoChanged;
+
   /// Metas de votos por `cd_rgint` (região intermediária), por campanha.
   final Map<String, int>? metasPorRegiao;
+
   /// Persiste metas; se null, o painel não mostra o modo «Metas».
   final Future<void> Function(Map<String, int> metas)? onSalvarMetas;
+
   /// `nenhum` | `tse` | `rede` | `comparativo` | `metas` | `benfeitorias` — fonte de verdade no [MapaRegionalPanel].
   final String painelRankingModo;
+
   /// Quando não nulo (painel da campanha), o ranking lê o modo aqui para não ficar desfasado da prop num frame.
   final ValueNotifier<String>? painelRankingModoNotifier;
 
@@ -127,8 +137,8 @@ class MapaRegionalWidget extends StatefulWidget {
 /// Limites do Brasil (delimitação do território nacional).
 /// Restringe a câmera para não mostrar nada além do Brasil; ver assets/geo/delimitacao_brasil.json.
 final _brasilBounds = LatLngBounds(
-  ll.LatLng(-33.75, -73.99),  // sudoeste Brasil
-  ll.LatLng(5.27, -34.79),    // nordeste Brasil
+  const ll.LatLng(-33.75, -73.99), // sudoeste Brasil
+  const ll.LatLng(5.27, -34.79), // nordeste Brasil
 );
 
 /// Destaque da camada Benfeitorias (âmbar: legível em fundo escuro; evita roxo baixo contraste).
@@ -169,7 +179,8 @@ Color _colorForRegiao(
   }
   if (partKey != null) {
     final customPart = coresCustomizadas?[partKey];
-    if (customPart != null && customPart.isNotEmpty) return _colorFromHex(customPart);
+    if (customPart != null && customPart.isNotEmpty)
+      return _colorFromHex(customPart);
   }
   final key = cdRgint ?? id;
   final custom = coresCustomizadas?[key];
@@ -183,7 +194,8 @@ String _tituloRegiaoRanking(String nome) {
   final t = nome.trim();
   if (t.isEmpty) return 'Região';
   final lower = t.toLowerCase();
-  if (lower.startsWith('região de ') || lower.startsWith('regiao de ')) return t;
+  if (lower.startsWith('região de ') || lower.startsWith('regiao de '))
+    return t;
   return 'Região de $t';
 }
 
@@ -194,12 +206,14 @@ String _regiaoIdFromHitValue(String hitValue) {
 
 class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   final MapController _mapController = MapController();
-  final LayerHitNotifier<String> _hitNotifier = ValueNotifier<LayerHitResult<String>?>(null);
+  final LayerHitNotifier<String> _hitNotifier =
+      ValueNotifier<LayerHitResult<String>?>(null);
   List<RegiaoIntermediariaMT>? _regioesMT;
   String? _hoveredRegionName;
   Offset? _hoverPosition;
   String? _editingRegionId;
   int? _editingPolygonIndex;
+
   /// Drill-down: só esta região imediata (polígonos + bolhas + marcadores).
   String? _regiaoDrillDownId;
   bool _loading = true;
@@ -207,8 +221,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   bool _rankingVisivel = false; // começa fechado — usuário abre quando quiser
   /// Cores de atingimento por região (modo Comparativo). null = desativado.
   Map<String, String>? _comparativoColors;
+
   /// Ratio de atingimento por região (estimativa/TSE ou estimativa/meta). Para exibir % no mapa.
   Map<String, double>? _comparativoRatios;
+
   /// Comparativo: mostra rótulo «0%» em regiões sem dados quando [incluirLabelsZero].
   bool _comparativoLabelsIncluirZero = false;
   Map<String, String>? _benfeitoriasColors;
@@ -294,7 +310,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     return out;
   }
 
-  bool _municipioPertenceRegiao(String municipioKey, RegiaoIntermediariaMT reg) {
+  bool _municipioPertenceRegiao(
+      String municipioKey, RegiaoIntermediariaMT reg) {
     final coords = getCoordsMunicipioMT(municipioKey);
     if (coords == null) return false;
     final pt = LatLng(coords.latitude, coords.longitude);
@@ -341,7 +358,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       }
     }
     if (minLat >= maxLat || minLng >= maxLng) return;
-    final bounds = LatLngBounds(ll.LatLng(minLat, minLng), ll.LatLng(maxLat, maxLng));
+    final bounds =
+        LatLngBounds(ll.LatLng(minLat, minLng), ll.LatLng(maxLat, maxLng));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _mapController.fitCamera(
@@ -393,7 +411,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
 
   Future<void> _loadGeo() async {
     try {
-      final mtRegioes = await loadRegioesImediatasMTFromAsset(kMTRegioesImediatas2024Asset);
+      final mtRegioes =
+          await loadRegioesImediatasMTFromAsset(kMTRegioesImediatas2024Asset);
       if (!mounted) return;
       setState(() {
         _regioesMT = mtRegioes;
@@ -419,13 +438,16 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     // Regiões intermediárias de MT (sem contorno extra de Brasil ou do estado).
     final mtList = _regioesMT;
     if (mtList != null) {
-      final inComparativo = _comparativoColors != null && _comparativoColors!.isNotEmpty;
-      final inBenfeitorias = _benfeitoriasColors != null && _benfeitoriasColors!.isNotEmpty;
+      final inComparativo =
+          _comparativoColors != null && _comparativoColors!.isNotEmpty;
+      final inBenfeitorias =
+          _benfeitoriasColors != null && _benfeitoriasColors!.isNotEmpty;
       for (final regiao in mtList) {
         final largestIdx = indexOfLargestGeoPolygon(regiao.polygons);
         var polygonIndex = 0;
         for (final geo in regiao.polygons) {
-          final isEditing = regiao.id == _editingRegionId && polygonIndex == _editingPolygonIndex;
+          final isEditing = regiao.id == _editingRegionId &&
+              polygonIndex == _editingPolygonIndex;
           final partKey = '${regiao.id}#$polygonIndex';
           final color = _colorForRegiao(
             regiao.cdRgint,
@@ -435,13 +457,19 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             comparativoColors: _comparativoColors,
             benfeitoriasColors: _benfeitoriasColors,
           );
-          final points = geo.points.map((p) => ll.LatLng(p.latitude, p.longitude)).toList();
-          final holes = geo.holes
-              .map((hole) => hole.map((p) => ll.LatLng(p.latitude, p.longitude)).toList())
+          final points = geo.points
+              .map((p) => ll.LatLng(p.latitude, p.longitude))
               .toList();
-          final isFocused = _regiaoDrillDownId != null && regiao.id == _regiaoDrillDownId;
-          final hasComparativoFill = inComparativo && _comparativoColors!.containsKey(regiao.id);
-          final hasBenfeitoriasFill = inBenfeitorias && _benfeitoriasColors!.containsKey(regiao.id);
+          final holes = geo.holes
+              .map((hole) =>
+                  hole.map((p) => ll.LatLng(p.latitude, p.longitude)).toList())
+              .toList();
+          final isFocused =
+              _regiaoDrillDownId != null && regiao.id == _regiaoDrillDownId;
+          final hasComparativoFill =
+              inComparativo && _comparativoColors!.containsKey(regiao.id);
+          final hasBenfeitoriasFill =
+              inBenfeitorias && _benfeitoriasColors!.containsKey(regiao.id);
 
           late final Color fillColor;
           late final Color borderColor;
@@ -453,7 +481,9 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             borderStrokeWidth = 5 * cLinha;
           } else if (hasComparativoFill || hasBenfeitoriasFill) {
             fillColor = color.withValues(alpha: 0.72);
-            borderColor = isFocused ? Colors.white.withValues(alpha: 0.92) : color.withValues(alpha: 0.9);
+            borderColor = isFocused
+                ? Colors.white.withValues(alpha: 0.92)
+                : color.withValues(alpha: 0.9);
             borderStrokeWidth = (isFocused ? 3.2 : 2) * cLinha;
           } else if (isFocused) {
             fillColor = theme.colorScheme.primary.withValues(alpha: 0.16);
@@ -461,7 +491,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             borderStrokeWidth = 2.5 * cLinha;
           } else {
             fillColor = Colors.transparent;
-            borderColor = neutralBorder.withValues(alpha: (inComparativo || inBenfeitorias) ? 0.45 : 1);
+            borderColor = neutralBorder.withValues(
+                alpha: (inComparativo || inBenfeitorias) ? 0.45 : 1);
             borderStrokeWidth = 1 * cLinha;
           }
 
@@ -493,7 +524,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     if (ratios == null || ratios.isEmpty || _regioesMT == null) return [];
 
     // 1ª passagem: coleta centróides apenas onde há dado real (ratio > 0)
-    final candidatos = <({ll.LatLng pos, Color cor, String pct, double ratio})>[];
+    final candidatos =
+        <({ll.LatLng pos, Color cor, String pct, double ratio})>[];
     for (final regiao in _regioesMT!) {
       final ratio = ratios[regiao.id];
       if (ratio == null) continue;
@@ -504,51 +536,62 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       final pct = '${(ratio * 100).toStringAsFixed(1)}%';
 
       if (regiao.polygons.isEmpty) continue;
-      final geoPoly = regiao.polygons.reduce((a, b) => a.points.length >= b.points.length ? a : b);
+      final geoPoly = regiao.polygons
+          .reduce((a, b) => a.points.length >= b.points.length ? a : b);
       final pts = geoPoly.points;
       if (pts.isEmpty) continue;
-      final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
-      final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
-      candidatos.add((pos: ll.LatLng(lat, lng), cor: cor, pct: pct, ratio: ratio));
+      final lat =
+          pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
+      final lng =
+          pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
+      candidatos
+          .add((pos: ll.LatLng(lat, lng), cor: cor, pct: pct, ratio: ratio));
     }
 
     // 2ª passagem: anti-sobreposição — mantém o badge mais relevante por célula de grade
     // Ordena pelo maior ratio primeiro (mais importante = fica visível)
     candidatos.sort((a, b) => b.ratio.compareTo(a.ratio));
-    const minDist = 1.4; // graus (≈ 155 km em MT) — ajustar conforme zoom desejado
+    const minDist =
+        1.4; // graus (≈ 155 km em MT) — ajustar conforme zoom desejado
     final aceitos = <({ll.LatLng pos, Color cor, String pct})>[];
     for (final c in candidatos) {
       final proximo = aceitos.any((a) =>
-        (a.pos.latitude - c.pos.latitude).abs() < minDist &&
-        (a.pos.longitude - c.pos.longitude).abs() < minDist);
+          (a.pos.latitude - c.pos.latitude).abs() < minDist &&
+          (a.pos.longitude - c.pos.longitude).abs() < minDist);
       if (!proximo) aceitos.add((pos: c.pos, cor: c.cor, pct: c.pct));
     }
 
-    return aceitos.map((c) => Marker(
-      point: c.pos,
-      width: 64,
-      height: 32,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: c.cor,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 2)),
-          ],
-        ),
-        child: Text(
-          c.pct,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 13,
-            shadows: [Shadow(color: Colors.black38, blurRadius: 2)],
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    )).toList();
+    return aceitos
+        .map((c) => Marker(
+              point: c.pos,
+              width: 64,
+              height: 32,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: c.cor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Text(
+                  c.pct,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    shadows: [Shadow(color: Colors.black38, blurRadius: 2)],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ))
+        .toList();
   }
 
   /// Rótulos com valor (R$) por região no modo benfeitorias.
@@ -558,7 +601,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final cores = _benfeitoriasColors;
     if (valores == null || valores.isEmpty || _regioesMT == null) return [];
 
-    final candidatos = <({ll.LatLng pos, Color cor, String txt, double ratio})>[];
+    final candidatos =
+        <({ll.LatLng pos, Color cor, String txt, double ratio})>[];
     for (final regiao in _regioesMT!) {
       final v = valores[regiao.id];
       if (v == null || v <= 0) continue;
@@ -566,12 +610,20 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       final hexCor = cores?[regiao.id] ?? '#78909C';
       final cor = _colorFromHex(hexCor);
       if (regiao.polygons.isEmpty) continue;
-      final geoPoly = regiao.polygons.reduce((a, b) => a.points.length >= b.points.length ? a : b);
+      final geoPoly = regiao.polygons
+          .reduce((a, b) => a.points.length >= b.points.length ? a : b);
       final pts = geoPoly.points;
       if (pts.isEmpty) continue;
-      final lat = pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
-      final lng = pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
-      candidatos.add((pos: ll.LatLng(lat, lng), cor: cor, txt: formatarMoedaCompactaPtBr(v), ratio: ratio));
+      final lat =
+          pts.map((p) => p.latitude).reduce((a, b) => a + b) / pts.length;
+      final lng =
+          pts.map((p) => p.longitude).reduce((a, b) => a + b) / pts.length;
+      candidatos.add((
+        pos: ll.LatLng(lat, lng),
+        cor: cor,
+        txt: formatarMoedaCompactaPtBr(v),
+        ratio: ratio
+      ));
     }
 
     candidatos.sort((a, b) => b.ratio.compareTo(a.ratio));
@@ -584,32 +636,37 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       if (!proximo) aceitos.add((pos: c.pos, cor: c.cor, txt: c.txt));
     }
 
-    return aceitos.map((c) => Marker(
-          point: c.pos,
-          width: 88,
-          height: 34,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              color: c.cor,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 2)),
-              ],
-            ),
-            child: Text(
-              c.txt,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                shadows: [Shadow(color: Colors.black38, blurRadius: 2)],
+    return aceitos
+        .map((c) => Marker(
+              point: c.pos,
+              width: 88,
+              height: 34,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: c.cor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Text(
+                  c.txt,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    shadows: [Shadow(color: Colors.black38, blurRadius: 2)],
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        )).toList();
+            ))
+        .toList();
   }
 
   /// Votos TSE: círculos com degradê (centro → transparente) e cor por faixa (vermelho … verde).
@@ -618,7 +675,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     if (votos == null || votos.isEmpty) return [];
 
     final entries = votos.entries
-        .map((e) => (nome: e.key, votos: e.value, coords: getCoordsMunicipioMT(e.key)))
+        .map((e) =>
+            (nome: e.key, votos: e.value, coords: getCoordsMunicipioMT(e.key)))
         .where((e) => e.coords != null)
         .toList();
     if (entries.isEmpty) return [];
@@ -689,14 +747,17 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         if (coords != null) {
           final nome = displayNomeCidadeMT(e.key);
           final m = e.value;
-          final cor = m.bandeiraCorPrimariaHex != null && m.bandeiraCorPrimariaHex!.isNotEmpty
+          final cor = m.bandeiraCorPrimariaHex != null &&
+                  m.bandeiraCorPrimariaHex!.isNotEmpty
               ? _colorFromHex(m.bandeiraCorPrimariaHex)
               : Colors.green.shade700;
-          final label = m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
-              ? m.bandeiraEmoji!.trim()
-              : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
-                  ? m.bandeiraIniciais!.trim()
-                  : '${m.quantidade}');
+          final label =
+              m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
+                  ? m.bandeiraEmoji!.trim()
+                  : (m.bandeiraIniciais != null &&
+                          m.bandeiraIniciais!.trim().isNotEmpty
+                      ? m.bandeiraIniciais!.trim()
+                      : '${m.quantidade}');
           final tamBandeira = (30 * s).clamp(18.0, 48.0);
           final tamMarcador = (32 * s).clamp(22.0, 52.0);
           final Widget marcadorChild = m.bandeiraVisual != null
@@ -706,8 +767,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                   fallbackIniciais: m.quantidade > 0 ? '${m.quantidade}' : '?',
                 )
               : (m.bandeiraEmoji != null && m.bandeiraEmoji!.trim().isNotEmpty
-                  ? Text(label, style: TextStyle(fontSize: (22 * s).clamp(14.0, 36.0)))
-                  : (m.bandeiraIniciais != null && m.bandeiraIniciais!.trim().isNotEmpty
+                  ? Text(label,
+                      style: TextStyle(fontSize: (22 * s).clamp(14.0, 36.0)))
+                  : (m.bandeiraIniciais != null &&
+                          m.bandeiraIniciais!.trim().isNotEmpty
                       ? CircleAvatar(
                           radius: (14 * s).clamp(10.0, 24.0),
                           backgroundColor: cor,
@@ -720,7 +783,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                             ),
                           ),
                         )
-                      : Icon(Icons.people, color: cor, size: (26 * s).clamp(18.0, 40.0))));
+                      : Icon(Icons.people,
+                          color: cor, size: (26 * s).clamp(18.0, 40.0))));
           markers.add(
             Marker(
               point: ll.LatLng(coords.latitude, coords.longitude),
@@ -760,7 +824,22 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
 
   /// Agrega votos por região (região imediata) usando point-in-polygon. Ordenado por total decrescente.
   /// Inclui percentual da região sobre o total geral, estimativa por cidade e por região.
-  List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> _rankingRegioes() {
+  List<
+      ({
+        String id,
+        String nome,
+        int total,
+        int totalEstimativa,
+        double pct,
+        List<
+            ({
+              String cidade,
+              String key,
+              int votos,
+              double pct,
+              int estimativa
+            })> cidades
+      })> _rankingRegioes() {
     final votos = widget.votosPorMunicipio;
     final regioes = _regioesMT;
     if (votos == null || votos.isEmpty || regioes == null) return [];
@@ -768,7 +847,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final totalGeral = votos.values.fold<int>(0, (a, b) => a + b);
     if (totalGeral == 0) return [];
 
-    final porRegiao = <String, ({String nome, int total, int totalEstimativa, Map<String, int> cidades})>{};
+    final porRegiao = <String,
+        ({
+      String nome,
+      int total,
+      int totalEstimativa,
+      Map<String, int> cidades
+    })>{};
     for (final e in votos.entries) {
       final coords = getCoordsMunicipioMT(e.key);
       if (coords == null) continue;
@@ -777,12 +862,22 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         if (pointInRegion(pt, reg.polygons)) {
           final key = reg.id;
           if (!porRegiao.containsKey(key)) {
-            porRegiao[key] = (nome: reg.nome, total: 0, totalEstimativa: 0, cidades: <String, int>{});
+            porRegiao[key] = (
+              nome: reg.nome,
+              total: 0,
+              totalEstimativa: 0,
+              cidades: <String, int>{}
+            );
           }
           final r = porRegiao[key]!;
           r.cidades[e.key] = (r.cidades[e.key] ?? 0) + e.value;
           final est = _estimativaCidade(e.key);
-          porRegiao[key] = (nome: r.nome, total: r.total + e.value, totalEstimativa: r.totalEstimativa + est, cidades: r.cidades);
+          porRegiao[key] = (
+            nome: r.nome,
+            total: r.total + e.value,
+            totalEstimativa: r.totalEstimativa + est,
+            cidades: r.cidades
+          );
           break;
         }
       }
@@ -804,7 +899,14 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               ))
           .toList()
         ..sort((a, b) => b.votos.compareTo(a.votos));
-      return (id: id, nome: nome, total: total, totalEstimativa: totalEstimativa, pct: pct, cidades: cidades);
+      return (
+        id: id,
+        nome: nome,
+        total: total,
+        totalEstimativa: totalEstimativa,
+        pct: pct,
+        cidades: cidades
+      );
     }).toList();
     list.sort((a, b) => b.total.compareTo(a.total));
 
@@ -818,12 +920,12 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       final cidadesRel = rr.cidades
           .map(
             (c) => (
-                  cidade: c.cidade,
-                  key: c.key,
-                  votos: c.votos,
-                  pct: totalReg > 0 ? (c.votos / totalReg * 100) : 0.0,
-                  estimativa: c.estimativa,
-                ),
+              cidade: c.cidade,
+              key: c.key,
+              votos: c.votos,
+              pct: totalReg > 0 ? (c.votos / totalReg * 100) : 0.0,
+              estimativa: c.estimativa,
+            ),
           )
           .toList();
       return [
@@ -841,8 +943,22 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   }
 
   /// Agrega votos TSE e estimativa por região (união de municípios), para metas sem depender só do TSE.
-  List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})>
-      _rankingRegioesParaMetas() {
+  List<
+      ({
+        String id,
+        String nome,
+        int total,
+        int totalEstimativa,
+        double pct,
+        List<
+            ({
+              String cidade,
+              String key,
+              int votos,
+              double pct,
+              int estimativa
+            })> cidades
+      })> _rankingRegioesParaMetas() {
     final regioes = _regioesMT;
     if (regioes == null) return [];
 
@@ -859,7 +975,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               total: 0,
               totalEstimativa: 0,
               pct: 0.0,
-              cidades: <({String cidade, String key, int votos, double pct, int estimativa})>[],
+              cidades: <({
+                String cidade,
+                String key,
+                int votos,
+                double pct,
+                int estimativa
+              })>[],
             ),
           )
           .toList();
@@ -868,9 +990,16 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final totalGeralVotos = votos.values.fold<int>(0, (a, b) => a + b);
     final totalGeral = totalGeralVotos > 0 ? totalGeralVotos : 1;
 
-    final porRegiao = <String, ({String nome, int total, int totalEstimativa, Map<String, ({int votos, int estimativa})> cidades})>{};
+    final porRegiao = <String,
+        ({
+      String nome,
+      int total,
+      int totalEstimativa,
+      Map<String, ({int votos, int estimativa})> cidades
+    })>{};
     for (final reg in regioes) {
-      porRegiao[reg.id] = (nome: reg.nome, total: 0, totalEstimativa: 0, cidades: {});
+      porRegiao[reg.id] =
+          (nome: reg.nome, total: 0, totalEstimativa: 0, cidades: {});
     }
     for (final key in keys) {
       final coords = getCoordsMunicipioMT(key);
@@ -882,7 +1011,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           final e = _estimativaCidade(key);
           final cur = porRegiao[reg.id]!;
           final prev = cur.cidades[key] ?? (votos: 0, estimativa: 0);
-          cur.cidades[key] = (votos: prev.votos + v, estimativa: prev.estimativa + e);
+          cur.cidades[key] =
+              (votos: prev.votos + v, estimativa: prev.estimativa + e);
           porRegiao[reg.id] = (
             nome: cur.nome,
             total: cur.total + v,
@@ -910,7 +1040,14 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               ))
           .toList()
         ..sort((a, b) => b.votos.compareTo(a.votos));
-      return (id: id, nome: nome, total: total, totalEstimativa: totalEstimativa, pct: pct, cidades: cidades);
+      return (
+        id: id,
+        nome: nome,
+        total: total,
+        totalEstimativa: totalEstimativa,
+        pct: pct,
+        cidades: cidades
+      );
     }).toList();
     list.sort((a, b) => b.totalEstimativa.compareTo(a.totalEstimativa));
 
@@ -923,12 +1060,12 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       final cidadesRel = rr.cidades
           .map(
             (c) => (
-                  cidade: c.cidade,
-                  key: c.key,
-                  votos: c.votos,
-                  pct: totalReg > 0 ? (c.votos / totalReg * 100) : 0.0,
-                  estimativa: c.estimativa,
-                ),
+              cidade: c.cidade,
+              key: c.key,
+              votos: c.votos,
+              pct: totalReg > 0 ? (c.votos / totalReg * 100) : 0.0,
+              estimativa: c.estimativa,
+            ),
           )
           .toList();
       return [
@@ -981,7 +1118,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                 ),
                 minZoom: 4,
                 maxZoom: 18,
-                interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+                interactionOptions:
+                    const InteractionOptions(flags: InteractiveFlag.all),
                 onTap: (_, __) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted) _onMapTap();
@@ -1002,8 +1140,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                 ),
                 if (heatMarkers.isNotEmpty) MarkerLayer(markers: heatMarkers),
                 if (markers.isNotEmpty) MarkerLayer(markers: markers),
-                if (comparativoLabels.isNotEmpty) MarkerLayer(markers: comparativoLabels),
-                if (benfeitoriasLabels.isNotEmpty) MarkerLayer(markers: benfeitoriasLabels),
+                if (comparativoLabels.isNotEmpty)
+                  MarkerLayer(markers: comparativoLabels),
+                if (benfeitoriasLabels.isNotEmpty)
+                  MarkerLayer(markers: benfeitoriasLabels),
               ],
             ),
           ),
@@ -1018,15 +1158,20 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               borderRadius: BorderRadius.circular(8),
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 child: Row(
                   children: [
-                    Icon(Icons.filter_alt, size: 20, color: Theme.of(context).colorScheme.primary),
+                    Icon(Icons.filter_alt,
+                        size: 20, color: Theme.of(context).colorScheme.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Em destaque: ${_tituloRegiaoRanking(drillNome)}',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1047,7 +1192,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               elevation: 4,
               borderRadius: BorderRadius.circular(8),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 child: Text(
                   _hoveredRegionName!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -1068,10 +1214,10 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final regiaoId = _regiaoIdFromHitValue(firstId);
     final regiao = _regioesMT?.where((r) => r.id == regiaoId).firstOrNull;
     if (regiao == null) return;
-    if (widget.onSaveNomeRegiao == null) return; // Edição desabilitada (apenas administrador).
-    final polygonIndex = firstId.contains('#')
-        ? int.tryParse(firstId.split('#').last) ?? 0
-        : 0;
+    if (widget.onSaveNomeRegiao == null)
+      return; // Edição desabilitada (apenas administrador).
+    final polygonIndex =
+        firstId.contains('#') ? int.tryParse(firstId.split('#').last) ?? 0 : 0;
     final partKey = '${regiao.id}#$polygonIndex';
     // No mapa só o nome oficial do GeoJSON (padronizado).
     final displayName = regiao.nome;
@@ -1085,13 +1231,15 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
       return;
     }
     if (widget.onRegionTap != null) {
-      final handled = widget.onRegionTap!(regiao.id, regiao.nome, regiao.cdRgint);
+      final handled =
+          widget.onRegionTap!(regiao.id, regiao.nome, regiao.cdRgint);
       if (handled) return;
     }
     _showRegionInfo(context, regiao, displayName, polygonIndex, partKey);
   }
 
-  void _showRegionInfo(BuildContext context, RegiaoIntermediariaMT regiao, String displayName, int polygonIndex, String partKey) {
+  void _showRegionInfo(BuildContext context, RegiaoIntermediariaMT regiao,
+      String displayName, int polygonIndex, String partKey) {
     final cdRgint = regiao.cdRgint ?? regiao.id;
     setState(() {
       _editingRegionId = regiao.id;
@@ -1100,15 +1248,44 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     // Campo de edição inicia com o nome oficial; admin pode alterar (salva em nomesCustomizados para outras telas).
     final nomeController = TextEditingController(text: displayName);
     final coresOpcoes = [
-      '#2196F3', '#4CAF50', '#FF9800', '#9C27B0', '#F44336', '#009688', '#FFC107', '#3F51B5', '#FF5722', '#9E9E9E',
-      '#E91E63', '#00BCD4', '#8BC34A', '#795548', '#607D8B', '#673AB7', '#CDDC39', '#FF4081', '#FF6F00', '#00695C',
-      '#37474F', '#7B1FA2', '#C2185B', '#1976D2', '#388E3C', '#F9A825', '#D32F2F', '#5D4037',
+      '#2196F3',
+      '#4CAF50',
+      '#FF9800',
+      '#9C27B0',
+      '#F44336',
+      '#009688',
+      '#FFC107',
+      '#3F51B5',
+      '#FF5722',
+      '#9E9E9E',
+      '#E91E63',
+      '#00BCD4',
+      '#8BC34A',
+      '#795548',
+      '#607D8B',
+      '#673AB7',
+      '#CDDC39',
+      '#FF4081',
+      '#FF6F00',
+      '#00695C',
+      '#37474F',
+      '#7B1FA2',
+      '#C2185B',
+      '#1976D2',
+      '#388E3C',
+      '#F9A825',
+      '#D32F2F',
+      '#5D4037',
     ];
-    String? corSelecionada = widget.coresCustomizadas?[partKey] ?? widget.coresCustomizadas?[cdRgint] ?? _coresPadrao[cdRgint];
-    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada)) corSelecionada = coresOpcoes.first;
+    String? corSelecionada = widget.coresCustomizadas?[partKey] ??
+        widget.coresCustomizadas?[cdRgint] ??
+        _coresPadrao[cdRgint];
+    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada))
+      corSelecionada = coresOpcoes.first;
 
     final fundidas = widget.regioesFundidas ?? [];
-    final estaEmFusao = fundidas.any((f) => f.ids.contains(cdRgint) && f.ids.length > 1);
+    final estaEmFusao =
+        fundidas.any((f) => f.ids.contains(cdRgint) && f.ids.length > 1);
     bool aplicarSoNestaRegiao = false;
 
     showDialog<bool?>(
@@ -1136,7 +1313,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                   const SizedBox(height: 12),
                   CheckboxListTile(
                     value: aplicarSoNestaRegiao,
-                    onChanged: (v) => setDialogState(() => aplicarSoNestaRegiao = v ?? false),
+                    onChanged: (v) =>
+                        setDialogState(() => aplicarSoNestaRegiao = v ?? false),
                     title: Text(
                       'Aplicar nome e cor só nesta região (remover da fusão)',
                       style: Theme.of(ctx2).textTheme.bodySmall,
@@ -1147,12 +1325,13 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                   Text(
                     'Esta região faz parte de uma fusão; todas mostram o mesmo nome. Marque acima para que só esta região receba o novo nome.',
                     style: Theme.of(ctx2).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(ctx2).colorScheme.onSurfaceVariant,
-                    ),
+                          color: Theme.of(ctx2).colorScheme.onSurfaceVariant,
+                        ),
                   ),
                 ],
                 const SizedBox(height: 16),
-                Text('Cor desta delimitação', style: Theme.of(ctx2).textTheme.labelLarge),
+                Text('Cor desta delimitação',
+                    style: Theme.of(ctx2).textTheme.labelLarge),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -1168,8 +1347,15 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
                         decoration: BoxDecoration(
                           color: cor,
                           shape: BoxShape.circle,
-                          border: Border.all(color: selected ? Colors.white : Colors.transparent, width: 3),
-                          boxShadow: [BoxShadow(color: Colors.black26, blurRadius: selected ? 4 : 1)],
+                          border: Border.all(
+                              color:
+                                  selected ? Colors.white : Colors.transparent,
+                              width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: selected ? 4 : 1)
+                          ],
                         ),
                       ),
                     );
@@ -1216,8 +1402,40 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
   /// ficar sempre alinhado ao toque (evita lista «nenhum» com rodapé em Metas).
   Widget _rankingPanelWidget({
     required bool compact,
-    required List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking,
-    required List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> rankingMetas,
+    required List<
+            ({
+              String id,
+              String nome,
+              int total,
+              int totalEstimativa,
+              double pct,
+              List<
+                  ({
+                    String cidade,
+                    String key,
+                    int votos,
+                    double pct,
+                    int estimativa
+                  })> cidades
+            })>
+        ranking,
+    required List<
+            ({
+              String id,
+              String nome,
+              int total,
+              int totalEstimativa,
+              double pct,
+              List<
+                  ({
+                    String cidade,
+                    String key,
+                    int votos,
+                    double pct,
+                    int estimativa
+                  })> cidades
+            })>
+        rankingMetas,
     required Map<String, int> metasMap,
     required int totalVotosTseGeral,
     required int totalEstimativaGeral,
@@ -1249,7 +1467,8 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
         onBenfeitoriasMapa: _onBenfeitoriasFromPanel,
         onPainelRankingModoChanged: widget.onPainelRankingModoChanged,
         onToggleFocusRegiao: (id) {
-          final modoNv = widget.painelRankingModoNotifier?.value ?? widget.painelRankingModo;
+          final modoNv = widget.painelRankingModoNotifier?.value ??
+              widget.painelRankingModo;
           if (_normalizePainelModoStr(modoNv) == 'metas') {
             return;
           }
@@ -1292,11 +1511,15 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+                Icon(Icons.error_outline,
+                    size: 48, color: Theme.of(context).colorScheme.error),
                 const SizedBox(height: 16),
-                Text('Erro ao carregar o mapa', style: Theme.of(context).textTheme.titleSmall),
+                Text('Erro ao carregar o mapa',
+                    style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 8),
-                Text(_error!, style: Theme.of(context).textTheme.bodySmall, textAlign: TextAlign.center),
+                Text(_error!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    textAlign: TextAlign.center),
               ],
             ),
           ),
@@ -1327,19 +1550,25 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
           children: [
             Expanded(
               flex: 4,
-              child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
+              child: _buildMapStackContent(context, polygons, heatMarkers,
+                  markers, comparativoLabels, benfeitoriasLabels),
             ),
-            Divider(height: 1, thickness: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
+            Divider(
+                height: 1,
+                thickness: 1,
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
               child: Row(
                 children: [
-                  Icon(Icons.leaderboard_outlined, size: 20, color: theme.colorScheme.primary),
+                  Icon(Icons.leaderboard_outlined,
+                      size: 20, color: theme.colorScheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Ranking por região',
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -1379,61 +1608,69 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
               constraints.maxHeight * (temLocais ? 0.62 : 0.82),
             ),
           );
-          Widget buildRankingPanel({required bool compact}) => _rankingPanelWidget(
-            compact: compact,
-            tseVotosCarregando: widget.tseVotosCarregando,
-            ranking: ranking,
-            rankingMetas: rankingMetas,
-            metasMap: metasMap,
-            totalVotosTseGeral: totalVotosTseGeral,
-            totalEstimativaGeral: totalEstimativaGeral,
-          );
+          Widget buildRankingPanel({required bool compact}) =>
+              _rankingPanelWidget(
+                compact: compact,
+                tseVotosCarregando: widget.tseVotosCarregando,
+                ranking: ranking,
+                rankingMetas: rankingMetas,
+                metasMap: metasMap,
+                totalVotosTseGeral: totalVotosTseGeral,
+                totalEstimativaGeral: totalEstimativaGeral,
+              );
 
           // Botão flutuante para mostrar/ocultar o ranking
           Widget buildToggleBtn() => Positioned(
-            right: 8,
-            top: 8,
-            child: Material(
-              elevation: 3,
-              borderRadius: BorderRadius.circular(24),
-              color: Theme.of(context).colorScheme.surface,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(24),
-                onTap: () {
-                  setState(() => _rankingVisivel = !_rankingVisivel);
-                  // Ao abrir, ativa a camada correta conforme o tab padrão (TSE)
-                  // O _RankingPanel cuida de acionar onMostrarTSE quando o usuário clica nos tabs
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _rankingVisivel ? Icons.leaderboard : Icons.leaderboard_outlined,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.primary,
+                right: 8,
+                top: 8,
+                child: Material(
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(24),
+                  color: Theme.of(context).colorScheme.surface,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(24),
+                    onTap: () {
+                      setState(() => _rankingVisivel = !_rankingVisivel);
+                      // Ao abrir, ativa a camada correta conforme o tab padrão (TSE)
+                      // O _RankingPanel cuida de acionar onMostrarTSE quando o usuário clica nos tabs
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _rankingVisivel
+                                ? Icons.leaderboard
+                                : Icons.leaderboard_outlined,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _rankingVisivel ? 'Ocultar ranking' : 'Ver ranking',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _rankingVisivel ? 'Ocultar ranking' : 'Ver ranking',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
+              );
 
           return Stack(
             clipBehavior: Clip.none,
             children: [
               Positioned.fill(
-                child: _buildMapStackContent(context, polygons, heatMarkers, markers, comparativoLabels, benfeitoriasLabels),
+                child: _buildMapStackContent(context, polygons, heatMarkers,
+                    markers, comparativoLabels, benfeitoriasLabels),
               ),
               // Botão toggle sempre visível (independente de haver dados)
               buildToggleBtn(),
@@ -1489,6 +1726,7 @@ class _RankingPanel extends StatefulWidget {
     this.locaisVotacaoContent,
     this.selectedMunicipioKey,
     this.layoutCompact = false,
+
     /// Quando o título «Ranking por região» já existe no pai (ex.: [ExpansionTile] em baixo do mapa).
     this.hideDuplicateHeading = false,
     this.focusedRegiaoId,
@@ -1503,9 +1741,40 @@ class _RankingPanel extends StatefulWidget {
     this.nomesCustomizados,
   });
 
-  final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking;
-  final List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> rankingMetas;
+  final List<
+      ({
+        String id,
+        String nome,
+        int total,
+        int totalEstimativa,
+        double pct,
+        List<
+            ({
+              String cidade,
+              String key,
+              int votos,
+              double pct,
+              int estimativa
+            })> cidades
+      })> ranking;
+  final List<
+      ({
+        String id,
+        String nome,
+        int total,
+        int totalEstimativa,
+        double pct,
+        List<
+            ({
+              String cidade,
+              String key,
+              int votos,
+              double pct,
+              int estimativa
+            })> cidades
+      })> rankingMetas;
   final Map<String, int> metasPorRegiao;
+
   /// Sincronizado com [MapaRegionalPanel] — evita dessincronizar após rebuild do pai.
   final String painelRankingModo;
   final Future<void> Function(Map<String, int> metas)? onSalvarMetas;
@@ -1517,6 +1786,7 @@ class _RankingPanel extends StatefulWidget {
   final Widget? locaisVotacaoContent;
   final String? selectedMunicipioKey;
   final bool layoutCompact;
+
   /// Esconde a faixa com ícone + «Ranking por Região» (evita duplicar o [ExpansionTile]).
   final bool hideDuplicateHeading;
   final String? focusedRegiaoId;
@@ -1525,6 +1795,7 @@ class _RankingPanel extends StatefulWidget {
   final void Function(bool)? onMostrarMarcadores;
   final bool mostrarTSE;
   final bool mostrarMarcadores;
+
   /// Cores no mapa (Comparativo ou Metas). [ratios] opcional: se null, o mapa assume TSE vs estimativa.
   final void Function(
     Map<String, String>? cores, {
@@ -1567,15 +1838,15 @@ _ModoRanking _parsePainelModo(String s) {
 
 // Cores de atingimento: ratio = estimativa / votos_tse
 String _corAtingimento(double ratio) {
-  if (ratio <= 0) return '#78909C';      // sem dados
-  if (ratio < 0.10) return '#B71C1C';   // < 10% — crítico
-  if (ratio < 0.25) return '#D32F2F';   // 10-25% — muito abaixo
-  if (ratio < 0.40) return '#E64A19';   // 25-40% — abaixo
-  if (ratio < 0.60) return '#F57C00';   // 40-60% — na metade
-  if (ratio < 0.80) return '#F9A825';   // 60-80% — bom progresso
-  if (ratio < 1.00) return '#558B2F';   // 80-99% — quase lá
-  if (ratio < 1.50) return '#2E7D32';   // 100-150% — superado!
-  return '#FFD700';                      // > 150% — excelência
+  if (ratio <= 0) return '#78909C'; // sem dados
+  if (ratio < 0.10) return '#B71C1C'; // < 10% — crítico
+  if (ratio < 0.25) return '#D32F2F'; // 10-25% — muito abaixo
+  if (ratio < 0.40) return '#E64A19'; // 25-40% — abaixo
+  if (ratio < 0.60) return '#F57C00'; // 40-60% — na metade
+  if (ratio < 0.80) return '#F9A825'; // 60-80% — bom progresso
+  if (ratio < 1.00) return '#558B2F'; // 80-99% — quase lá
+  if (ratio < 1.50) return '#2E7D32'; // 100-150% — superado!
+  return '#FFD700'; // > 150% — excelência
 }
 
 String _labelAtingimento(double ratio) {
@@ -1597,7 +1868,9 @@ class _RankingPanelState extends State<_RankingPanel> {
 
   String _assinaturaBenfeitorias(List<BenfeitoriaRegiaoRanking> list) {
     if (list.isEmpty) return '';
-    return list.map((r) => '${r.id}:${r.valorTotal.toStringAsFixed(2)}').join('|');
+    return list
+        .map((r) => '${r.id}:${r.valorTotal.toStringAsFixed(2)}')
+        .join('|');
   }
 
   @override
@@ -1616,7 +1889,8 @@ class _RankingPanelState extends State<_RankingPanel> {
     if (oldList.isNotEmpty && list.length == oldList.length) {
       var same = true;
       for (var i = 0; i < list.length; i++) {
-        if (list[i].id != oldList[i].id || list[i].valorTotal != oldList[i].valorTotal) {
+        if (list[i].id != oldList[i].id ||
+            list[i].valorTotal != oldList[i].valorTotal) {
           same = false;
           break;
         }
@@ -1647,7 +1921,10 @@ class _RankingPanelState extends State<_RankingPanel> {
       cores[r.id] = _corAtingimento(t);
     }
     widget.onBenfeitoriasMapa?.call(
-      cores.isEmpty ? null : BenfeitoriasMapaPayload(cores: cores, ratios: ratios, valores: valores),
+      cores.isEmpty
+          ? null
+          : BenfeitoriasMapaPayload(
+              cores: cores, ratios: ratios, valores: valores),
     );
   }
 
@@ -1681,21 +1958,34 @@ class _RankingPanelState extends State<_RankingPanel> {
     final totalVotosTseGeral = widget.totalVotosTseGeral;
     final totalEstimativaGeral = widget.totalEstimativaGeral;
     final focusedRegiaoId = widget.focusedRegiaoId;
-    final modo = _parsePainelModo(_normalizePainelModoStr(widget.painelRankingModo));
+    final modo =
+        _parsePainelModo(_normalizePainelModoStr(widget.painelRankingModo));
 
     // ── Ranking da rede: agrega estimativa por região (flat lista de cidades) ──
     // Ranking da rede: agrega estimativa por região
-    final rankingRede = <({String id, String nome, int estimativaTotal, List<({String cidade, String key, int estimativa})> cidades})>[];
+    final rankingRede = <({
+      String id,
+      String nome,
+      int estimativaTotal,
+      List<({String cidade, String key, int estimativa})> cidades
+    })>[];
     if (totalEstimativaGeral > 0) {
       for (final r in ranking.where((r) => r.totalEstimativa > 0)) {
         final cidades = r.cidades
             .where((c) => c.estimativa > 0)
-            .map((c) => (cidade: c.cidade, key: c.key, estimativa: c.estimativa))
+            .map(
+                (c) => (cidade: c.cidade, key: c.key, estimativa: c.estimativa))
             .toList()
           ..sort((a, b) => b.estimativa.compareTo(a.estimativa));
-        rankingRede.add((id: r.id, nome: r.nome, estimativaTotal: r.totalEstimativa, cidades: cidades));
+        rankingRede.add((
+          id: r.id,
+          nome: r.nome,
+          estimativaTotal: r.totalEstimativa,
+          cidades: cidades
+        ));
       }
-      rankingRede.sort((a, b) => b.estimativaTotal.compareTo(a.estimativaTotal));
+      rankingRede
+          .sort((a, b) => b.estimativaTotal.compareTo(a.estimativaTotal));
     }
 
     // Abas TSE / Rede / Comparativo: não exigir estimativa > 0 (campanhas só com benfeitorias ou TSE também usam o mapa).
@@ -1710,7 +2000,9 @@ class _RankingPanelState extends State<_RankingPanel> {
     final modoMetas = modo == _ModoRanking.metas;
     final modoBenfeitorias = modo == _ModoRanking.benfeitorias;
     final modoNenhum = modo == _ModoRanking.nenhum;
-    final totalValorBenf = widget.benfeitoriasRanking?.fold<double>(0, (s, r) => s + r.valorTotal) ?? 0.0;
+    final totalValorBenf = widget.benfeitoriasRanking
+            ?.fold<double>(0, (s, r) => s + r.valorTotal) ??
+        0.0;
     var totalMetaSoma = 0;
     var totalAtingidoSoma = 0;
     for (final r in widget.rankingMetas) {
@@ -1733,10 +2025,13 @@ class _RankingPanelState extends State<_RankingPanel> {
 
     return Material(
       elevation: widget.hideDuplicateHeading ? 0 : 4,
-      borderRadius: widget.hideDuplicateHeading ? null : BorderRadius.circular(12),
+      borderRadius:
+          widget.hideDuplicateHeading ? null : BorderRadius.circular(12),
       child: ClipRRect(
-        borderRadius: widget.hideDuplicateHeading ? BorderRadius.zero : BorderRadius.circular(12),
-          child: Container(
+        borderRadius: widget.hideDuplicateHeading
+            ? BorderRadius.zero
+            : BorderRadius.circular(12),
+        child: Container(
           width: panelWidth,
           color: theme.colorScheme.surface,
           child: Column(
@@ -1748,7 +2043,8 @@ class _RankingPanelState extends State<_RankingPanel> {
                 padding: padCabecalho,
                 decoration: BoxDecoration(
                   color: cs.primaryContainer.withValues(alpha: 0.35),
-                  border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
+                  border: Border(
+                      bottom: BorderSide(color: cs.outlineVariant, width: 0.5)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1757,22 +2053,27 @@ class _RankingPanelState extends State<_RankingPanel> {
                     if (!widget.hideDuplicateHeading)
                       Row(
                         children: [
-                          Icon(Icons.leaderboard_outlined, size: 18, color: cs.primary),
+                          Icon(Icons.leaderboard_outlined,
+                              size: 18, color: cs.primary),
                           const SizedBox(width: 8),
                           Flexible(
                             child: Text(
                               'Ranking por Região',
-                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                              style: theme.textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           if (focusedRegiaoId != null) ...[
                             TextButton.icon(
-                              onPressed: () => widget.onToggleFocusRegiao(focusedRegiaoId),
+                              onPressed: () =>
+                                  widget.onToggleFocusRegiao(focusedRegiaoId),
                               icon: const Icon(Icons.zoom_out_map, size: 14),
-                              label: const Text('Ver tudo', style: TextStyle(fontSize: 11)),
+                              label: const Text('Ver tudo',
+                                  style: TextStyle(fontSize: 11)),
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
@@ -1784,11 +2085,14 @@ class _RankingPanelState extends State<_RankingPanel> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
-                          onPressed: () => widget.onToggleFocusRegiao(focusedRegiaoId),
+                          onPressed: () =>
+                              widget.onToggleFocusRegiao(focusedRegiaoId),
                           icon: const Icon(Icons.zoom_out_map, size: 14),
-                          label: const Text('Ver tudo', style: TextStyle(fontSize: 11)),
+                          label: const Text('Ver tudo',
+                              style: TextStyle(fontSize: 11)),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -1796,11 +2100,15 @@ class _RankingPanelState extends State<_RankingPanel> {
                       ),
                     if (!widget.hideDuplicateHeading)
                       SizedBox(height: compactOverlay ? 6 : 8)
-                    else if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas)
+                    else if (mostrarAbasTseRedeComparativo ||
+                        temBenfeitorias ||
+                        temModoMetas)
                       const SizedBox(height: 4),
 
                     // ── Tabs: clique ativa; clique duplo limpa o mapa ──
-                    if (mostrarAbasTseRedeComparativo || temBenfeitorias || temModoMetas) ...[
+                    if (mostrarAbasTseRedeComparativo ||
+                        temBenfeitorias ||
+                        temModoMetas) ...[
                       Wrap(
                         spacing: compactOverlay ? 4 : 6,
                         runSpacing: compactOverlay ? 4 : 6,
@@ -1872,7 +2180,8 @@ class _RankingPanelState extends State<_RankingPanel> {
                                   widget.onMostrarTSE?.call(false);
                                   widget.onMostrarMarcadores?.call(false);
                                   widget.onBenfeitoriasMapa?.call(null);
-                                  widget.onComparativoColors?.call(cores.isEmpty ? null : cores);
+                                  widget.onComparativoColors
+                                      ?.call(cores.isEmpty ? null : cores);
                                 }
                               },
                             ),
@@ -1960,18 +2269,25 @@ class _RankingPanelState extends State<_RankingPanel> {
                     else
                       Row(
                         children: [
-                          if (modo == _ModoRanking.tse || modo == _ModoRanking.comparativo)
-                            Expanded(child: _KpiChip(
+                          if (modo == _ModoRanking.tse ||
+                              modo == _ModoRanking.comparativo)
+                            Expanded(
+                                child: _KpiChip(
                               icon: Icons.how_to_vote_outlined,
                               label: 'TSE 2022',
                               value: formatarInteiroPtBr(totalVotosTseGeral),
                               color: const Color(0xFF1565C0),
                               theme: theme,
                             )),
-                          if ((modo == _ModoRanking.tse || modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
+                          if ((modo == _ModoRanking.tse ||
+                                  modo == _ModoRanking.comparativo) &&
+                              totalEstimativaGeral > 0)
                             const SizedBox(width: 8),
-                          if ((modo == _ModoRanking.rede || modo == _ModoRanking.comparativo) && totalEstimativaGeral > 0)
-                            Expanded(child: _KpiChip(
+                          if ((modo == _ModoRanking.rede ||
+                                  modo == _ModoRanking.comparativo) &&
+                              totalEstimativaGeral > 0)
+                            Expanded(
+                                child: _KpiChip(
                               icon: Icons.groups_outlined,
                               label: 'Campanha',
                               value: formatarInteiroPtBr(totalEstimativaGeral),
@@ -1988,9 +2304,9 @@ class _RankingPanelState extends State<_RankingPanel> {
                               ? 'Toque na região para filtrar o mapa • Valores por município cadastrado nas benfeitorias'
                               : modoMetas
                                   ? 'Toque na região para filtrar o mapa • Cores = estimativa da campanha ÷ meta por região'
-                              : (modoRede || modoNenhum)
-                                  ? 'Toque na região para filtrar o mapa'
-                                  : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
+                                  : (modoRede || modoNenhum)
+                                      ? 'Toque na região para filtrar o mapa'
+                                      : 'Toque na região para filtrar o mapa • Toque na cidade para ver urnas',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: cs.onSurfaceVariant,
                             fontSize: compactOverlay ? 11 : null,
@@ -1999,7 +2315,7 @@ class _RankingPanelState extends State<_RankingPanel> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      ],
+                  ],
                 ),
               ),
 
@@ -2007,299 +2323,509 @@ class _RankingPanelState extends State<_RankingPanel> {
               Expanded(
                 flex: listaAreaFlex,
                 child: modoNenhum
-                    ? _buildListaNenhum(cs, theme, compact: widget.hideDuplicateHeading)
+                    ? _buildListaNenhum(cs, theme,
+                        compact: widget.hideDuplicateHeading)
                     : modoBenfeitorias
-                    ? _buildListaBenfeitorias(widget.benfeitoriasRanking ?? const [], cs, theme)
-                    : modoMetas
-                    ? _buildListaMetas(cs, theme)
-                    : modoComparativo
-                    ? _buildListaComparativo(ranking, totalVotosTseGeral, totalEstimativaGeral, cs, theme)
-                    : modoRede
-                    ? _buildListaRede(rankingRede, totalEstimativaGeral, cs, theme)
-                    : (widget.tseVotosCarregando && ranking.isEmpty)
-                    ? const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: CircularProgressIndicator(),
-                        ),
-                      )
-                    : ranking.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            'Sem dados TSE por região. Aguarde o carregamento ou confirme o vínculo TSE 2022 no perfil do candidato (a mesma visão para toda a equipa com grau 1).',
-                            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      )
-                    : LayoutBuilder(
-                        builder: (context, listCx) {
-                          const baseVm = 3.0;
-                          const approxTile = 102.0;
-                          final n = ranking.length;
-                          final boost = _rankingListaSlackExtraPorItem(
-                            viewportHeight: listCx.maxHeight,
-                            itemCount: n,
-                            approxItemHeight: approxTile,
-                            baseVerticalMargin: baseVm,
-                          );
-                          return ListView.builder(
-                  itemCount: ranking.length,
-                  itemBuilder: (context, i) {
-                    final r = ranking[i];
-                    final isFocused = focusedRegiaoId == r.id;
-                    final containsSelected = widget.selectedMunicipioKey != null &&
-                        r.cidades.any((c) => c.key == widget.selectedMunicipioKey);
-                    final barColor = _barColor(i, cs);
-                    final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+                        ? _buildListaBenfeitorias(
+                            widget.benfeitoriasRanking ?? const [], cs, theme)
+                        : modoMetas
+                            ? _buildListaMetas(cs, theme)
+                            : modoComparativo
+                                ? _buildListaComparativo(
+                                    ranking,
+                                    totalVotosTseGeral,
+                                    totalEstimativaGeral,
+                                    cs,
+                                    theme)
+                                : modoRede
+                                    ? _buildListaRede(rankingRede,
+                                        totalEstimativaGeral, cs, theme)
+                                    : (widget.tseVotosCarregando &&
+                                            ranking.isEmpty)
+                                        ? const Center(
+                                            child: Padding(
+                                              padding: EdgeInsets.all(24),
+                                              child:
+                                                  CircularProgressIndicator(),
+                                            ),
+                                          )
+                                        : ranking.isEmpty
+                                            ? Center(
+                                                child: Padding(
+                                                  padding:
+                                                      const EdgeInsets.all(24),
+                                                  child: Text(
+                                                    'Sem dados TSE por região. Aguarde o carregamento ou confirme o vínculo TSE 2022 no perfil do candidato (a mesma visão para toda a equipa com grau 1).',
+                                                    style: theme
+                                                        .textTheme.bodyMedium
+                                                        ?.copyWith(
+                                                            color: cs
+                                                                .onSurfaceVariant),
+                                                    textAlign: TextAlign.center,
+                                                  ),
+                                                ),
+                                              )
+                                            : LayoutBuilder(
+                                                builder: (context, listCx) {
+                                                  const baseVm = 3.0;
+                                                  const approxTile = 102.0;
+                                                  final n = ranking.length;
+                                                  final boost =
+                                                      _rankingListaSlackExtraPorItem(
+                                                    viewportHeight:
+                                                        listCx.maxHeight,
+                                                    itemCount: n,
+                                                    approxItemHeight:
+                                                        approxTile,
+                                                    baseVerticalMargin: baseVm,
+                                                  );
+                                                  return ListView.builder(
+                                                    itemCount: ranking.length,
+                                                    itemBuilder: (context, i) {
+                                                      final r = ranking[i];
+                                                      final isFocused =
+                                                          focusedRegiaoId ==
+                                                              r.id;
+                                                      final containsSelected =
+                                                          widget.selectedMunicipioKey !=
+                                                                  null &&
+                                                              r.cidades.any((c) =>
+                                                                  c.key ==
+                                                                  widget
+                                                                      .selectedMunicipioKey);
+                                                      final barColor =
+                                                          _barColor(i, cs);
+                                                      final medalLabel = i < 3
+                                                          ? _medals[i]
+                                                          : '${i + 1}º';
 
-                    return Container(
-                      margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        border: isFocused
-                            ? Border.all(color: cs.primary, width: 2)
-                            : containsSelected
-                                ? Border.all(color: cs.secondary, width: 1)
-                                : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-                        color: isFocused
-                            ? cs.primaryContainer.withValues(alpha: 0.32)
-                            : containsSelected
-                                ? cs.secondaryContainer.withValues(alpha: 0.15)
-                                : null,
-                        boxShadow: isFocused
-                            ? [
-                                BoxShadow(
-                                  color: cs.primary.withValues(alpha: 0.28),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: ExpansionTile(
-                        initiallyExpanded: containsSelected || isFocused,
-                        shape: const RoundedRectangleBorder(),
-                        collapsedShape: const RoundedRectangleBorder(),
-                        tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                        title: InkWell(
-                          onTap: () => widget.onToggleFocusRegiao(r.id),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    // Medal / rank
-                                    Text(
-                                      medalLabel,
-                                      style: TextStyle(
-                                        fontSize: i < 3 ? 18 : 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: i >= 3 ? cs.onSurfaceVariant : null,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        _tituloRegiaoRanking(r.nome),
-                                        style: theme.textTheme.bodyMedium?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    // % badge
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: barColor.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(20),
-                                      ),
-                                      child: Text(
-                                        '${r.pct.toStringAsFixed(1)}%',
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: barColor,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isFocused)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: Icon(Icons.map, size: 16, color: cs.primary),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                // Barra de progresso TSE
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: LinearProgressIndicator(
-                                    value: r.pct / 100,
-                                    minHeight: 5,
-                                    backgroundColor: barColor.withValues(alpha: 0.12),
-                                    valueColor: AlwaysStoppedAnimation<Color>(barColor),
-                                  ),
-                                ),
-                                const SizedBox(height: 3),
-                                // Números TSE + estimativa (sem Spacer — usa Wrap para não transbordar)
-                                Wrap(
-                                  spacing: 6,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.how_to_vote_outlined, size: 12, color: cs.onSurfaceVariant),
-                                        const SizedBox(width: 3),
-                                        Text(
-                                          formatarInteiroPtBr(r.total),
-                                          style: theme.textTheme.labelSmall?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        Text(
-                                          ' TSE',
-                                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                                        ),
-                                      ],
-                                    ),
-                                    if (r.totalEstimativa > 0)
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
-                                          const SizedBox(width: 2),
-                                          Text(
-                                            formatarInteiroPtBr(r.totalEstimativa),
-                                            style: theme.textTheme.labelSmall?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                              color: cs.secondary,
-                                            ),
-                                          ),
-                                          Text(
-                                            ' camp.',
-                                            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                                          ),
-                                        ],
-                                      ),
-                                    // Botão filtrar — no Wrap não estoura
-                                    GestureDetector(
-                                      onTap: () => widget.onToggleFocusRegiao(r.id),
-                                      child: Text(
-                                        isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          color: cs.primary,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        children: [
-                          const Divider(height: 1),
-                          // Cabeçalho cidades — sem colunas fixas
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
-                            child: Row(
-                              children: [
-                                const SizedBox(width: 20),
-                                Expanded(
-                                  child: Text(
-                                    'Cidade',
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: cs.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  'TSE   %',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          ...r.cidades.map((c) {
-                            final isSelected = c.key == widget.selectedMunicipioKey;
-                            return InkWell(
-                              onTap: () => widget.onCityTap?.call(c.key),
-                              child: Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                decoration: isSelected
-                                    ? BoxDecoration(
-                                        color: cs.primaryContainer.withValues(alpha: 0.5),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: cs.primary, width: 1),
-                                      )
-                                    : null,
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      isSelected ? Icons.place : Icons.circle,
-                                      size: isSelected ? 14 : 6,
-                                      color: isSelected ? cs.primary : barColor.withValues(alpha: 0.6),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    // Nome da cidade — ocupa o espaço disponível
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            c.cidade,
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              fontWeight: isSelected ? FontWeight.bold : null,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          if (c.estimativa > 0)
-                                            Text(
-                                              '${formatarInteiroPtBr(c.estimativa)} camp.',
-                                              style: theme.textTheme.labelSmall?.copyWith(
-                                                color: cs.secondary,
-                                                fontSize: 9,
+                                                      return Container(
+                                                        margin:
+                                                            EdgeInsets.fromLTRB(
+                                                                8,
+                                                                baseVm + boost,
+                                                                8,
+                                                                baseVm + boost),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(10),
+                                                          border: isFocused
+                                                              ? Border.all(
+                                                                  color: cs
+                                                                      .primary,
+                                                                  width: 2)
+                                                              : containsSelected
+                                                                  ? Border.all(
+                                                                      color: cs
+                                                                          .secondary,
+                                                                      width: 1)
+                                                                  : Border.all(
+                                                                      color: cs
+                                                                          .outlineVariant
+                                                                          .withValues(
+                                                                              alpha: 0.4)),
+                                                          color: isFocused
+                                                              ? cs.primaryContainer
+                                                                  .withValues(
+                                                                      alpha:
+                                                                          0.32)
+                                                              : containsSelected
+                                                                  ? cs.secondaryContainer
+                                                                      .withValues(
+                                                                          alpha:
+                                                                              0.15)
+                                                                  : null,
+                                                          boxShadow: isFocused
+                                                              ? [
+                                                                  BoxShadow(
+                                                                    color: cs
+                                                                        .primary
+                                                                        .withValues(
+                                                                            alpha:
+                                                                                0.28),
+                                                                    blurRadius:
+                                                                        12,
+                                                                    offset:
+                                                                        const Offset(
+                                                                            0,
+                                                                            2),
+                                                                  ),
+                                                                ]
+                                                              : null,
+                                                        ),
+                                                        child: ExpansionTile(
+                                                          initiallyExpanded:
+                                                              containsSelected ||
+                                                                  isFocused,
+                                                          shape:
+                                                              const RoundedRectangleBorder(),
+                                                          collapsedShape:
+                                                              const RoundedRectangleBorder(),
+                                                          tilePadding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal:
+                                                                      10,
+                                                                  vertical: 0),
+                                                          title: InkWell(
+                                                            onTap: () => widget
+                                                                .onToggleFocusRegiao(
+                                                                    r.id),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        8),
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      vertical:
+                                                                          4),
+                                                              child: Column(
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .start,
+                                                                children: [
+                                                                  Row(
+                                                                    children: [
+                                                                      // Medal / rank
+                                                                      Text(
+                                                                        medalLabel,
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize: i < 3
+                                                                              ? 18
+                                                                              : 13,
+                                                                          fontWeight:
+                                                                              FontWeight.bold,
+                                                                          color: i >= 3
+                                                                              ? cs.onSurfaceVariant
+                                                                              : null,
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              8),
+                                                                      Expanded(
+                                                                        child:
+                                                                            Text(
+                                                                          _tituloRegiaoRanking(
+                                                                              r.nome),
+                                                                          style: theme
+                                                                              .textTheme
+                                                                              .bodyMedium
+                                                                              ?.copyWith(
+                                                                            fontWeight:
+                                                                                FontWeight.w600,
+                                                                          ),
+                                                                          overflow:
+                                                                              TextOverflow.ellipsis,
+                                                                        ),
+                                                                      ),
+                                                                      // % badge
+                                                                      Container(
+                                                                        padding: const EdgeInsets
+                                                                            .symmetric(
+                                                                            horizontal:
+                                                                                7,
+                                                                            vertical:
+                                                                                2),
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color:
+                                                                              barColor.withValues(alpha: 0.15),
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(20),
+                                                                        ),
+                                                                        child:
+                                                                            Text(
+                                                                          '${r.pct.toStringAsFixed(1)}%',
+                                                                          style: theme
+                                                                              .textTheme
+                                                                              .labelSmall
+                                                                              ?.copyWith(
+                                                                            fontWeight:
+                                                                                FontWeight.bold,
+                                                                            color:
+                                                                                barColor,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      if (isFocused)
+                                                                        Padding(
+                                                                          padding: const EdgeInsets
+                                                                              .only(
+                                                                              left: 4),
+                                                                          child: Icon(
+                                                                              Icons.map,
+                                                                              size: 16,
+                                                                              color: cs.primary),
+                                                                        ),
+                                                                    ],
+                                                                  ),
+                                                                  const SizedBox(
+                                                                      height:
+                                                                          4),
+                                                                  // Barra de progresso TSE
+                                                                  ClipRRect(
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(4),
+                                                                    child:
+                                                                        LinearProgressIndicator(
+                                                                      value:
+                                                                          r.pct /
+                                                                              100,
+                                                                      minHeight:
+                                                                          5,
+                                                                      backgroundColor:
+                                                                          barColor.withValues(
+                                                                              alpha: 0.12),
+                                                                      valueColor:
+                                                                          AlwaysStoppedAnimation<Color>(
+                                                                              barColor),
+                                                                    ),
+                                                                  ),
+                                                                  const SizedBox(
+                                                                      height:
+                                                                          3),
+                                                                  // Números TSE + estimativa (sem Spacer — usa Wrap para não transbordar)
+                                                                  Wrap(
+                                                                    spacing: 6,
+                                                                    crossAxisAlignment:
+                                                                        WrapCrossAlignment
+                                                                            .center,
+                                                                    children: [
+                                                                      Row(
+                                                                        mainAxisSize:
+                                                                            MainAxisSize.min,
+                                                                        children: [
+                                                                          Icon(
+                                                                              Icons.how_to_vote_outlined,
+                                                                              size: 12,
+                                                                              color: cs.onSurfaceVariant),
+                                                                          const SizedBox(
+                                                                              width: 3),
+                                                                          Text(
+                                                                            formatarInteiroPtBr(r.total),
+                                                                            style:
+                                                                                theme.textTheme.labelSmall?.copyWith(
+                                                                              fontWeight: FontWeight.w600,
+                                                                            ),
+                                                                          ),
+                                                                          Text(
+                                                                            ' TSE',
+                                                                            style:
+                                                                                theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                      if (r.totalEstimativa >
+                                                                          0)
+                                                                        Row(
+                                                                          mainAxisSize:
+                                                                              MainAxisSize.min,
+                                                                          children: [
+                                                                            Icon(Icons.groups_outlined,
+                                                                                size: 12,
+                                                                                color: cs.secondary),
+                                                                            const SizedBox(width: 2),
+                                                                            Text(
+                                                                              formatarInteiroPtBr(r.totalEstimativa),
+                                                                              style: theme.textTheme.labelSmall?.copyWith(
+                                                                                fontWeight: FontWeight.w600,
+                                                                                color: cs.secondary,
+                                                                              ),
+                                                                            ),
+                                                                            Text(
+                                                                              ' camp.',
+                                                                              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                                                                            ),
+                                                                          ],
+                                                                        ),
+                                                                      // Botão filtrar — no Wrap não estoura
+                                                                      GestureDetector(
+                                                                        onTap: () =>
+                                                                            widget.onToggleFocusRegiao(r.id),
+                                                                        child:
+                                                                            Text(
+                                                                          isFocused
+                                                                              ? '✕ Ver tudo'
+                                                                              : '🗺 Filtrar',
+                                                                          style: theme
+                                                                              .textTheme
+                                                                              .labelSmall
+                                                                              ?.copyWith(
+                                                                            color:
+                                                                                cs.primary,
+                                                                            fontWeight:
+                                                                                FontWeight.w600,
+                                                                            decoration:
+                                                                                TextDecoration.underline,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          children: [
+                                                            const Divider(
+                                                                height: 1),
+                                                            // Cabeçalho cidades — sem colunas fixas
+                                                            Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .fromLTRB(
+                                                                      10,
+                                                                      6,
+                                                                      10,
+                                                                      2),
+                                                              child: Row(
+                                                                children: [
+                                                                  const SizedBox(
+                                                                      width:
+                                                                          20),
+                                                                  Expanded(
+                                                                    child: Text(
+                                                                      'Cidade',
+                                                                      style: theme
+                                                                          .textTheme
+                                                                          .labelSmall
+                                                                          ?.copyWith(
+                                                                        fontWeight:
+                                                                            FontWeight.w700,
+                                                                        color: cs
+                                                                            .onSurfaceVariant,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  Text(
+                                                                    'TSE   %',
+                                                                    style: theme
+                                                                        .textTheme
+                                                                        .labelSmall
+                                                                        ?.copyWith(
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w700,
+                                                                      color: cs
+                                                                          .onSurfaceVariant,
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                            ...r.cidades
+                                                                .map((c) {
+                                                              final isSelected = c
+                                                                      .key ==
+                                                                  widget
+                                                                      .selectedMunicipioKey;
+                                                              return InkWell(
+                                                                onTap: () => widget
+                                                                    .onCityTap
+                                                                    ?.call(
+                                                                        c.key),
+                                                                child:
+                                                                    Container(
+                                                                  margin: const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          6,
+                                                                      vertical:
+                                                                          1),
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          8,
+                                                                      vertical:
+                                                                          5),
+                                                                  decoration:
+                                                                      isSelected
+                                                                          ? BoxDecoration(
+                                                                              color: cs.primaryContainer.withValues(alpha: 0.5),
+                                                                              borderRadius: BorderRadius.circular(6),
+                                                                              border: Border.all(color: cs.primary, width: 1),
+                                                                            )
+                                                                          : null,
+                                                                  child: Row(
+                                                                    children: [
+                                                                      Icon(
+                                                                        isSelected
+                                                                            ? Icons.place
+                                                                            : Icons.circle,
+                                                                        size: isSelected
+                                                                            ? 14
+                                                                            : 6,
+                                                                        color: isSelected
+                                                                            ? cs.primary
+                                                                            : barColor.withValues(alpha: 0.6),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              6),
+                                                                      // Nome da cidade — ocupa o espaço disponível
+                                                                      Expanded(
+                                                                        child:
+                                                                            Column(
+                                                                          crossAxisAlignment:
+                                                                              CrossAxisAlignment.start,
+                                                                          children: [
+                                                                            Text(
+                                                                              c.cidade,
+                                                                              style: theme.textTheme.bodySmall?.copyWith(
+                                                                                fontWeight: isSelected ? FontWeight.bold : null,
+                                                                              ),
+                                                                              overflow: TextOverflow.ellipsis,
+                                                                            ),
+                                                                            if (c.estimativa >
+                                                                                0)
+                                                                              Text(
+                                                                                '${formatarInteiroPtBr(c.estimativa)} camp.',
+                                                                                style: theme.textTheme.labelSmall?.copyWith(
+                                                                                  color: cs.secondary,
+                                                                                  fontSize: 9,
+                                                                                ),
+                                                                              ),
+                                                                          ],
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                          width:
+                                                                              8),
+                                                                      // Votos + % em texto compacto sem SizedBox fixo
+                                                                      Text(
+                                                                        '${formatarInteiroPtBr(c.votos)}  ${c.pct.toStringAsFixed(1)}%',
+                                                                        style: theme
+                                                                            .textTheme
+                                                                            .labelSmall
+                                                                            ?.copyWith(
+                                                                          fontWeight: isSelected
+                                                                              ? FontWeight.w600
+                                                                              : null,
+                                                                          color:
+                                                                              cs.onSurfaceVariant,
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              );
+                                                            }),
+                                                            const SizedBox(
+                                                                height: 4),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    },
+                                                  );
+                                                },
                                               ),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Votos + % em texto compacto sem SizedBox fixo
-                                    Text(
-                                      '${formatarInteiroPtBr(c.votos)}  ${c.pct.toStringAsFixed(1)}%',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        fontWeight: isSelected ? FontWeight.w600 : null,
-                                        color: cs.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                          const SizedBox(height: 4),
-                        ],
-                      ),
-                    );
-                  },
-                );
-                        },
-                      ),
               ),
 
               if (showLocais) ...[
@@ -2353,7 +2879,8 @@ class _RankingPanelState extends State<_RankingPanel> {
                       decoration: InputDecoration(
                         labelText: _nomeRegiaoExibicao(r.id, r.nome),
                         border: const OutlineInputBorder(),
-                        helperText: 'Estimativa atual: ${formatarInteiroPtBr(r.totalEstimativa)}',
+                        helperText:
+                            'Estimativa atual: ${formatarInteiroPtBr(r.totalEstimativa)}',
                       ),
                     ),
                   ),
@@ -2361,8 +2888,12 @@ class _RankingPanelState extends State<_RankingPanel> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Salvar')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancelar')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Salvar')),
           ],
         ),
       );
@@ -2384,7 +2915,8 @@ class _RankingPanelState extends State<_RankingPanel> {
     }
   }
 
-  Future<void> _abrirDialogMetaUmaRegiao(BuildContext context, {required String regiaoId}) async {
+  Future<void> _abrirDialogMetaUmaRegiao(BuildContext context,
+      {required String regiaoId}) async {
     final salvar = widget.onSalvarMetas;
     if (salvar == null) return;
     final r = widget.rankingMetas.where((e) => e.id == regiaoId).firstOrNull;
@@ -2404,7 +2936,8 @@ class _RankingPanelState extends State<_RankingPanel> {
             decoration: InputDecoration(
               labelText: 'Meta de votos',
               border: const OutlineInputBorder(),
-              helperText: 'Estimativa atual da campanha: ${formatarInteiroPtBr(r.totalEstimativa)}',
+              helperText:
+                  'Estimativa atual da campanha: ${formatarInteiroPtBr(r.totalEstimativa)}',
             ),
           ),
           actions: [
@@ -2418,7 +2951,9 @@ class _RankingPanelState extends State<_RankingPanel> {
                 },
                 child: const Text('Remover meta'),
               ),
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancelar')),
             FilledButton(
               onPressed: () async {
                 final raw = controller.text.trim();
@@ -2458,7 +2993,8 @@ class _RankingPanelState extends State<_RankingPanel> {
           padding: const EdgeInsets.all(24),
           child: Text(
             'Carregando regiões…',
-            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: cs.onSurfaceVariant),
           ),
         ),
       );
@@ -2470,7 +3006,9 @@ class _RankingPanelState extends State<_RankingPanel> {
         Padding(
           padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
           child: OutlinedButton.icon(
-            onPressed: widget.onSalvarMetas == null ? null : () => _abrirDialogMetas(context),
+            onPressed: widget.onSalvarMetas == null
+                ? null
+                : () => _abrirDialogMetas(context),
             icon: const Icon(Icons.table_rows_outlined, size: 18),
             label: const Text('Editar todas as metas'),
           ),
@@ -2479,7 +3017,8 @@ class _RankingPanelState extends State<_RankingPanel> {
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
           child: Text(
             'Em cada região use «Adicionar meta» ou «Editar meta». Valores da estimativa vêm da rede cadastrada.',
-            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: cs.onSurfaceVariant),
           ),
         ),
         const Divider(height: 1),
@@ -2499,114 +3038,139 @@ class _RankingPanelState extends State<_RankingPanel> {
                 itemCount: ranking.length,
                 itemBuilder: (context, i) {
                   final r = ranking[i];
-              final m = metas[r.id] ?? 0;
-              final ratio = m > 0 ? r.totalEstimativa / m : 0.0;
-              final isFocused = widget.focusedRegiaoId == r.id;
-              final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
-              final corBarra = cs.primary;
+                  final m = metas[r.id] ?? 0;
+                  final ratio = m > 0 ? r.totalEstimativa / m : 0.0;
+                  final isFocused = widget.focusedRegiaoId == r.id;
+                  final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+                  final corBarra = cs.primary;
 
-              return Container(
-                margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isFocused ? cs.primary : cs.outlineVariant.withValues(alpha: 0.7),
-                    width: isFocused ? 2 : 1,
-                  ),
-                  color: isFocused ? cs.primaryContainer.withValues(alpha: 0.22) : cs.surfaceContainerHighest.withValues(alpha: 0.4),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(medalLabel, style: TextStyle(fontSize: i < 3 ? 18 : 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _tituloRegiaoRanking(_nomeRegiaoExibicao(r.id, r.nome)),
-                              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (m > 0)
-                            Text(
-                              '${(ratio * 100).toStringAsFixed(1)}%',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ),
-                        ],
+                  return Container(
+                    margin: EdgeInsets.fromLTRB(
+                        8, baseVm + boost, 8, baseVm + boost),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isFocused
+                            ? cs.primary
+                            : cs.outlineVariant.withValues(alpha: 0.7),
+                        width: isFocused ? 2 : 1,
                       ),
-                      const SizedBox(height: 6),
-                      if (m > 0)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: (ratio).clamp(0.0, 1.5) / 1.5,
-                            minHeight: 6,
-                            backgroundColor: cs.outlineVariant.withValues(alpha: 0.35),
-                            valueColor: AlwaysStoppedAnimation<Color>(corBarra),
-                          ),
-                        )
-                      else
-                        const SizedBox(height: 6),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 4,
+                      color: isFocused
+                          ? cs.primaryContainer.withValues(alpha: 0.22)
+                          : cs.surfaceContainerHighest.withValues(alpha: 0.4),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.flag_outlined, size: 12, color: cs.onSurfaceVariant),
-                              const SizedBox(width: 4),
-                              Text(
-                                m > 0 ? '${formatarInteiroPtBr(m)} meta' : 'Sem meta',
-                                style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.groups_outlined, size: 12, color: cs.onSurfaceVariant),
-                              const SizedBox(width: 4),
-                              Text(
-                                '${formatarInteiroPtBr(r.totalEstimativa)} est.',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: cs.onSurfaceVariant,
+                              Text(medalLabel,
+                                  style: TextStyle(
+                                      fontSize: i < 3 ? 18 : 13,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _tituloRegiaoRanking(
+                                      _nomeRegiaoExibicao(r.id, r.nome)),
+                                  style: theme.textTheme.bodyMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (m > 0)
+                                Text(
+                                  '${(ratio * 100).toStringAsFixed(1)}%',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
                             ],
+                          ),
+                          const SizedBox(height: 6),
+                          if (m > 0)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: (ratio).clamp(0.0, 1.5) / 1.5,
+                                minHeight: 6,
+                                backgroundColor:
+                                    cs.outlineVariant.withValues(alpha: 0.35),
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(corBarra),
+                              ),
+                            )
+                          else
+                            const SizedBox(height: 6),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 4,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.flag_outlined,
+                                      size: 12, color: cs.onSurfaceVariant),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    m > 0
+                                        ? '${formatarInteiroPtBr(m)} meta'
+                                        : 'Sem meta',
+                                    style: theme.textTheme.labelSmall
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.groups_outlined,
+                                      size: 12, color: cs.onSurfaceVariant),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${formatarInteiroPtBr(r.totalEstimativa)} est.',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: widget.onSalvarMetas == null
+                                  ? null
+                                  : () => _abrirDialogMetaUmaRegiao(context,
+                                      regiaoId: r.id),
+                              icon: Icon(
+                                  m > 0
+                                      ? Icons.edit_outlined
+                                      : Icons.add_circle_outline,
+                                  size: 18),
+                              label: Text(
+                                  m > 0 ? 'Editar meta' : 'Adicionar meta'),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: widget.onSalvarMetas == null
-                                ? null
-                                : () => _abrirDialogMetaUmaRegiao(context, regiaoId: r.id),
-                            icon: Icon(m > 0 ? Icons.edit_outlined : Icons.add_circle_outline, size: 18),
-                            label: Text(m > 0 ? 'Editar meta' : 'Adicionar meta'),
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              visualDensity: VisualDensity.compact,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
-                  ),
-                );
-            },
-          );
+                  );
+                },
+              );
             },
           ),
         ),
@@ -2616,7 +3180,8 @@ class _RankingPanelState extends State<_RankingPanel> {
 
   // ── Estado vazio: nenhuma camada selecionada ──────────────────────────────
 
-  Widget _buildListaNenhum(ColorScheme cs, ThemeData theme, {bool compact = false}) {
+  Widget _buildListaNenhum(ColorScheme cs, ThemeData theme,
+      {bool compact = false}) {
     final iconSize = compact ? 28.0 : 40.0;
     final pad = compact ? 10.0 : 16.0;
     return LayoutBuilder(
@@ -2627,16 +3192,21 @@ class _RankingPanelState extends State<_RankingPanel> {
             constraints: BoxConstraints(minHeight: box.maxHeight),
             child: Center(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 20, vertical: pad),
+                padding: EdgeInsets.symmetric(
+                    horizontal: compact ? 12 : 20, vertical: pad),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.touch_app_outlined, size: iconSize, color: cs.primary.withValues(alpha: 0.5)),
+                    Icon(Icons.touch_app_outlined,
+                        size: iconSize,
+                        color: cs.primary.withValues(alpha: 0.5)),
                     SizedBox(height: compact ? 6 : 12),
                     Text(
                       'Selecione uma visualização',
-                      style: (compact ? theme.textTheme.labelLarge : theme.textTheme.titleSmall)
+                      style: (compact
+                              ? theme.textTheme.labelLarge
+                              : theme.textTheme.titleSmall)
                           ?.copyWith(fontWeight: FontWeight.w600),
                       textAlign: TextAlign.center,
                     ),
@@ -2645,7 +3215,9 @@ class _RankingPanelState extends State<_RankingPanel> {
                       compact
                           ? 'Use as abas acima (Eleição 2022, Minha Rede, etc.) para carregar dados no mapa.'
                           : 'Toque em "Eleição 2022", "Minha Rede", "Comparativo", "Metas" ou "Benfeitorias" (quando disponível) para carregar os dados no mapa.',
-                      style: (compact ? theme.textTheme.labelSmall : theme.textTheme.bodySmall)
+                      style: (compact
+                              ? theme.textTheme.labelSmall
+                              : theme.textTheme.bodySmall)
                           ?.copyWith(color: cs.onSurfaceVariant, height: 1.25),
                       textAlign: TextAlign.center,
                     ),
@@ -2673,17 +3245,20 @@ class _RankingPanelState extends State<_RankingPanel> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.volunteer_activism_outlined, size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.45)),
+              Icon(Icons.volunteer_activism_outlined,
+                  size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.45)),
               const SizedBox(height: 12),
               Text(
                 'Nenhum dado no mapa por município',
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
                 'O mapa usa o município da benfeitoria ou, se estiver vazio, o município do apoiador. Confira se o apoiador tem cidade (MT) e, nas benfeitorias, o município quando for diferente.',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -2709,192 +3284,209 @@ class _RankingPanelState extends State<_RankingPanel> {
           baseVerticalMargin: baseVm,
         );
         return ListView.builder(
-      itemCount: rankingBenf.length,
-      itemBuilder: (context, i) {
-        final r = rankingBenf[i];
-        final isFocused = widget.focusedRegiaoId == r.id;
-        final pct = maxV > 0 ? r.valorTotal / maxV * 100 : 0.0;
-        final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
-        final t = maxV > 0 ? r.valorTotal / maxV : 0.0;
-        final hexCor = _corAtingimento(t);
-        final barCor = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
+          itemCount: rankingBenf.length,
+          itemBuilder: (context, i) {
+            final r = rankingBenf[i];
+            final isFocused = widget.focusedRegiaoId == r.id;
+            final pct = maxV > 0 ? r.valorTotal / maxV * 100 : 0.0;
+            final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+            final t = maxV > 0 ? r.valorTotal / maxV : 0.0;
+            final hexCor = _corAtingimento(t);
+            final barCor =
+                Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
 
-        return Container(
-          margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: isFocused
-                ? Border.all(color: kBenfeitoriasMapaAccent, width: 2)
-                : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-            color: isFocused ? kBenfeitoriasMapaAccent.withValues(alpha: 0.12) : null,
-          ),
-          child: ExpansionTile(
-            shape: const RoundedRectangleBorder(),
-            collapsedShape: const RoundedRectangleBorder(),
-            tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            title: InkWell(
-              onTap: () => widget.onToggleFocusRegiao(r.id),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+            return Container(
+              margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: isFocused
+                    ? Border.all(color: kBenfeitoriasMapaAccent, width: 2)
+                    : Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.4)),
+                color: isFocused
+                    ? kBenfeitoriasMapaAccent.withValues(alpha: 0.12)
+                    : null,
+              ),
+              child: ExpansionTile(
+                shape: const RoundedRectangleBorder(),
+                collapsedShape: const RoundedRectangleBorder(),
+                tilePadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                title: InkWell(
+                  onTap: () => widget.onToggleFocusRegiao(r.id),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          medalLabel,
-                          style: TextStyle(
-                            fontSize: i < 3 ? 18 : 13,
-                            fontWeight: FontWeight.bold,
-                            color: i >= 3 ? cs.onSurfaceVariant : null,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _tituloRegiaoRanking(r.nome),
-                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: barCor.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            formatarMoedaPtBr(r.valorTotal),
-                            style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: barCor),
-                          ),
-                        ),
-                        if (isFocused)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Icon(Icons.map, size: 16, color: kBenfeitoriasMapaAccent),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: pct / 100,
-                        minHeight: 5,
-                        backgroundColor: barCor.withValues(alpha: 0.12),
-                        valueColor: AlwaysStoppedAnimation<Color>(barCor),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Wrap(
-                      spacing: 6,
-                      children: [
-                        Text(
-                          '${r.qtdTotal} registro(s)',
-                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                        ),
-                        GestureDetector(
-                          onTap: () => widget.onToggleFocusRegiao(r.id),
-                          child: Text(
-                            isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: kBenfeitoriasMapaAccent,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.underline,
+                        Row(
+                          children: [
+                            Text(
+                              medalLabel,
+                              style: TextStyle(
+                                fontSize: i < 3 ? 18 : 13,
+                                fontWeight: FontWeight.bold,
+                                color: i >= 3 ? cs.onSurfaceVariant : null,
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            children: [
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Text(
-                        'Cidade',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'Valor',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ...r.cidades.map((c) {
-                final isSelected = c.key == widget.selectedMunicipioKey;
-                return InkWell(
-                  onTap: () => widget.onCityTap?.call(c.key),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    decoration: isSelected
-                        ? BoxDecoration(
-                            color: cs.primaryContainer.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: cs.primary, width: 1),
-                          )
-                        : null,
-                    child: Row(
-                      children: [
-                        Icon(
-                          isSelected ? Icons.place : Icons.circle,
-                          size: isSelected ? 14 : 6,
-                          color: isSelected ? cs.primary : barCor.withValues(alpha: 0.6),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                c.cidade,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  fontWeight: isSelected ? FontWeight.bold : null,
-                                ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _tituloRegiaoRanking(r.nome),
+                                style: theme.textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              Text(
-                                '${c.qtd} reg.',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: cs.onSurfaceVariant,
-                                  fontSize: 9,
-                                ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: barCor.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                            ],
+                              child: Text(
+                                formatarMoedaPtBr(r.valorTotal),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.bold, color: barCor),
+                              ),
+                            ),
+                            if (isFocused)
+                              const Padding(
+                                padding: EdgeInsets.only(left: 4),
+                                child: Icon(Icons.map,
+                                    size: 16, color: kBenfeitoriasMapaAccent),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct / 100,
+                            minHeight: 5,
+                            backgroundColor: barCor.withValues(alpha: 0.12),
+                            valueColor: AlwaysStoppedAnimation<Color>(barCor),
                           ),
                         ),
-                        Text(
-                          formatarMoedaPtBr(c.valor),
-                          style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                        const SizedBox(height: 3),
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            Text(
+                              '${r.qtdTotal} registro(s)',
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                            GestureDetector(
+                              onTap: () => widget.onToggleFocusRegiao(r.id),
+                              child: Text(
+                                isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: kBenfeitoriasMapaAccent,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                );
-              }),
-              const SizedBox(height: 4),
-            ],
-          ),
+                ),
+                children: [
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Text(
+                            'Cidade',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'Valor',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  ...r.cidades.map((c) {
+                    final isSelected = c.key == widget.selectedMunicipioKey;
+                    return InkWell(
+                      onTap: () => widget.onCityTap?.call(c.key),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 5),
+                        decoration: isSelected
+                            ? BoxDecoration(
+                                color:
+                                    cs.primaryContainer.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: cs.primary, width: 1),
+                              )
+                            : null,
+                        child: Row(
+                          children: [
+                            Icon(
+                              isSelected ? Icons.place : Icons.circle,
+                              size: isSelected ? 14 : 6,
+                              color: isSelected
+                                  ? cs.primary
+                                  : barCor.withValues(alpha: 0.6),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    c.cidade,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight:
+                                          isSelected ? FontWeight.bold : null,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '${c.qtd} reg.',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                      fontSize: 9,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              formatarMoedaPtBr(c.valor),
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            );
+          },
         );
-      },
-    );
       },
     );
   }
@@ -2902,7 +3494,23 @@ class _RankingPanelState extends State<_RankingPanel> {
   // ── Lista comparativa (TSE 2022 vs Campanha) ─────────────────────────────
 
   Widget _buildListaComparativo(
-    List<({String id, String nome, int total, int totalEstimativa, double pct, List<({String cidade, String key, int votos, double pct, int estimativa})> cidades})> ranking,
+    List<
+            ({
+              String id,
+              String nome,
+              int total,
+              int totalEstimativa,
+              double pct,
+              List<
+                  ({
+                    String cidade,
+                    String key,
+                    int votos,
+                    double pct,
+                    int estimativa
+                  })> cidades
+            })>
+        ranking,
     int totalTse,
     int totalEstimativa,
     ColorScheme cs,
@@ -2922,7 +3530,8 @@ class _RankingPanelState extends State<_RankingPanel> {
           padding: const EdgeInsets.all(24),
           child: Text(
             'Sem dados TSE para comparar. Isto costuma aparecer enquanto carrega ou se o deputado ainda não vinculou o cadastro à lista TSE 2022. A equipa (grau 1) vê os mesmos totais do candidato quando o vínculo existe.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: cs.onSurfaceVariant),
             textAlign: TextAlign.center,
           ),
         ),
@@ -2946,9 +3555,17 @@ class _RankingPanelState extends State<_RankingPanel> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(width: 10, height: 10, decoration: BoxDecoration(color: Color(int.parse(item.cor.replaceFirst('#', 'FF'), radix: 16)), shape: BoxShape.circle)),
+                Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                        color: Color(int.parse(item.cor.replaceFirst('#', 'FF'),
+                            radix: 16)),
+                        shape: BoxShape.circle)),
                 const SizedBox(width: 4),
-                Text(item.label, style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                Text(item.label,
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: cs.onSurfaceVariant)),
               ],
             ),
         ],
@@ -2976,136 +3593,206 @@ class _RankingPanelState extends State<_RankingPanel> {
                 itemCount: ranking.length,
                 itemBuilder: (context, i) {
                   final r = ranking[i];
-              final ratio = r.total > 0 ? r.totalEstimativa / r.total : 0.0;
-              final hexCor = _corAtingimento(ratio);
-              final corAtingimento = Color(int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
-              final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
-              final isFocused = widget.focusedRegiaoId == r.id;
+                  final ratio = r.total > 0 ? r.totalEstimativa / r.total : 0.0;
+                  final hexCor = _corAtingimento(ratio);
+                  final corAtingimento = Color(
+                      int.parse(hexCor.replaceFirst('#', 'FF'), radix: 16));
+                  final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+                  final isFocused = widget.focusedRegiaoId == r.id;
 
-              return Container(
-                margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  border: isFocused
-                      ? Border.all(color: cs.primary, width: 2.5)
-                      : Border.all(color: corAtingimento.withValues(alpha: 0.5)),
-                  color: corAtingimento.withValues(alpha: isFocused ? 0.1 : 0.06),
-                  boxShadow: isFocused
-                      ? [
-                          BoxShadow(
-                            color: cs.primary.withValues(alpha: 0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: ExpansionTile(
-                  shape: const RoundedRectangleBorder(),
-                  collapsedShape: const RoundedRectangleBorder(),
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                  title: InkWell(
-                    onTap: () => widget.onToggleFocusRegiao(r.id),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(medalLabel, style: TextStyle(fontSize: i < 3 ? 18 : 13, fontWeight: FontWeight.bold, color: i >= 3 ? cs.onSurfaceVariant : null)),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _tituloRegiaoRanking(r.nome),
-                                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                  return Container(
+                    margin: EdgeInsets.fromLTRB(
+                        8, baseVm + boost, 8, baseVm + boost),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: isFocused
+                          ? Border.all(color: cs.primary, width: 2.5)
+                          : Border.all(
+                              color: corAtingimento.withValues(alpha: 0.5)),
+                      color: corAtingimento.withValues(
+                          alpha: isFocused ? 0.1 : 0.06),
+                      boxShadow: isFocused
+                          ? [
+                              BoxShadow(
+                                color: cs.primary.withValues(alpha: 0.3),
+                                blurRadius: 12,
+                                offset: const Offset(0, 2),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                decoration: BoxDecoration(color: corAtingimento.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
-                                child: Text('${(ratio * 100).toStringAsFixed(1)}%', style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: corAtingimento)),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          // Barra dupla: TSE (base) vs campanha (progresso)
-                          Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: 1.0,
-                                  minHeight: 7,
-                                  backgroundColor: cs.outlineVariant.withValues(alpha: 0.3),
-                                  valueColor: AlwaysStoppedAnimation<Color>(cs.outlineVariant.withValues(alpha: 0.3)),
-                                ),
-                              ),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: (ratio).clamp(0.0, 1.5) / 1.5,
-                                  minHeight: 7,
-                                  backgroundColor: Colors.transparent,
-                                  valueColor: AlwaysStoppedAnimation<Color>(corAtingimento),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Wrap(
-                            spacing: 6,
-                            children: [
-                              Row(mainAxisSize: MainAxisSize.min, children: [
-                                Icon(Icons.how_to_vote_outlined, size: 12, color: cs.onSurfaceVariant),
-                                const SizedBox(width: 2),
-                                Text(formatarInteiroPtBr(r.total), style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600)),
-                                Text(' TSE', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                              ]),
-                              if (r.totalEstimativa > 0)
-                                Row(mainAxisSize: MainAxisSize.min, children: [
-                                  Icon(Icons.groups_outlined, size: 12, color: corAtingimento),
-                                  const SizedBox(width: 2),
-                                  Text(formatarInteiroPtBr(r.totalEstimativa), style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, color: corAtingimento)),
-                                  Text(' camp.', style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                                ]),
-                              Text(_labelAtingimento(ratio), style: theme.textTheme.labelSmall?.copyWith(color: corAtingimento, fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ]
+                          : null,
                     ),
-                  ),
-                  children: [
-                    const Divider(height: 1),
-                    ...r.cidades.map((c) {
-                      final cRatio = c.votos > 0 ? c.estimativa / c.votos : 0.0;
-                      final cHex = _corAtingimento(cRatio);
-                      final cCor = Color(int.parse(cHex.replaceFirst('#', 'FF'), radix: 16));
-                      return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                        child: Row(
-                          children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: cCor, shape: BoxShape.circle)),
-                            const SizedBox(width: 6),
-                            Expanded(child: Text(c.cidade, style: theme.textTheme.bodySmall, overflow: TextOverflow.ellipsis)),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${formatarInteiroPtBr(c.votos)} TSE  •  ${c.estimativa > 0 ? formatarInteiroPtBr(c.estimativa) : "—"} camp.',
-                              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                            ),
-                          ],
+                    child: ExpansionTile(
+                      shape: const RoundedRectangleBorder(),
+                      collapsedShape: const RoundedRectangleBorder(),
+                      tilePadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 0),
+                      title: InkWell(
+                        onTap: () => widget.onToggleFocusRegiao(r.id),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(medalLabel,
+                                      style: TextStyle(
+                                          fontSize: i < 3 ? 18 : 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: i >= 3
+                                              ? cs.onSurfaceVariant
+                                              : null)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _tituloRegiaoRanking(r.nome),
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                              fontWeight: FontWeight.w600),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 2),
+                                    decoration: BoxDecoration(
+                                        color: corAtingimento.withValues(
+                                            alpha: 0.15),
+                                        borderRadius:
+                                            BorderRadius.circular(20)),
+                                    child: Text(
+                                        '${(ratio * 100).toStringAsFixed(1)}%',
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: corAtingimento)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              // Barra dupla: TSE (base) vs campanha (progresso)
+                              Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: 1.0,
+                                      minHeight: 7,
+                                      backgroundColor: cs.outlineVariant
+                                          .withValues(alpha: 0.3),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          cs.outlineVariant
+                                              .withValues(alpha: 0.3)),
+                                    ),
+                                  ),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: (ratio).clamp(0.0, 1.5) / 1.5,
+                                      minHeight: 7,
+                                      backgroundColor: Colors.transparent,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          corAtingimento),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Wrap(
+                                spacing: 6,
+                                children: [
+                                  Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.how_to_vote_outlined,
+                                            size: 12,
+                                            color: cs.onSurfaceVariant),
+                                        const SizedBox(width: 2),
+                                        Text(formatarInteiroPtBr(r.total),
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                        Text(' TSE',
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                    color:
+                                                        cs.onSurfaceVariant)),
+                                      ]),
+                                  if (r.totalEstimativa > 0)
+                                    Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.groups_outlined,
+                                              size: 12, color: corAtingimento),
+                                          const SizedBox(width: 2),
+                                          Text(
+                                              formatarInteiroPtBr(
+                                                  r.totalEstimativa),
+                                              style: theme.textTheme.labelSmall
+                                                  ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: corAtingimento)),
+                                          Text(' camp.',
+                                              style: theme.textTheme.labelSmall
+                                                  ?.copyWith(
+                                                      color:
+                                                          cs.onSurfaceVariant)),
+                                        ]),
+                                  Text(_labelAtingimento(ratio),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                              color: corAtingimento,
+                                              fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      );
-                    }),
-                    const SizedBox(height: 4),
-                  ],
-                ),
+                      ),
+                      children: [
+                        const Divider(height: 1),
+                        ...r.cidades.map((c) {
+                          final cRatio =
+                              c.votos > 0 ? c.estimativa / c.votos : 0.0;
+                          final cHex = _corAtingimento(cRatio);
+                          final cCor = Color(int.parse(
+                              cHex.replaceFirst('#', 'FF'),
+                              radix: 16));
+                          return Container(
+                            margin: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 5),
+                            child: Row(
+                              children: [
+                                Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                        color: cCor, shape: BoxShape.circle)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                    child: Text(c.cidade,
+                                        style: theme.textTheme.bodySmall,
+                                        overflow: TextOverflow.ellipsis)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${formatarInteiroPtBr(c.votos)} TSE  •  ${c.estimativa > 0 ? formatarInteiroPtBr(c.estimativa) : "—"} camp.',
+                                  style: theme.textTheme.labelSmall
+                                      ?.copyWith(color: cs.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 4),
+                      ],
+                    ),
+                  );
+                },
               );
-            },
-          );
             },
           ),
         ),
@@ -3116,7 +3803,14 @@ class _RankingPanelState extends State<_RankingPanel> {
   // ── Lista da rede (campanha) ────────────────────────────────────────────────
 
   Widget _buildListaRede(
-    List<({String id, String nome, int estimativaTotal, List<({String cidade, String key, int estimativa})> cidades})> rankingRede,
+    List<
+            ({
+              String id,
+              String nome,
+              int estimativaTotal,
+              List<({String cidade, String key, int estimativa})> cidades
+            })>
+        rankingRede,
     int totalEstimativa,
     ColorScheme cs,
     ThemeData theme,
@@ -3128,17 +3822,20 @@ class _RankingPanelState extends State<_RankingPanel> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.groups_outlined, size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+              Icon(Icons.groups_outlined,
+                  size: 40, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
               const SizedBox(height: 12),
               Text(
                 'Nenhum dado da rede ainda.',
-                style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
               Text(
                 'Ative "Minha rede" nas camadas e cadastre votantes e apoiadores.',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -3159,189 +3856,209 @@ class _RankingPanelState extends State<_RankingPanel> {
           baseVerticalMargin: baseVm,
         );
         return ListView.builder(
-      itemCount: rankingRede.length,
-      itemBuilder: (context, i) {
-        final r = rankingRede[i];
-        final isFocused = widget.focusedRegiaoId == r.id;
-        final pct = totalEstimativa > 0 ? r.estimativaTotal / totalEstimativa * 100 : 0.0;
-        final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
+          itemCount: rankingRede.length,
+          itemBuilder: (context, i) {
+            final r = rankingRede[i];
+            final isFocused = widget.focusedRegiaoId == r.id;
+            final pct = totalEstimativa > 0
+                ? r.estimativaTotal / totalEstimativa * 100
+                : 0.0;
+            final medalLabel = i < 3 ? _medals[i] : '${i + 1}º';
 
-        return Container(
-          margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: isFocused
-                ? Border.all(color: cs.secondary, width: 2)
-                : Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-            color: isFocused ? cs.secondaryContainer.withValues(alpha: 0.28) : null,
-            boxShadow: isFocused
-                ? [
-                    BoxShadow(
-                      color: cs.secondary.withValues(alpha: 0.28),
-                      blurRadius: 12,
-                      offset: const Offset(0, 2),
-                    ),
-                  ]
-                : null,
-          ),
-          child: ExpansionTile(
-            shape: const RoundedRectangleBorder(),
-            collapsedShape: const RoundedRectangleBorder(),
-            tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            title: InkWell(
-              onTap: () => widget.onToggleFocusRegiao(r.id),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          medalLabel,
-                          style: TextStyle(
-                            fontSize: i < 3 ? 18 : 13,
-                            fontWeight: FontWeight.bold,
-                            color: i >= 3 ? cs.onSurfaceVariant : null,
-                          ),
+            return Container(
+              margin: EdgeInsets.fromLTRB(8, baseVm + boost, 8, baseVm + boost),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: isFocused
+                    ? Border.all(color: cs.secondary, width: 2)
+                    : Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.4)),
+                color: isFocused
+                    ? cs.secondaryContainer.withValues(alpha: 0.28)
+                    : null,
+                boxShadow: isFocused
+                    ? [
+                        BoxShadow(
+                          color: cs.secondary.withValues(alpha: 0.28),
+                          blurRadius: 12,
+                          offset: const Offset(0, 2),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _tituloRegiaoRanking(r.nome),
-                            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: cs.secondary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${pct.toStringAsFixed(1)}%',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: cs.secondary,
-                            ),
-                          ),
-                        ),
-                        if (isFocused)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Icon(Icons.map, size: 16, color: cs.secondary),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    // Barra de progresso campanha
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: pct / 100,
-                        minHeight: 5,
-                        backgroundColor: cs.secondary.withValues(alpha: 0.12),
-                        valueColor: AlwaysStoppedAnimation<Color>(cs.secondary),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Wrap(
-                      spacing: 6,
+                      ]
+                    : null,
+              ),
+              child: ExpansionTile(
+                shape: const RoundedRectangleBorder(),
+                collapsedShape: const RoundedRectangleBorder(),
+                tilePadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                title: InkWell(
+                  onTap: () => widget.onToggleFocusRegiao(r.id),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.groups_outlined, size: 12, color: cs.secondary),
-                            const SizedBox(width: 3),
                             Text(
-                              formatarInteiroPtBr(r.estimativaTotal),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: cs.secondary,
+                              medalLabel,
+                              style: TextStyle(
+                                fontSize: i < 3 ? 18 : 13,
+                                fontWeight: FontWeight.bold,
+                                color: i >= 3 ? cs.onSurfaceVariant : null,
                               ),
                             ),
-                            Text(
-                              ' votos campanha',
-                              style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _tituloRegiaoRanking(r.nome),
+                                style: theme.textTheme.bodyMedium
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: cs.secondary.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${pct.toStringAsFixed(1)}%',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: cs.secondary,
+                                ),
+                              ),
+                            ),
+                            if (isFocused)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 4),
+                                child: Icon(Icons.map,
+                                    size: 16, color: cs.secondary),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        // Barra de progresso campanha
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: pct / 100,
+                            minHeight: 5,
+                            backgroundColor:
+                                cs.secondary.withValues(alpha: 0.12),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(cs.secondary),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Wrap(
+                          spacing: 6,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.groups_outlined,
+                                    size: 12, color: cs.secondary),
+                                const SizedBox(width: 3),
+                                Text(
+                                  formatarInteiroPtBr(r.estimativaTotal),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: cs.secondary,
+                                  ),
+                                ),
+                                Text(
+                                  ' votos campanha',
+                                  style: theme.textTheme.labelSmall
+                                      ?.copyWith(color: cs.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                            GestureDetector(
+                              onTap: () => widget.onToggleFocusRegiao(r.id),
+                              child: Text(
+                                isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: cs.secondary,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
                             ),
                           ],
                         ),
-                        GestureDetector(
-                          onTap: () => widget.onToggleFocusRegiao(r.id),
+                      ],
+                    ),
+                  ),
+                ),
+                children: [
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 20),
+                        Expanded(
                           child: Text(
-                            isFocused ? '✕ Ver tudo' : '🗺 Filtrar',
+                            'Cidade',
                             style: theme.textTheme.labelSmall?.copyWith(
-                              color: cs.secondary,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.w700,
+                              color: cs.onSurfaceVariant,
                             ),
+                          ),
+                        ),
+                        Text(
+                          'Votos   %',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurfaceVariant,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-            children: [
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 20),
-                    Expanded(
-                      child: Text(
-                        'Cidade',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'Votos   %',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ...r.cidades.map((c) {
-                final cpct = totalEstimativa > 0 ? c.estimativa / totalEstimativa * 100 : 0.0;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                  child: Row(
-                    children: [
-                      Icon(Icons.circle, size: 6, color: cs.secondary.withValues(alpha: 0.6)),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          c.cidade,
-                          style: theme.textTheme.bodySmall,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${formatarInteiroPtBr(c.estimativa)}  ${cpct.toStringAsFixed(1)}%',
-                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                      ),
-                    ],
                   ),
-                );
-              }),
-              const SizedBox(height: 4),
-            ],
-          ),
+                  ...r.cidades.map((c) {
+                    final cpct = totalEstimativa > 0
+                        ? c.estimativa / totalEstimativa * 100
+                        : 0.0;
+                    return Container(
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      child: Row(
+                        children: [
+                          Icon(Icons.circle,
+                              size: 6,
+                              color: cs.secondary.withValues(alpha: 0.6)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              c.cidade,
+                              style: theme.textTheme.bodySmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${formatarInteiroPtBr(c.estimativa)}  ${cpct.toStringAsFixed(1)}%',
+                            style: theme.textTheme.labelSmall
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            );
+          },
         );
-      },
-    );
       },
     );
   }
@@ -3349,7 +4066,12 @@ class _RankingPanelState extends State<_RankingPanel> {
 
 /// Botão de aba no cabeçalho do ranking (TSE / Minha Rede).
 class _TabBtn extends StatelessWidget {
-  const _TabBtn({required this.label, required this.icon, required this.active, required this.color, required this.onTap});
+  const _TabBtn(
+      {required this.label,
+      required this.icon,
+      required this.active,
+      required this.color,
+      required this.onTap});
   final String label;
   final IconData icon;
   final bool active;
@@ -3367,7 +4089,8 @@ class _TabBtn extends StatelessWidget {
         decoration: BoxDecoration(
           color: active ? color : color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: active ? color : color.withValues(alpha: 0.3)),
+          border:
+              Border.all(color: active ? color : color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -3404,6 +4127,7 @@ class _KpiChip extends StatelessWidget {
   final String value;
   final Color color;
   final ThemeData theme;
+
   /// Texto do rótulo/valor em [onSurface] para leitura em chips coloridos no tema escuro.
   final bool readableTextOnDark;
 
@@ -3451,5 +4175,3 @@ class _KpiChip extends StatelessWidget {
     );
   }
 }
-
-

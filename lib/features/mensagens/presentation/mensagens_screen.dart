@@ -16,7 +16,8 @@ import '../../agenda/providers/agenda_provider.dart';
 import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
-import '../../votantes/providers/votantes_provider.dart' show municipiosMTListProvider, refreshMunicipiosMTList;
+import '../../votantes/providers/votantes_provider.dart'
+    show municipiosMTListProvider, refreshMunicipiosMTList;
 import '../../../models/municipio.dart';
 import '../providers/mensagens_provider.dart';
 
@@ -35,7 +36,8 @@ class MensagensScreen extends ConsumerWidget {
         ],
       );
     }
-    final ocultarAniversariantes = profile.role == 'apoiador' || profile.role == 'votante';
+    final ocultarAniversariantes =
+        profile.role == 'apoiador' || profile.role == 'votante';
 
     if (ocultarAniversariantes) {
       return const Column(
@@ -55,10 +57,12 @@ class _MensagensScreenComAbas extends ConsumerStatefulWidget {
   const _MensagensScreenComAbas();
 
   @override
-  ConsumerState<_MensagensScreenComAbas> createState() => _MensagensScreenComAbasState();
+  ConsumerState<_MensagensScreenComAbas> createState() =>
+      _MensagensScreenComAbasState();
 }
 
-class _MensagensScreenComAbasState extends ConsumerState<_MensagensScreenComAbas>
+class _MensagensScreenComAbasState
+    extends ConsumerState<_MensagensScreenComAbas>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
@@ -125,7 +129,9 @@ class _Header extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('Mensagens', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Mensagens',
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const EstadoMTBadge(compact: true),
         ],
       ),
@@ -158,17 +164,25 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
         title: const Text('Excluir mensagem'),
         content: Text('Remover "${m.titulo}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Excluir')),
         ],
       ),
     );
     if (ok != true || !mounted) return;
     try {
       await ref.read(excluirMensagemProvider)(m.id);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mensagem removida.')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Mensagem removida.')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
     }
   }
 
@@ -189,7 +203,8 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
       if (!mounted) return;
       // Mostra o erro REAL do servidor para facilitar diagnóstico
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: SelectableText('Erro ao enviar push:\n${e.toString().replaceFirst("Exception: ", "")}'),
+        content: SelectableText(
+            'Erro ao enviar push:\n${e.toString().replaceFirst("Exception: ", "")}'),
         duration: const Duration(seconds: 8),
         backgroundColor: Theme.of(context).colorScheme.errorContainer,
       ));
@@ -200,13 +215,17 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
-    final podeEditar = profile?.role == 'candidato' || profile?.role == 'assessor';
+    final podeEditar =
+        profile?.role == 'candidato' || profile?.role == 'assessor';
     final listAsync = ref.watch(mensagensVisiveisParaUsuarioProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(mensagensListProvider);
-        await ref.read(mensagensListProvider.future).then((_) {}).onError((_, __) {});
+        await ref
+            .read(mensagensListProvider.future)
+            .then((_) {})
+            .onError((_, __) {});
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -218,7 +237,8 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
               children: [
                 Chip(
                   avatar: const Icon(Icons.chat_bubble_outline, size: 16),
-                  label: Text('${listAsync.valueOrNull?.length ?? 0} mensagens'),
+                  label:
+                      Text('${listAsync.valueOrNull?.length ?? 0} mensagens'),
                 ),
                 const Spacer(),
                 if (podeEditar)
@@ -231,7 +251,10 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
             ),
             const SizedBox(height: 16),
             listAsync.when(
-              loading: () => const Center(child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())),
+              loading: () => const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator())),
               error: (e, _) => Text('Erro: $e'),
               data: (lista) {
                 if (lista.isEmpty) {
@@ -240,9 +263,13 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
                       padding: const EdgeInsets.symmetric(vertical: 48),
                       child: Column(
                         children: [
-                          Icon(Icons.send, size: 64, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+                          Icon(Icons.send,
+                              size: 64,
+                              color: theme.colorScheme.onSurfaceVariant
+                                  .withValues(alpha: 0.4)),
                           const SizedBox(height: 16),
-                          Text('Sem mensagem ainda', style: theme.textTheme.titleMedium),
+                          Text('Sem mensagem ainda',
+                              style: theme.textTheme.titleMedium),
                         ],
                       ),
                     ),
@@ -345,11 +372,14 @@ class _MensagemCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(m.titulo, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(m.titulo,
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
                       Text(
                         _escopoLabel[m.escopo] ?? m.escopo,
-                        style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.secondary),
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: theme.colorScheme.secondary),
                       ),
                     ],
                   ),
@@ -365,7 +395,8 @@ class _MensagemCard extends StatelessWidget {
                         value: 'notify',
                         child: ListTile(
                           dense: true,
-                          leading: const Icon(Icons.notifications_active_outlined),
+                          leading:
+                              const Icon(Icons.notifications_active_outlined),
                           title: Text(_MensagemCard._tituloMenuPush(m.escopo)),
                         ),
                       ),
@@ -399,7 +430,8 @@ class _MensagemCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      Icon(Icons.link_rounded, size: 18, color: theme.colorScheme.primary),
+                      Icon(Icons.link_rounded,
+                          size: 18, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -422,7 +454,9 @@ class _MensagemCard extends StatelessWidget {
                 Icon(
                   enviada ? Icons.check_circle : Icons.schedule,
                   size: 14,
-                  color: enviada ? Colors.green : theme.colorScheme.onSurfaceVariant,
+                  color: enviada
+                      ? Colors.green
+                      : theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -430,17 +464,21 @@ class _MensagemCard extends StatelessWidget {
                       ? 'Enviada em ${DateFormat('dd/MM/yyyy HH:mm').format(m.enviadaEm!.toLocal())}'
                       : 'Não enviada por push',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: enviada ? Colors.green : theme.colorScheme.onSurfaceVariant,
+                    color: enviada
+                        ? Colors.green
+                        : theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
                 if (!enviada && podeEditar) ...[
                   const Spacer(),
                   TextButton.icon(
                     onPressed: onNotificar,
-                    icon: const Icon(Icons.notifications_active_outlined, size: 16),
+                    icon: const Icon(Icons.notifications_active_outlined,
+                        size: 16),
                     label: const Text('Enviar push'),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -461,7 +499,8 @@ class _NovaMensagemDialog extends ConsumerStatefulWidget {
   const _NovaMensagemDialog();
 
   @override
-  ConsumerState<_NovaMensagemDialog> createState() => _NovaMensagemDialogState();
+  ConsumerState<_NovaMensagemDialog> createState() =>
+      _NovaMensagemDialogState();
 }
 
 class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
@@ -499,8 +538,10 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
 
   Future<void> _salvar() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_escopo == 'cidade' && (_municipioCidadeId == null || _municipioCidadeId!.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecione o município.')));
+    if (_escopo == 'cidade' &&
+        (_municipioCidadeId == null || _municipioCidadeId!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selecione o município.')));
       return;
     }
     setState(() => _loading = true);
@@ -511,19 +552,25 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
           corpo: _corpo.text.trim().isEmpty ? null : _corpo.text.trim(),
           linkUrl: _link.text.trim().isEmpty ? null : _link.text.trim(),
           escopo: _escopo,
-          municipiosIds: _escopo == 'cidade' && _municipioCidadeId != null ? [_municipioCidadeId!] : const [],
+          municipiosIds: _escopo == 'cidade' && _municipioCidadeId != null
+              ? [_municipioCidadeId!]
+              : const [],
           enviarPush: _enviarPush,
         ),
       );
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_enviarPush ? 'Mensagem criada e notificação enviada!' : 'Mensagem criada.')),
+          SnackBar(
+              content: Text(_enviarPush
+                  ? 'Mensagem criada e notificação enviada!'
+                  : 'Mensagem criada.')),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
         setState(() => _loading = false);
       }
     }
@@ -553,7 +600,9 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                     hintText: 'Ex.: Reunião em Cuiabá — 15/04',
                   ),
                   textCapitalization: TextCapitalization.sentences,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o título' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Informe o título'
+                      : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -583,23 +632,26 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   isExpanded: true,
-                  value: _escopo,
+                  initialValue: _escopo,
                   decoration: const InputDecoration(
                     labelText: 'Abrangência',
                     prefixIcon: Icon(Icons.public_outlined),
                   ),
-                  items: [
-                    const DropdownMenuItem(
+                  items: const [
+                    DropdownMenuItem(
                       value: 'global',
-                      child: Text('Global — todos os usuários', overflow: TextOverflow.ellipsis, maxLines: 1),
+                      child: Text('Global — todos os usuários',
+                          overflow: TextOverflow.ellipsis, maxLines: 1),
                     ),
-                    const DropdownMenuItem(
+                    DropdownMenuItem(
                       value: 'privada_assessores',
-                      child: Text('Privada — apenas assessores', overflow: TextOverflow.ellipsis, maxLines: 1),
+                      child: Text('Privada — apenas assessores',
+                          overflow: TextOverflow.ellipsis, maxLines: 1),
                     ),
-                    const DropdownMenuItem(
+                    DropdownMenuItem(
                       value: 'privada_apoiadores',
-                      child: Text('Privada — apenas apoiadores', overflow: TextOverflow.ellipsis, maxLines: 1),
+                      child: Text('Privada — apenas apoiadores',
+                          overflow: TextOverflow.ellipsis, maxLines: 1),
                     ),
                     DropdownMenuItem(
                       value: 'cidade',
@@ -625,7 +677,8 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                           children: [
                             Text(
                               'Municípios indisponíveis.',
-                              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: theme.colorScheme.error),
                             ),
                             OutlinedButton.icon(
                               onPressed: () async {
@@ -639,26 +692,32 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                         );
                       }
                       final ordenados = List<Municipio>.from(municipios)
-                        ..sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+                        ..sort((a, b) => a.nome
+                            .toLowerCase()
+                            .compareTo(b.nome.toLowerCase()));
 
                       return DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: _municipioCidadeId != null && ordenados.any((m) => m.id == _municipioCidadeId)
+                        initialValue: _municipioCidadeId != null &&
+                                ordenados.any((m) => m.id == _municipioCidadeId)
                             ? _municipioCidadeId
                             : null,
                         decoration: const InputDecoration(
                           labelText: 'Município *',
                           prefixIcon: Icon(Icons.location_city_outlined),
-                          helperText: 'Só recebem quem tem perfil vinculado neste município.',
+                          helperText:
+                              'Só recebem quem tem perfil vinculado neste município.',
                         ),
                         items: [
                           for (final m in ordenados)
                             DropdownMenuItem(
                               value: m.id,
-                              child: Text(m.nome, overflow: TextOverflow.ellipsis, maxLines: 1),
+                              child: Text(m.nome,
+                                  overflow: TextOverflow.ellipsis, maxLines: 1),
                             ),
                         ],
-                        onChanged: (v) => setState(() => _municipioCidadeId = v),
+                        onChanged: (v) =>
+                            setState(() => _municipioCidadeId = v),
                       );
                     },
                     loading: () => const LinearProgressIndicator(),
@@ -679,7 +738,8 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                   title: const Text('Enviar notificação push'),
                   subtitle: Text(
                     _subtituloPush(),
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     maxLines: 5,
                     softWrap: true,
                   ),
@@ -701,7 +761,10 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
         FilledButton(
           onPressed: _loading ? null : _salvar,
           child: _loading
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Criar mensagem'),
         ),
       ],
@@ -727,7 +790,7 @@ class _AniversariantesTab extends ConsumerWidget {
       error: (e, _) => Center(child: Text('Erro: $e')),
       data: (todas) {
         if (todas.isEmpty) {
-          return _AniversariantesEmptyState(
+          return const _AniversariantesEmptyState(
             icon: Icons.cake_outlined,
             titulo: 'Nenhuma data de nascimento cadastrada',
             subtitulo:
@@ -737,7 +800,10 @@ class _AniversariantesTab extends ConsumerWidget {
         return RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(aniversariantesProvider);
-            await ref.read(aniversariantesProvider.future).then((_) {}).onError((_, __) {});
+            await ref
+                .read(aniversariantesProvider.future)
+                .then((_) {})
+                .onError((_, __) {});
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -772,7 +838,8 @@ class _AniversariantesTab extends ConsumerWidget {
                 proximosAsync.when(
                   loading: () => const LinearProgressIndicator(minHeight: 2),
                   error: (_, __) => const SizedBox.shrink(),
-                  data: (proximos) => _SecaoProximos30(theme: theme, lista: proximos),
+                  data: (proximos) =>
+                      _SecaoProximos30(theme: theme, lista: proximos),
                 ),
               ],
             ),
@@ -796,7 +863,8 @@ class _SecaoHoje extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.wb_sunny_outlined, size: 20, color: theme.colorScheme.tertiary),
+            Icon(Icons.wb_sunny_outlined,
+                size: 20, color: theme.colorScheme.tertiary),
             const SizedBox(width: 8),
             Text(
               'Hoje',
@@ -828,8 +896,10 @@ class _SecaoHoje extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.2),
-                  child: Icon(Icons.cake_rounded, color: theme.colorScheme.primary, size: 22),
+                  backgroundColor:
+                      theme.colorScheme.primary.withValues(alpha: 0.2),
+                  child: Icon(Icons.cake_rounded,
+                      color: theme.colorScheme.primary, size: 22),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -847,7 +917,8 @@ class _SecaoHoje extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          ...lista.map((a) => _AniversarianteCard(aniversariante: a, destaque: true)),
+          ...lista.map(
+              (a) => _AniversarianteCard(aniversariante: a, destaque: true)),
         ],
       ],
     );
@@ -868,7 +939,8 @@ class _SecaoProximos30 extends StatelessWidget {
         const SizedBox(height: 12),
         Row(
           children: [
-            Icon(Icons.calendar_month_outlined, size: 20, color: theme.colorScheme.primary),
+            Icon(Icons.calendar_month_outlined,
+                size: 20, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
             Text(
               'Próximos 30 dias',
@@ -887,7 +959,8 @@ class _SecaoProximos30 extends StatelessWidget {
                 ),
                 child: Text(
                   '${lista.length}',
-                  style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
           ],
@@ -931,10 +1004,15 @@ class _PainelInfo extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: tonal ? theme.colorScheme.primaryContainer.withValues(alpha: destaque ? 0.55 : 0.35) : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        color: tonal
+            ? theme.colorScheme.primaryContainer
+                .withValues(alpha: destaque ? 0.55 : 0.35)
+            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: destaque ? theme.colorScheme.primary.withValues(alpha: 0.35) : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+          color: destaque
+              ? theme.colorScheme.primary.withValues(alpha: 0.35)
+              : theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
         ),
       ),
       child: child,
@@ -962,11 +1040,15 @@ class _AniversariantesEmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 56, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45)),
+            Icon(icon,
+                size: 56,
+                color:
+                    theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45)),
             const SizedBox(height: 16),
             Text(
               titulo,
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -986,13 +1068,15 @@ class _AniversariantesEmptyState extends StatelessWidget {
 }
 
 class _AniversarianteCard extends ConsumerStatefulWidget {
-  const _AniversarianteCard({required this.aniversariante, this.destaque = false});
+  const _AniversarianteCard(
+      {required this.aniversariante, this.destaque = false});
 
   final Aniversariante aniversariante;
   final bool destaque;
 
   @override
-  ConsumerState<_AniversarianteCard> createState() => _AniversarianteCardState();
+  ConsumerState<_AniversarianteCard> createState() =>
+      _AniversarianteCardState();
 }
 
 class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
@@ -1069,12 +1153,14 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
         tipoColor = theme.colorScheme.tertiary;
     }
 
-    final cidadeStr = a.municipioNome != null && a.municipioNome!.trim().isNotEmpty
-        ? displayNomeCidadeMT(a.municipioNome!.trim())
-        : null;
-    final origemStr = a.origemLugarNome != null && a.origemLugarNome!.trim().isNotEmpty
-        ? 'De: ${a.origemLugarNome!.trim()}'
-        : null;
+    final cidadeStr =
+        a.municipioNome != null && a.municipioNome!.trim().isNotEmpty
+            ? displayNomeCidadeMT(a.municipioNome!.trim())
+            : null;
+    final origemStr =
+        a.origemLugarNome != null && a.origemLugarNome!.trim().isNotEmpty
+            ? 'De: ${a.origemLugarNome!.trim()}'
+            : null;
     final linhaLocal = <String>[
       if (cidadeStr != null) cidadeStr,
       if (origemStr != null) origemStr,
@@ -1102,20 +1188,26 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
         child: ListTile(
           isThreeLine: true,
           titleAlignment: ListTileTitleAlignment.top,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           leading: CircleAvatar(
             backgroundColor: widget.destaque
                 ? theme.colorScheme.primary.withValues(alpha: 0.12)
                 : theme.colorScheme.secondaryContainer.withValues(alpha: 0.35),
             child: Icon(
-              widget.destaque ? Icons.cake_outlined : Icons.card_giftcard_outlined,
-              color: widget.destaque ? theme.colorScheme.primary : theme.colorScheme.onSecondaryContainer,
+              widget.destaque
+                  ? Icons.cake_outlined
+                  : Icons.card_giftcard_outlined,
+              color: widget.destaque
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSecondaryContainer,
               size: 22,
             ),
           ),
           title: Text(
             a.nome,
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -1236,10 +1328,12 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
                           ),
                         )
                       : IconButton.filledTonal(
-                          icon: const Icon(Icons.card_giftcard_rounded, size: 22),
+                          icon:
+                              const Icon(Icons.card_giftcard_rounded, size: 22),
                           style: IconButton.styleFrom(
                             foregroundColor: theme.colorScheme.primary,
-                            backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+                            backgroundColor: theme.colorScheme.primaryContainer
+                                .withValues(alpha: 0.5),
                           ),
                           onPressed: _compartilharCartaoParabens,
                         ),
@@ -1257,7 +1351,8 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
                     icon: const Icon(Icons.chat, size: 20),
                     style: IconButton.styleFrom(
                       foregroundColor: const Color(0xFF25D366),
-                      backgroundColor: const Color(0xFF25D366).withValues(alpha: 0.12),
+                      backgroundColor:
+                          const Color(0xFF25D366).withValues(alpha: 0.12),
                     ),
                     onPressed: _loadingParabens
                         ? null
@@ -1278,4 +1373,3 @@ class _AniversarianteCardState extends ConsumerState<_AniversarianteCard> {
     );
   }
 }
-

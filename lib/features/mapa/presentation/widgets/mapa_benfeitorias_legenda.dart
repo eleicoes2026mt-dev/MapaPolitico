@@ -28,11 +28,13 @@ class MapaBenfeitoriasLegenda extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.volunteer_activism_outlined, size: 18, color: const Color(0xFFFFB300)),
+                const Icon(Icons.volunteer_activism_outlined,
+                    size: 18, color: Color(0xFFFFB300)),
                 const SizedBox(width: 8),
                 Text(
                   'Legenda — benfeitorias por região (R\$)',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -40,7 +42,8 @@ class MapaBenfeitoriasLegenda extends StatelessWidget {
             Text(
               'Cada região é pintada conforme o total de benfeitorias (R\$) nela, em relação à região com maior valor em MT. '
               'Quanto mais quente a cor, menor o valor relativo; verde e dourado = maiores valores.',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -55,14 +58,17 @@ class MapaBenfeitoriasLegenda extends StatelessWidget {
                         width: 10,
                         height: 10,
                         decoration: BoxDecoration(
-                          color: Color(int.parse(item.hex.replaceFirst('#', 'FF'), radix: 16)),
+                          color: Color(int.parse(
+                              item.hex.replaceFirst('#', 'FF'),
+                              radix: 16)),
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         item.label,
-                        style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ],
                   ),

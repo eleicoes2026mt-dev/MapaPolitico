@@ -97,7 +97,9 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
 
   int get _estimativaVotos {
     if (_tipo == 'PF') {
-      return _votosSozinho ? (int.tryParse(_estimativaController.text) ?? 0) : (int.tryParse(_qtdFamiliaController.text) ?? 0);
+      return _votosSozinho
+          ? (int.tryParse(_estimativaController.text) ?? 0)
+          : (int.tryParse(_qtdFamiliaController.text) ?? 0);
     }
     return (int.tryParse(_votosPfController.text) ?? 0) +
         (int.tryParse(_votosFamiliaController.text) ?? 0) +
@@ -126,7 +128,8 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
         _endereco = dados.enderecoCompleto;
         _cidadeFromApi = dados.municipio;
         if (dados.municipio.isNotEmpty) {
-          final porUf = chaveMunicipioMtApartirCepLocalidade(dados.municipio, 'MT');
+          final porUf =
+              chaveMunicipioMtApartirCepLocalidade(dados.municipio, 'MT');
           final k = normalizarNomeMunicipioMT(dados.municipio);
           final porNome = listCidadesMTNomesNormalizados.contains(k) ? k : null;
           final nova = porUf ?? porNome;
@@ -199,11 +202,15 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Verifique os campos obrigatórios e tente novamente.')),
+          const SnackBar(
+              content:
+                  Text('Verifique os campos obrigatórios e tente novamente.')),
         );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
-            _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+            _scrollController.animateTo(0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut);
           }
         });
       }
@@ -219,17 +226,21 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
       final lista = ref.read(apoiadoresListProvider).valueOrNull ?? [];
       final telDig = telefoneSoDigitos(telefone);
       if (telDig.length >= 10) {
-        final jaCadastrado = lista.any((a) => telefoneSoDigitos(a.telefone) == telDig);
+        final jaCadastrado =
+            lista.any((a) => telefoneSoDigitos(a.telefone) == telDig);
         if (jaCadastrado) {
-          setState(() => _error = 'Este contato já está cadastrado para outro apoiador.');
+          setState(() =>
+              _error = 'Este contato já está cadastrado para outro apoiador.');
           return;
         }
       }
       if (email.isNotEmpty) {
         final emailNorm = email.toLowerCase();
-        final jaCadastrado = lista.any((a) => (a.email ?? '').trim().toLowerCase() == emailNorm);
+        final jaCadastrado =
+            lista.any((a) => (a.email ?? '').trim().toLowerCase() == emailNorm);
         if (jaCadastrado) {
-          setState(() => _error = 'Este e-mail já está cadastrado para outro apoiador.');
+          setState(() =>
+              _error = 'Este e-mail já está cadastrado para outro apoiador.');
           return;
         }
       }
@@ -248,19 +259,32 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
         telefone: telefone.isEmpty ? null : telefone,
         email: email.isEmpty ? null : email,
         estimativaVotos: _estimativaVotos,
-        dataNascimento: _tipo == 'PF' ? parseDataDDMMYYYY(_nascimentoController.text) : null,
+        dataNascimento: _tipo == 'PF'
+            ? parseDataDDMMYYYY(_nascimentoController.text)
+            : null,
         votosSozinho: _votosSozinho,
-        qtdVotosFamilia: _tipo == 'PF' ? (int.tryParse(_qtdFamiliaController.text) ?? 0) : 0,
-        cnpj: _tipo == 'PJ' ? _cnpjController.text.replaceAll(RegExp(r'[^\d]'), '') : null,
+        qtdVotosFamilia:
+            _tipo == 'PF' ? (int.tryParse(_qtdFamiliaController.text) ?? 0) : 0,
+        cnpj: _tipo == 'PJ'
+            ? _cnpjController.text.replaceAll(RegExp(r'[^\d]'), '')
+            : null,
         razaoSocial: _razaoSocial,
         nomeFantasia: _nomeFantasia,
         situacaoCnpj: _situacaoCnpj,
         endereco: _endereco,
-        contatoResponsavel: _contatoRespController.text.trim().isEmpty ? null : _contatoRespController.text.trim(),
-        emailResponsavel: _emailRespController.text.trim().isEmpty ? null : _emailRespController.text.trim(),
-        votosPf: _tipo == 'PJ' ? (int.tryParse(_votosPfController.text) ?? 0) : 0,
-        votosFamilia: _tipo == 'PJ' ? (int.tryParse(_votosFamiliaController.text) ?? 0) : 0,
-        votosFuncionarios: _tipo == 'PJ' ? (int.tryParse(_votosFuncController.text) ?? 0) : 0,
+        contatoResponsavel: _contatoRespController.text.trim().isEmpty
+            ? null
+            : _contatoRespController.text.trim(),
+        emailResponsavel: _emailRespController.text.trim().isEmpty
+            ? null
+            : _emailRespController.text.trim(),
+        votosPf:
+            _tipo == 'PJ' ? (int.tryParse(_votosPfController.text) ?? 0) : 0,
+        votosFamilia: _tipo == 'PJ'
+            ? (int.tryParse(_votosFamiliaController.text) ?? 0)
+            : 0,
+        votosFuncionarios:
+            _tipo == 'PJ' ? (int.tryParse(_votosFuncController.text) ?? 0) : 0,
         votosPrometidosUltimaEleicao: parseLegado(_legadoController.text),
         benfeitorias: _benfeitorias
             .where((b) => b.titulo.trim().isNotEmpty)
@@ -272,12 +296,24 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                   descricao: b.descricao,
                 ))
             .toList(),
-        cep: _cepController.text.trim().isEmpty ? null : _cepController.text.trim(),
-        logradouro: _logradouroController.text.trim().isEmpty ? null : _logradouroController.text.trim(),
-        numero: _numeroController.text.trim().isEmpty ? null : _numeroController.text.trim(),
-        complemento: _complementoController.text.trim().isEmpty ? null : _complementoController.text.trim(),
-        origemLugarTexto: _origemController.text.trim().isEmpty ? null : _origemController.text.trim(),
-        linkInstagram: _instagramController.text.trim().isEmpty ? null : _instagramController.text.trim(),
+        cep: _cepController.text.trim().isEmpty
+            ? null
+            : _cepController.text.trim(),
+        logradouro: _logradouroController.text.trim().isEmpty
+            ? null
+            : _logradouroController.text.trim(),
+        numero: _numeroController.text.trim().isEmpty
+            ? null
+            : _numeroController.text.trim(),
+        complemento: _complementoController.text.trim().isEmpty
+            ? null
+            : _complementoController.text.trim(),
+        origemLugarTexto: _origemController.text.trim().isEmpty
+            ? null
+            : _origemController.text.trim(),
+        linkInstagram: _instagramController.text.trim().isEmpty
+            ? null
+            : _instagramController.text.trim(),
       ));
       if (mounted) {
         widget.onCreate();
@@ -291,7 +327,9 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
           _error = msg;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Theme.of(context).colorScheme.error),
+          SnackBar(
+              content: Text(msg),
+              backgroundColor: Theme.of(context).colorScheme.error),
         );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
@@ -333,11 +371,13 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _tipo,
+                  initialValue: _tipo,
                   decoration: const InputDecoration(labelText: 'Tipo'),
                   items: const [
                     DropdownMenuItem(value: 'PF', child: Text('Pessoa Física')),
-                    DropdownMenuItem(value: 'PJ', child: Text('Pessoa Jurídica (Empresarial)')),
+                    DropdownMenuItem(
+                        value: 'PJ',
+                        child: Text('Pessoa Jurídica (Empresarial)')),
                   ],
                   onChanged: (v) => setState(() => _tipo = v ?? 'PF'),
                 ),
@@ -345,17 +385,24 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                 TextFormField(
                   controller: _nomeController,
                   decoration: InputDecoration(
-                    labelText: _tipo == 'PJ' ? 'Razão social (preenchido pela busca do CNPJ)' : 'Nome *',
-                    hintText: _tipo == 'PF' ? 'Nome completo' : 'Busque o CNPJ para preencher',
+                    labelText: _tipo == 'PJ'
+                        ? 'Razão social (preenchido pela busca do CNPJ)'
+                        : 'Nome *',
+                    hintText: _tipo == 'PF'
+                        ? 'Nome completo'
+                        : 'Busque o CNPJ para preencher',
                   ),
                   textCapitalization: TextCapitalization.words,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
                 ),
                 const SizedBox(height: 16),
                 ClassificacaoApoiadorField(
                   sugestoesExtras: classificacoesSugestoesApoiador(
                     ref.watch(apoiadoresListProvider).valueOrNull ?? [],
-                  ).where((e) => !kClassificacoesApoiadorPadrao.contains(e)).toList(),
+                  )
+                      .where((e) => !kClassificacoesApoiadorPadrao.contains(e))
+                      .toList(),
                   initialPerfil: _perfil,
                   onChanged: (v) => setState(() => _perfil = v),
                 ),
@@ -365,7 +412,9 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                 if (_tipo == 'PF') ..._buildCamposPF(theme),
                 if (_tipo == 'PJ') ..._buildCamposPJ(theme),
                 const SizedBox(height: 16),
-                Text('Endereço (opcional)', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Endereço (opcional)',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _cepController,
@@ -382,7 +431,8 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                             ),
                           )
                         : null,
-                    helperText: 'Preenche endereço e cidade (MT) ao concluir os 8 dígitos.',
+                    helperText:
+                        'Preenche endereço e cidade (MT) ao concluir os 8 dígitos.',
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [CepInputFormatter()],
@@ -391,7 +441,8 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _logradouroController,
-                  decoration: const InputDecoration(labelText: 'Rua / logradouro'),
+                  decoration:
+                      const InputDecoration(labelText: 'Rua / logradouro'),
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 8),
@@ -410,7 +461,9 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
                 _buildSecaoBenfeitorias(theme),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
-                  Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                  Text(_error!,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.error)),
                 ],
               ],
             ),
@@ -424,17 +477,26 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
         ),
         FilledButton(
           onPressed: _loading ? null : _salvar,
-          child: _loading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Cadastrar'),
+          child: _loading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Cadastrar'),
         ),
       ],
     );
   }
 
   Future<void> _abrirCalendarioNascimento() async {
-    final dataAtual = parseDataDDMMYYYY(_nascimentoController.text) ?? DateTime(1990, 1, 1);
+    final dataAtual =
+        parseDataDDMMYYYY(_nascimentoController.text) ?? DateTime(1990, 1, 1);
     final picked = await showDatePicker(
       context: context,
-      initialDate: dataAtual.isBefore(DateTime(1900, 1, 1)) || dataAtual.isAfter(DateTime.now()) ? DateTime(1990, 1, 1) : dataAtual,
+      initialDate: dataAtual.isBefore(DateTime(1900, 1, 1)) ||
+              dataAtual.isAfter(DateTime.now())
+          ? DateTime(1990, 1, 1)
+          : dataAtual,
       firstDate: DateTime(1900, 1, 1),
       lastDate: DateTime.now(),
       locale: const Locale('pt', 'BR'),
@@ -463,7 +525,8 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
       const SizedBox(height: 16),
       TextFormField(
         controller: _emailController,
-        decoration: const InputDecoration(labelText: 'E-mail', hintText: 'exemplo@email.com'),
+        decoration: const InputDecoration(
+            labelText: 'E-mail', hintText: 'exemplo@email.com'),
         keyboardType: TextInputType.emailAddress,
         validator: (v) {
           if (v == null || v.trim().isEmpty) return null;
@@ -485,7 +548,8 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
       const SizedBox(height: 16),
       TextFormField(
         controller: _telefoneController,
-        decoration: const InputDecoration(labelText: 'Contato', hintText: '(00) 0 0000-0000'),
+        decoration: const InputDecoration(
+            labelText: 'Contato', hintText: '(00) 0 0000-0000'),
         keyboardType: TextInputType.phone,
         inputFormatters: [TelefoneInputFormatter()],
       ),
@@ -493,16 +557,23 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
       const Text('Os votos serão apenas dele ou da família?'),
       Row(
         children: [
-          Radio<bool>(value: true, groupValue: _votosSozinho, onChanged: (v) => setState(() => _votosSozinho = true)),
+          Radio<bool>(
+              value: true,
+              groupValue: _votosSozinho,
+              onChanged: (v) => setState(() => _votosSozinho = true)),
           const Text('Só dele'),
-          Radio<bool>(value: false, groupValue: _votosSozinho, onChanged: (v) => setState(() => _votosSozinho = false)),
+          Radio<bool>(
+              value: false,
+              groupValue: _votosSozinho,
+              onChanged: (v) => setState(() => _votosSozinho = false)),
           const Text('Da família'),
         ],
       ),
       if (!_votosSozinho) ...[
         TextFormField(
           controller: _qtdFamiliaController,
-          decoration: const InputDecoration(labelText: 'Quantidade de votos (família)'),
+          decoration:
+              const InputDecoration(labelText: 'Quantidade de votos (família)'),
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 16),
@@ -524,7 +595,8 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
             flex: 2,
             child: TextFormField(
               controller: _cnpjController,
-              decoration: const InputDecoration(labelText: 'CNPJ *', hintText: '00.000.000/0001-00'),
+              decoration: const InputDecoration(
+                  labelText: 'CNPJ *', hintText: '00.000.000/0001-00'),
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() => _cnpjCarregado = false),
             ),
@@ -539,19 +611,26 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
       if (_cnpjCarregado && _razaoSocial != null) ...[
         const SizedBox(height: 12),
         Text('Razão social: $_razaoSocial', style: theme.textTheme.bodyMedium),
-        if (_nomeFantasia != null && _nomeFantasia!.isNotEmpty) Text('Nome fantasia: $_nomeFantasia', style: theme.textTheme.bodySmall),
+        if (_nomeFantasia != null && _nomeFantasia!.isNotEmpty)
+          Text('Nome fantasia: $_nomeFantasia',
+              style: theme.textTheme.bodySmall),
         Text('Situação: $_situacaoCnpj', style: theme.textTheme.bodySmall),
-        if (_endereco != null) Text('Endereço: $_endereco', style: theme.textTheme.bodySmall),
-        if (_cidadeFromApi != null) Text('Cidade: $_cidadeFromApi', style: theme.textTheme.bodySmall),
+        if (_endereco != null)
+          Text('Endereço: $_endereco', style: theme.textTheme.bodySmall),
+        if (_cidadeFromApi != null)
+          Text('Cidade: $_cidadeFromApi', style: theme.textTheme.bodySmall),
         const SizedBox(height: 16),
       ],
       TextFormField(
         controller: _contatoRespController,
-        decoration: const InputDecoration(labelText: 'Contato do responsável *'),
+        decoration:
+            const InputDecoration(labelText: 'Contato do responsável *'),
         keyboardType: TextInputType.phone,
         validator: (v) {
           if (_tipo != 'PJ') return null;
-          return (v == null || v.trim().isEmpty) ? 'Informe o contato do responsável' : null;
+          return (v == null || v.trim().isEmpty)
+              ? 'Informe o contato do responsável'
+              : null;
         },
       ),
       const SizedBox(height: 16),
@@ -561,7 +640,9 @@ class NovoApoiadorDialogState extends ConsumerState<NovoApoiadorDialog> {
         keyboardType: TextInputType.emailAddress,
         validator: (v) {
           if (_tipo != 'PJ') return null;
-          return (v == null || v.trim().isEmpty) ? 'Informe o e-mail do responsável' : null;
+          return (v == null || v.trim().isEmpty)
+              ? 'Informe o e-mail do responsável'
+              : null;
         },
       ),
       const SizedBox(height: 16),
@@ -695,7 +776,9 @@ class _BenfeitoriaTile extends StatelessWidget {
               children: [
                 Expanded(
                   child: TextField(
-                    decoration: const InputDecoration(labelText: 'O que foi feito', hintText: 'Obra, manutenção, ajuda de custo...'),
+                    decoration: const InputDecoration(
+                        labelText: 'O que foi feito',
+                        hintText: 'Obra, manutenção, ajuda de custo...'),
                     onChanged: (v) {
                       form.titulo = v;
                       onChanged();
@@ -707,9 +790,11 @@ class _BenfeitoriaTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: form.tipo,
+              initialValue: form.tipo,
               decoration: const InputDecoration(labelText: 'Tipo'),
-              items: tipos.map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2))).toList(),
+              items: tipos
+                  .map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2)))
+                  .toList(),
               onChanged: (v) {
                 if (v != null) {
                   form.tipo = v;
@@ -719,7 +804,8 @@ class _BenfeitoriaTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             TextField(
-              decoration: const InputDecoration(labelText: 'Valor (R\$)', hintText: '0.000,00'),
+              decoration: const InputDecoration(
+                  labelText: 'Valor (R\$)', hintText: '0.000,00'),
               keyboardType: TextInputType.number,
               inputFormatters: [ValorRealInputFormatter()],
               onChanged: (v) {
@@ -729,7 +815,8 @@ class _BenfeitoriaTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             TextField(
-              decoration: const InputDecoration(labelText: 'Data (DD/MM/AAAA)', hintText: 'DD/MM/AAAA'),
+              decoration: const InputDecoration(
+                  labelText: 'Data (DD/MM/AAAA)', hintText: 'DD/MM/AAAA'),
               inputFormatters: [DataNascimentoInputFormatter()],
               onChanged: (v) {
                 form.data = parseDataDDMMYYYY(v);
@@ -742,4 +829,3 @@ class _BenfeitoriaTile extends StatelessWidget {
     );
   }
 }
-

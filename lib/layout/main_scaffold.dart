@@ -514,6 +514,7 @@ class _Sidebar extends ConsumerWidget {
     _NavItem('/assessores', 'Assessores', Icons.people_outline),
     _NavItem('/apoiadores', 'Apoiadores', Icons.person_add_alt_1_outlined),
     _NavItem('/painel-indicacoes', 'Rede de indicações', Icons.account_tree_outlined),
+    _NavItem('/dashboard-indicacoes-amigos', 'Rede dos amigos', Icons.hub_outlined),
     _NavItem('/votantes', kAmigosGilbertoLabel, Icons.checklist_outlined),
     _NavItem('/agenda', 'Agenda', Icons.event_outlined),
     _NavItem('/mensagens', 'Mensagens', Icons.chat_bubble_outline),
@@ -669,6 +670,9 @@ class _Sidebar extends ConsumerWidget {
                   children: [
                     ..._items.where((e) {
                       if (prof == null) return true;
+                      if (e.path == '/dashboard-indicacoes-amigos') {
+                        return prof.role == 'votante' || prof.role == 'apoiador';
+                      }
                       if (e.path == '/painel-indicacoes' && !gestaoCompleta) return false;
                       if (_pathsOcultosMenuGlobal.contains(e.path)) return false;
                       if (e.path == '/configuracoes' && !gestaoCompleta) return false;

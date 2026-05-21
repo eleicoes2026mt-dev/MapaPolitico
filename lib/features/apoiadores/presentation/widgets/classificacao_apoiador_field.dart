@@ -17,18 +17,23 @@ class ClassificacaoApoiadorField extends StatefulWidget {
   final ValueChanged<String?> onChanged;
 
   @override
-  State<ClassificacaoApoiadorField> createState() => _ClassificacaoApoiadorFieldState();
+  State<ClassificacaoApoiadorField> createState() =>
+      _ClassificacaoApoiadorFieldState();
 }
 
 /// Sem classificação (opcional).
 const kClassificacaoNenhuma = '__classificacao_nenhuma__';
 
-class _ClassificacaoApoiadorFieldState extends State<ClassificacaoApoiadorField> {
+class _ClassificacaoApoiadorFieldState
+    extends State<ClassificacaoApoiadorField> {
   late String _dropdownValue;
   late final TextEditingController _outroController;
 
   List<String> get _baseOpcoes {
-    final s = <String>{...kClassificacoesApoiadorPadrao, ...widget.sugestoesExtras};
+    final s = <String>{
+      ...kClassificacoesApoiadorPadrao,
+      ...widget.sugestoesExtras
+    };
     final ini = widget.initialPerfil?.trim();
     if (ini != null && ini.isNotEmpty) s.add(ini);
     final list = s.toList();
@@ -82,14 +87,15 @@ class _ClassificacaoApoiadorFieldState extends State<ClassificacaoApoiadorField>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<String>(
-          value: _dropdownValue == kClassificacaoNenhuma ||
+          initialValue: _dropdownValue == kClassificacaoNenhuma ||
                   _dropdownValue == kClassificacaoOutroValor ||
                   op.contains(_dropdownValue)
               ? _dropdownValue
               : kClassificacaoOutroValor,
           decoration: const InputDecoration(
             labelText: 'Classificação',
-            helperText: 'Pode escolher uma opção ou «Outro» para digitar uma nova.',
+            helperText:
+                'Pode escolher uma opção ou «Outro» para digitar uma nova.',
           ),
           items: [
             const DropdownMenuItem(
@@ -122,7 +128,8 @@ class _ClassificacaoApoiadorFieldState extends State<ClassificacaoApoiadorField>
           const SizedBox(height: 4),
           Text(
             'Ex.: Prefeito(a) da Cidade, Vereador(a), Pastor da Igreja, Empresário, ou outro termo da sua campanha.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
         ],
       ],

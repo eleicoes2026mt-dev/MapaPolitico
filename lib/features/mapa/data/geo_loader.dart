@@ -24,7 +24,10 @@ bool pointInPolygon(LatLng point, GeoPolygon polygon) {
     final p0 = pts[i];
     final p1 = pts[(i + 1) % pts.length];
     if ((p0.latitude > py) == (p1.latitude > py)) continue;
-    final x = p0.longitude + (py - p0.latitude) / (p1.latitude - p0.latitude) * (p1.longitude - p0.longitude);
+    final x = p0.longitude +
+        (py - p0.latitude) /
+            (p1.latitude - p0.latitude) *
+            (p1.longitude - p0.longitude);
     if (x > px) crossings++;
   }
   return crossings.isOdd;
@@ -48,7 +51,8 @@ double _ringAreaAbs(List<LatLng> ring) {
   var s = 0.0;
   for (var i = 0; i < ring.length; i++) {
     final j = (i + 1) % ring.length;
-    s += ring[i].longitude * ring[j].latitude - ring[j].longitude * ring[i].latitude;
+    s += ring[i].longitude * ring[j].latitude -
+        ring[j].longitude * ring[i].latitude;
   }
   return (s * 0.5).abs();
 }
@@ -200,7 +204,9 @@ List<List<double>> _simplifyRing(List<List<double>> ring,
   if (ring.length <= maxPoints) return ring;
   final step = (ring.length / maxPoints).ceil().clamp(2, 5);
   final out = <List<double>>[];
-  for (var i = 0; i < ring.length; i += step) out.add(ring[i]);
+  for (var i = 0; i < ring.length; i += step) {
+    out.add(ring[i]);
+  }
   if (ring.length > 1 && out.last != ring.last) out.add(ring.last);
   return out;
 }

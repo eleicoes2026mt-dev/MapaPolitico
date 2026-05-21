@@ -73,15 +73,23 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
       setState(() => _notifStatus = 'denied');
       return;
     }
-    setState(() { _loading = true; _notifStatus = 'loading'; });
+    setState(() {
+      _loading = true;
+      _notifStatus = 'loading';
+    });
     try {
-      final result = await PushSubscriptionService.instance.enablePush(profile.id);
+      final result =
+          await PushSubscriptionService.instance.enablePush(profile.id);
       setState(() {
-        _notifStatus = result == PushSubscribeResult.denied ? 'denied' : 'granted';
+        _notifStatus =
+            result == PushSubscribeResult.denied ? 'denied' : 'granted';
         _loading = false;
       });
     } catch (_) {
-      setState(() { _notifStatus = 'denied'; _loading = false; });
+      setState(() {
+        _notifStatus = 'denied';
+        _loading = false;
+      });
     }
   }
 
@@ -119,18 +127,21 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
                       color: theme.colorScheme.primaryContainer,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.how_to_vote, size: 38, color: theme.colorScheme.primary),
+                    child: Icon(Icons.how_to_vote,
+                        size: 38, color: theme.colorScheme.primary),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'CampanhaMT',
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Gestão Eleitoral · Mato Grosso',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 28),
@@ -140,7 +151,10 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
                   const SizedBox(height: 24),
 
                   // Conteúdo do passo atual
-                  if (_step == 0) _buildInstallStep(theme) else _buildNotifStep(theme),
+                  if (_step == 0)
+                    _buildInstallStep(theme)
+                  else
+                    _buildNotifStep(theme),
                 ],
               ),
             ),
@@ -158,28 +172,31 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
 
     // Já instalado → avança direto
     if (isInstalled) {
-      WidgetsBinding.instance.addPostFrameCallback(
-          (_) { if (mounted) setState(() => _step = 1); });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _step = 1);
+      });
       return const SizedBox.shrink();
     }
 
     return Column(
       children: [
-        Icon(Icons.install_mobile_outlined, size: 48, color: theme.colorScheme.primary),
+        Icon(Icons.install_mobile_outlined,
+            size: 48, color: theme.colorScheme.primary),
         const SizedBox(height: 12),
         Text(
           'Instale o app na sua tela inicial',
-          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
           'Acesse como um app nativo — ícone na tela inicial, sem abrir o browser.',
-          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
-
         if (isIOSSafari) ...[
           // Safari iOS: único browser sem API de install automático
           _SafariInstallGuide(theme: theme),
@@ -209,7 +226,9 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
             child: FilledButton.icon(
               onPressed: _loading ? null : _instalarAgora,
               icon: _loading
-                  ? const SizedBox(width: 20, height: 20,
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.download_outlined),
               label: Text(_loading ? 'Aguarde...' : 'Instalar o app'),
@@ -242,7 +261,11 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
       // Aguarda o evento pwa-app-installed ou avança após 3s
       await Future.delayed(const Duration(seconds: 3));
     }
-    if (mounted) setState(() { _loading = false; _step = 1; });
+    if (mounted)
+      setState(() {
+        _loading = false;
+        _step = 1;
+      });
   }
 
   // ── Passo 2: Notificações ─────────────────────────────────────────────────
@@ -255,22 +278,25 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
         Icon(
           granted ? Icons.notifications_active : Icons.notifications_outlined,
           size: 48,
-          color: granted ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+          color: granted
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurfaceVariant,
         ),
         const SizedBox(height: 12),
         Text(
           'Ative as notificações',
-          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         Text(
           'Receba alertas de visitas do deputado, aniversariantes, mensagens e atualizações — mesmo com o app fechado.',
-          style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodyMedium
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),
-
         if (granted) ...[
           Container(
             padding: const EdgeInsets.all(12),
@@ -309,7 +335,8 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
             ),
             child: Text(
               'Permissão negada. Para ativar manualmente: clique no ícone de cadeado na barra do browser → Notificações → Permitir.',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onErrorContainer),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onErrorContainer),
               textAlign: TextAlign.center,
             ),
           ),
@@ -333,17 +360,24 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
           ),
         ] else ...[
           // Estado inicial
-          _NotifBenefit(icon: Icons.event, text: 'Visitas do deputado à sua cidade'),
+          const _NotifBenefit(
+              icon: Icons.event, text: 'Visitas do deputado à sua cidade'),
           const SizedBox(height: 8),
-          _NotifBenefit(icon: Icons.cake_outlined, text: 'Alertas de aniversariantes'),
-          _NotifBenefit(icon: Icons.chat_bubble_outline, text: 'Mensagens da pré-campanha'),
+          const _NotifBenefit(
+              icon: Icons.cake_outlined, text: 'Alertas de aniversariantes'),
+          const _NotifBenefit(
+              icon: Icons.chat_bubble_outline,
+              text: 'Mensagens da pré-campanha'),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: _loading ? null : _requestNotifications,
               icon: _loading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.notifications_active),
               label: Text(_loading ? 'Aguardando...' : 'Ativar notificações'),
             ),
@@ -391,7 +425,8 @@ class _StepIndicator extends StatelessWidget {
                   ),
                   child: Center(
                     child: isDone
-                        ? Icon(Icons.check, size: 16, color: theme.colorScheme.onPrimary)
+                        ? Icon(Icons.check,
+                            size: 16, color: theme.colorScheme.onPrimary)
                         : Text(
                             '${i + 1}',
                             style: theme.textTheme.labelMedium?.copyWith(
@@ -407,7 +442,9 @@ class _StepIndicator extends StatelessWidget {
                 Text(
                   labels[i],
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: isActive ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                    color: isActive
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
                     fontWeight: isActive ? FontWeight.bold : null,
                   ),
                 ),
@@ -444,13 +481,24 @@ class _SafariInstallGuide extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Como instalar no iPhone/iPad:', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Como instalar no iPhone/iPad:',
+              style: theme.textTheme.labelLarge
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          _SafariStep(n: '1', icon: Icons.ios_share, text: 'Toque no botão de compartilhar (↑) na barra inferior'),
+          const _SafariStep(
+              n: '1',
+              icon: Icons.ios_share,
+              text: 'Toque no botão de compartilhar (↑) na barra inferior'),
           const SizedBox(height: 8),
-          _SafariStep(n: '2', icon: Icons.add_box_outlined, text: 'Selecione "Adicionar à Tela de Início"'),
+          const _SafariStep(
+              n: '2',
+              icon: Icons.add_box_outlined,
+              text: 'Selecione "Adicionar à Tela de Início"'),
           const SizedBox(height: 8),
-          _SafariStep(n: '3', icon: Icons.check_circle_outline, text: 'Toque em "Adicionar" para confirmar'),
+          const _SafariStep(
+              n: '3',
+              icon: Icons.check_circle_outline,
+              text: 'Toque em "Adicionar" para confirmar'),
         ],
       ),
     );
@@ -471,8 +519,13 @@ class _SafariStep extends StatelessWidget {
         Container(
           width: 24,
           height: 24,
-          decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
-          child: Center(child: Text(n, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onPrimary, fontWeight: FontWeight.bold))),
+          decoration: BoxDecoration(
+              color: theme.colorScheme.primary, shape: BoxShape.circle),
+          child: Center(
+              child: Text(n,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onPrimary,
+                      fontWeight: FontWeight.bold))),
         ),
         const SizedBox(width: 10),
         Icon(icon, size: 20, color: theme.colorScheme.primary),

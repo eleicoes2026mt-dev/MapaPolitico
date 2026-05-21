@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/regioes_fundidas.dart';
 import '../../../../core/constants/regioes_mt.dart';
-import '../../../mapa/providers/cidades_marcadores_provider.dart' show cidadesMarcadoresMapaCampanhaProvider;
+import '../../../mapa/providers/cidades_marcadores_provider.dart'
+    show cidadesMarcadoresMapaCampanhaProvider;
 import '../../../dados_tse/providers/dados_tse_provider.dart';
 import '../../../mapa/providers/mapa_visual_prefs_provider.dart';
 import '../../../mapa/presentation/widgets/mapa_regional_widget.dart';
@@ -27,17 +28,22 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
   }
 
   bool _onRegionTap(String id, String nome, String? cdRgint) {
-    if (!HardwareKeyboard.instance.isControlPressed && !HardwareKeyboard.instance.isMetaPressed) return false;
+    if (!HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isMetaPressed) return false;
     if (cdRgint == null || cdRgint.isEmpty) return true;
     final fundidas = ref.read(regioesFundidasParaMapaProvider);
     final covered = <String>{};
     for (final f in fundidas) {
-      for (final i in f.ids) covered.add(i);
+      for (final i in f.ids) {
+        covered.add(i);
+      }
     }
     if (covered.contains(cdRgint)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Esta região já está em uma fusão. Remova a fusão na aba Regiões para selecioná-la.')),
+          const SnackBar(
+              content: Text(
+                  'Esta região já está em uma fusão. Remova a fusão na aba Regiões para selecioná-la.')),
         );
       }
       return true;
@@ -57,19 +63,22 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
     final nome = _nomeFusaoController.text.trim();
     if (nome.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Digite um nome para a fusão.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Digite um nome para a fusão.')));
       }
       return;
     }
     final ids = _selectedCdRgints.toList()..sort();
-    final fundida = RegiaoFundida(id: 'merge_${ids.join("_")}', nome: nome, ids: ids);
+    final fundida =
+        RegiaoFundida(id: 'merge_${ids.join("_")}', nome: nome, ids: ids);
     await ref.read(regioesFundidasProvider.notifier).add(fundida);
     setState(() {
       _selectedCdRgints.clear();
       _nomeFusaoController.clear();
     });
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Fusão "$nome" criada.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Fusão "$nome" criada.')));
     }
   }
 
@@ -96,7 +105,8 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                       children: [
                         Text(
                           '${regioes.length} regiões do arquivo (GeoJSON), na ordem do mapa:',
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
                         ),
                         const SizedBox(height: 12),
                         ...regioes.map((r) => Padding(
@@ -112,7 +122,10 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                                     ),
                                   ),
                                   const SizedBox(width: 10),
-                                  Expanded(child: Text(r.nome, style: const TextStyle(fontSize: 15))),
+                                  Expanded(
+                                      child: Text(r.nome,
+                                          style:
+                                              const TextStyle(fontSize: 15))),
                                 ],
                               ),
                             )),
@@ -124,7 +137,8 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                   padding: EdgeInsets.all(24),
                   child: Center(child: CircularProgressIndicator()),
                 ),
-                error: (e, _) => Text('Erro ao carregar: $e', style: TextStyle(color: theme.colorScheme.error)),
+                error: (e, _) => Text('Erro ao carregar: $e',
+                    style: TextStyle(color: theme.colorScheme.error)),
               );
             },
           ),
@@ -145,8 +159,10 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
     final votosPorMunicipio = votosTseAsync.valueOrNull ?? {};
     final marcadoresCampanha = ref.watch(cidadesMarcadoresMapaCampanhaProvider);
     final regioesFundidas = ref.watch(regioesFundidasParaMapaProvider);
-    final nomesCustomizados = ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
-    final coresCustomizadas = ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
+    final nomesCustomizados =
+        ref.watch(nomesCustomizadosProvider).valueOrNull ?? {};
+    final coresCustomizadas =
+        ref.watch(coresCustomizadasProvider).valueOrNull ?? {};
     final theme = Theme.of(context);
     final isAdmin = ref.watch(isAdminProvider);
     final mapaVisual = ref.watch(mapaVisualPrefsProvider);
@@ -171,10 +187,12 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                   Text(
                     isAdmin
                         ? 'Clique em uma região para editar o nome. Segure Ctrl (ou Cmd) e clique em duas ou mais regiões para fundi-las.'
-                          '${votosPorMunicipio.isEmpty && marcadoresCampanha.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores ou votantes.'}'
+                            '${votosPorMunicipio.isEmpty && marcadoresCampanha.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores ou votantes.'}'
                         : 'Mapa das regiões de MT.'
-                          '${votosPorMunicipio.isEmpty && marcadoresCampanha.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores ou votantes.'}',
-                    style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant),
+                            '${votosPorMunicipio.isEmpty && marcadoresCampanha.isEmpty ? '' : ' Marcadores: votos por cidade (TSE) e cidades com apoiadores ou votantes.'}',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -190,39 +208,51 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final mapHeight = constraints.maxHeight.clamp(280.0, double.infinity);
+              final mapHeight =
+                  constraints.maxHeight.clamp(280.0, double.infinity);
               final narrow = MediaQuery.sizeOf(context).width < 720;
               return Stack(
                 clipBehavior: Clip.none,
                 children: [
                   MapaRegionalWidget(
-                      height: mapHeight,
-                      embedRankingBelowMap: narrow,
-                      pontosMapaEscala: mapaVisual.escalaPontos,
-                      contornoMapaEscala: mapaVisual.escalaContorno,
-                      tseVotosCarregando: votosTseAsync.isLoading,
-                      votosPorMunicipio: votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
-                      cidadesMarcadoresMapa: marcadoresCampanha.isEmpty ? null : marcadoresCampanha,
-                      regioesFundidas: regioesFundidas.isEmpty ? null : regioesFundidas,
-                      nomesCustomizados: nomesCustomizados.isEmpty ? null : nomesCustomizados,
-                      coresCustomizadas: coresCustomizadas.isEmpty ? null : coresCustomizadas,
-                      onSaveNomeRegiao: isAdmin
-                          ? (cdRgint, nome) {
-                              ref.read(nomesCustomizadosProvider.notifier).setNome(cdRgint, nome);
-                            }
-                          : null,
-                      onRemoverDaFusao: isAdmin
-                          ? (cdRgint) {
-                              ref.read(regioesFundidasProvider.notifier).removeCdRgintFromFusion(cdRgint);
-                            }
-                          : null,
-                      onSaveCorRegiao: isAdmin
-                          ? (cdRgint, hexCor) {
-                              ref.read(coresCustomizadasProvider.notifier).setCor(cdRgint, hexCor);
-                            }
-                          : null,
-                      onRegionTap: isAdmin ? _onRegionTap : null,
-                    ),
+                    height: mapHeight,
+                    embedRankingBelowMap: narrow,
+                    pontosMapaEscala: mapaVisual.escalaPontos,
+                    contornoMapaEscala: mapaVisual.escalaContorno,
+                    tseVotosCarregando: votosTseAsync.isLoading,
+                    votosPorMunicipio:
+                        votosPorMunicipio.isEmpty ? null : votosPorMunicipio,
+                    cidadesMarcadoresMapa:
+                        marcadoresCampanha.isEmpty ? null : marcadoresCampanha,
+                    regioesFundidas:
+                        regioesFundidas.isEmpty ? null : regioesFundidas,
+                    nomesCustomizados:
+                        nomesCustomizados.isEmpty ? null : nomesCustomizados,
+                    coresCustomizadas:
+                        coresCustomizadas.isEmpty ? null : coresCustomizadas,
+                    onSaveNomeRegiao: isAdmin
+                        ? (cdRgint, nome) {
+                            ref
+                                .read(nomesCustomizadosProvider.notifier)
+                                .setNome(cdRgint, nome);
+                          }
+                        : null,
+                    onRemoverDaFusao: isAdmin
+                        ? (cdRgint) {
+                            ref
+                                .read(regioesFundidasProvider.notifier)
+                                .removeCdRgintFromFusion(cdRgint);
+                          }
+                        : null,
+                    onSaveCorRegiao: isAdmin
+                        ? (cdRgint, hexCor) {
+                            ref
+                                .read(coresCustomizadasProvider.notifier)
+                                .setCor(cdRgint, hexCor);
+                          }
+                        : null,
+                    onRegionTap: isAdmin ? _onRegionTap : null,
+                  ),
                   if (isAdmin && selecionadas >= 2) ...[
                     Positioned(
                       left: 0,
@@ -253,7 +283,8 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
                                         hintText: 'Ex.: Centro-Norte',
                                         isDense: true,
                                       ),
-                                      textCapitalization: TextCapitalization.words,
+                                      textCapitalization:
+                                          TextCapitalization.words,
                                       onSubmitted: (_) => _fundirSelecionadas(),
                                     ),
                                   ),

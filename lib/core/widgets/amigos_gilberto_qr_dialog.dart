@@ -32,7 +32,8 @@ String _mensagemConviteSemUrl({required String inviterLabel}) {
   return '$n convida você a participar da pré-campanha. Use o link de cadastro abaixo.';
 }
 
-String _legendaCompartilhamentoComLink({required String url, required String inviterLabel}) {
+String _legendaCompartilhamentoComLink(
+    {required String url, required String inviterLabel}) {
   return '${_mensagemConviteSemUrl(inviterLabel: inviterLabel)}\n\n$url';
 }
 
@@ -171,10 +172,12 @@ class _ExportCaptureCard extends StatelessWidget {
                       color: const Color(0xFFE8F4FC),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 18, vertical: 14),
                         child: Row(
                           children: [
-                            Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 24),
+                            const Icon(Icons.waving_hand_rounded,
+                                color: _fsBlueMid, size: 24),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -243,7 +246,8 @@ class _ExportCaptureCard extends StatelessWidget {
                   const _BenefitTile(
                     icon: Icons.event_available_outlined,
                     title: 'Reuniões e encontros',
-                    subtitle: 'Convites e avisos sobre encontros em polos e cidades.',
+                    subtitle:
+                        'Convites e avisos sobre encontros em polos e cidades.',
                     forExport: true,
                   ),
                   const _BenefitTile(
@@ -301,7 +305,8 @@ class _QrCardStatic extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF0D1117).withValues(alpha: 0.12)),
+        border:
+            Border.all(color: const Color(0xFF0D1117).withValues(alpha: 0.12)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -462,7 +467,8 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
         fileName: 'convite_amigos_gilberto.png',
       );
     } catch (e, st) {
-      debugPrintStack(label: 'shareInvite convite cartão falhou', stackTrace: st);
+      debugPrintStack(
+          label: 'shareInvite convite cartão falhou', stackTrace: st);
       if (!mounted) return;
       final b = pngBytes;
       if (kIsWeb && b != null && b.isNotEmpty) {
@@ -480,7 +486,8 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
               ),
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
           );
           return;
@@ -543,7 +550,8 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
                 child: SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 ),
               ),
             ),
@@ -624,14 +632,17 @@ class _ConviteFullscreenPageState extends State<_ConviteFullscreenPage> {
                         children: [
                           if (widget.inviterSubtitle != null &&
                               widget.inviterSubtitle!.trim().isNotEmpty) ...[
-                            _ConviteInviteBanner(text: widget.inviterSubtitle!.trim()),
+                            _ConviteInviteBanner(
+                                text: widget.inviterSubtitle!.trim()),
                           ],
                           Expanded(
                             child: Padding(
                               padding: EdgeInsets.fromLTRB(
                                 24,
                                 widget.inviterSubtitle != null &&
-                                        widget.inviterSubtitle!.trim().isNotEmpty
+                                        widget.inviterSubtitle!
+                                            .trim()
+                                            .isNotEmpty
                                     ? 8
                                     : 20,
                                 24,
@@ -682,7 +693,7 @@ class _ConviteInviteBanner extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
         child: Row(
           children: [
-            Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 22),
+            const Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 22),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -767,7 +778,8 @@ class _HeaderBar extends StatelessWidget {
                     height: 1.15,
                   ),
                 ),
-                if (inviterSubtitle != null && inviterSubtitle!.trim().isNotEmpty) ...[
+                if (inviterSubtitle != null &&
+                    inviterSubtitle!.trim().isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     'Convite de ${inviterSubtitle!.trim()}',
@@ -999,7 +1011,8 @@ class _WideBody extends StatelessWidget {
         Expanded(
           flex: fs ? 42 : 38,
           child: Column(
-            crossAxisAlignment: fs ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+            crossAxisAlignment:
+                fs ? CrossAxisAlignment.start : CrossAxisAlignment.center,
             children: [
               _CandidatePhotoBlock(
                 imageUrl: candidatePhotoUrl,
@@ -1077,7 +1090,8 @@ class _WideBody extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 22),
+                  const Icon(Icons.waving_hand_rounded,
+                      color: _fsBlueMid, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -1193,7 +1207,8 @@ class _NarrowBody extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
-                  Icon(Icons.waving_hand_rounded, color: _fsBlueMid, size: 22),
+                  const Icon(Icons.waving_hand_rounded,
+                      color: _fsBlueMid, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -1478,12 +1493,12 @@ class _QrCardState extends State<_QrCard> with SingleTickerProviderStateMixin {
     Widget core = DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
-        boxShadow: [
+        boxShadow: const [
           BoxShadow(
-            color: const Color(0x5500B4FF),
+            color: Color(0x5500B4FF),
             blurRadius: 20,
             spreadRadius: 0,
-            offset: const Offset(0, 4),
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -1648,8 +1663,8 @@ class _LinkBlock extends StatelessWidget {
                 onTap: () => _open(context),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding:
-                      EdgeInsets.symmetric(vertical: emphasize ? 8 : 6, horizontal: 8),
+                  padding: EdgeInsets.symmetric(
+                      vertical: emphasize ? 8 : 6, horizontal: 8),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text(

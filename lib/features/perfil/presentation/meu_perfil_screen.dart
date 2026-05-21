@@ -460,9 +460,10 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   DropdownButtonFormField<String?>(
-                                    value: _partidoIdValido(lista, _partidoId)
-                                        ? _partidoId
-                                        : null,
+                                    initialValue:
+                                        _partidoIdValido(lista, _partidoId)
+                                            ? _partidoId
+                                            : null,
                                     decoration: const InputDecoration(
                                       labelText: 'Partido',
                                       prefixIcon: Icon(Icons.flag_outlined),
@@ -492,7 +493,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                                     onPressed: () => _abrirCadastroPartido(
                                         context, ref, theme),
                                     icon: const Icon(Icons.add, size: 18),
-                                    label: const Text('Cadastrar partido e bandeira'),
+                                    label: const Text(
+                                        'Cadastrar partido e bandeira'),
                                   ),
                                 ],
                               );
@@ -500,7 +502,8 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                             loading: () => const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
                               child: Center(
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
                             error: (e, _) => Text(
@@ -514,7 +517,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                       const EstadoMTBadge(),
                       const SizedBox(height: 16),
                       DropdownButtonFormField<String?>(
-                        value: _cargo ?? profile?.cargo,
+                        initialValue: _cargo ?? profile?.cargo,
                         decoration: const InputDecoration(
                           labelText: 'Cargo',
                           prefixIcon: Icon(Icons.work_outline),
@@ -540,7 +543,7 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                             setState(() => _sqCandidatoTse2022 = v),
                       ),
                       const SizedBox(height: 16),
-                      _NmVotavelTseField(),
+                      const _NmVotavelTseField(),
                     ],
                     const SizedBox(height: 16),
                     Container(
@@ -965,7 +968,7 @@ class _NmVotavelTseField extends ConsumerWidget {
         }
         final current = selected.valueOrNull;
         return DropdownButtonFormField<String?>(
-          value: list.contains(current) ? current : null,
+          initialValue: list.contains(current) ? current : null,
           decoration: const InputDecoration(
             labelText: 'Meu nome no arquivo TSE (NM_VOTAVEL)',
             hintText: 'Selecione como seu nome aparece no CSV',
@@ -1308,4 +1311,3 @@ class _EnderecoAssessorFormBodyState
     );
   }
 }
-

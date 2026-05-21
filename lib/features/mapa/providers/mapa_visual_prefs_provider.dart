@@ -47,9 +47,7 @@ class MapaVisualPrefsNotifier extends StateNotifier<MapaVisualPrefs> {
     try {
       final p = await SharedPreferences.getInstance();
       double? pontos = p.getDouble(_prefsKeyPontos);
-      if (pontos == null) {
-        pontos = p.getDouble(_prefsKeyPontosLegacy);
-      }
+      pontos ??= p.getDouble(_prefsKeyPontosLegacy);
       final contorno = p.getDouble(_prefsKeyContorno);
       state = MapaVisualPrefs(
         escalaPontos: _clampEscala(pontos ?? kMapaVisualEscalaDefault),

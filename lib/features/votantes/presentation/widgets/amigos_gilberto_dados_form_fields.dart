@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/amigos_gilberto.dart';
 import '../../../../core/services/cep_br_service.dart';
-import '../../../../core/utils/municipio_resolver.dart' show chaveMunicipioMtApartirCepLocalidade;
+import '../../../../core/utils/municipio_resolver.dart'
+    show chaveMunicipioMtApartirCepLocalidade;
 import '../../../../core/widgets/municipio_mt_picker_sheet.dart';
 import '../../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
     show CepInputFormatter, TelefoneInputFormatter, cepSoDigitos;
@@ -58,10 +59,12 @@ class AmigosGilbertoDadosFormFields extends ConsumerStatefulWidget {
   final TextEditingController? linkInstagram;
 
   @override
-  ConsumerState<AmigosGilbertoDadosFormFields> createState() => _AmigosGilbertoDadosFormFieldsState();
+  ConsumerState<AmigosGilbertoDadosFormFields> createState() =>
+      _AmigosGilbertoDadosFormFieldsState();
 }
 
-class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDadosFormFields> {
+class _AmigosGilbertoDadosFormFieldsState
+    extends ConsumerState<AmigosGilbertoDadosFormFields> {
   Timer? _cepDebounce;
   bool _cepLoading = false;
 
@@ -135,7 +138,8 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
           controller: widget.nome,
           decoration: const InputDecoration(labelText: 'Nome *'),
           textCapitalization: TextCapitalization.words,
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+          validator: (v) =>
+              (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
         ),
         const SizedBox(height: 12),
         TextFormField(
@@ -176,10 +180,11 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: widget.abrangencia,
+          initialValue: widget.abrangencia,
           decoration: const InputDecoration(
             labelText: 'Abrangência',
-            helperText: 'Individual = 1 voto (o próprio). Familiar = total da família.',
+            helperText:
+                'Individual = 1 voto (o próprio). Familiar = total da família.',
           ),
           items: const [
             DropdownMenuItem(value: 'Individual', child: Text('Individual')),
@@ -198,7 +203,8 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
             decoration: const InputDecoration(
               labelText: 'Total de votos na família (titular + familiares)',
               hintText: '2',
-              helperText: 'Informe o número total esperado na família, incluindo o próprio.',
+              helperText:
+                  'Informe o número total esperado na família, incluindo o próprio.',
             ),
             keyboardType: TextInputType.number,
             validator: (v) {
@@ -208,13 +214,13 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
             },
           )
         else
-          InputDecorator(
-            decoration: const InputDecoration(
+          const InputDecorator(
+            decoration: InputDecoration(
               labelText: 'Votos',
               helperText: 'Sempre 1 para cadastro individual.',
               enabled: false,
             ),
-            child: const Text('1 (individual)', style: TextStyle(color: Colors.grey)),
+            child: Text('1 (individual)', style: TextStyle(color: Colors.grey)),
           ),
         if (widget.footerWidget != null) ...[
           const SizedBox(height: 12),
@@ -223,7 +229,8 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
         const SizedBox(height: 8),
         Text(
           'Endereço (opcional)',
-          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          style:
+              theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         TextFormField(
@@ -267,7 +274,8 @@ class _AmigosGilbertoDadosFormFieldsState extends ConsumerState<AmigosGilbertoDa
         const SizedBox(height: 8),
         Text(
           'A cidade alimenta o mapa regional e a estimativa por município.',
-          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       ],
     );

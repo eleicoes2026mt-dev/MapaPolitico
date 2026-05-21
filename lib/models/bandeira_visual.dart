@@ -2,12 +2,126 @@ import 'package:flutter/material.dart';
 
 /// Lista fixa de emojis para escolha rápida (~100).
 const List<String> kBandeiraEmojisOpcoes = [
-  '⭐', '🔥', '💪', '❤️', '🎯', '🗳️', '✅', '🌟', '🇧🇷', '🤝', '👍', '🙏', '💚', '💛', '💙', '🧡', '⚡', '🎉', '🏆', '📣',
-  '🌈', '☀️', '🌙', '⚽', '🎵', '📍', '🏠', '🌳', '🐦', '🦅', '🌾', '🚜', '🛣️', '🎓', '👨‍👩‍👧', '👥', '🧑‍🤝‍🧑', '💼', '🏛️', '📢',
-  '✊', '🤲', '💯', '🎁', '🥇', '🥈', '🥉', '🎖️', '🏅', '🔔', '📌', '📎', '✏️', '📝', '📊', '📈', '💡', '🔑', '🛡️', '⚖️',
-  '🕊️', '🌺', '🌻', '🌹', '🍀', '🌴', '🏞️', '🌄', '🌅', '🧭', '🗺️', '🎪', '🎭', '🎨', '🖌️', '🎬', '📷', '🎥', '📺', '📻',
-  '🎸', '🥁', '🎺', '🎷', '🎻', '🎹', '🎤', '🎧', '📱', '💻', '⌚', '⏰', '📅', '🔋', '🔌', '💎', '👑', '🎩', '👔', '👗',
-  '🧢', '👟', '🎒', '🧳', '🎈', '🎀', '🏁', '🚩', '🎌', '🏴', '🏳️', '🏳️‍🌈', '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '⚫', '⚪',
+  '⭐',
+  '🔥',
+  '💪',
+  '❤️',
+  '🎯',
+  '🗳️',
+  '✅',
+  '🌟',
+  '🇧🇷',
+  '🤝',
+  '👍',
+  '🙏',
+  '💚',
+  '💛',
+  '💙',
+  '🧡',
+  '⚡',
+  '🎉',
+  '🏆',
+  '📣',
+  '🌈',
+  '☀️',
+  '🌙',
+  '⚽',
+  '🎵',
+  '📍',
+  '🏠',
+  '🌳',
+  '🐦',
+  '🦅',
+  '🌾',
+  '🚜',
+  '🛣️',
+  '🎓',
+  '👨‍👩‍👧',
+  '👥',
+  '🧑‍🤝‍🧑',
+  '💼',
+  '🏛️',
+  '📢',
+  '✊',
+  '🤲',
+  '💯',
+  '🎁',
+  '🥇',
+  '🥈',
+  '🥉',
+  '🎖️',
+  '🏅',
+  '🔔',
+  '📌',
+  '📎',
+  '✏️',
+  '📝',
+  '📊',
+  '📈',
+  '💡',
+  '🔑',
+  '🛡️',
+  '⚖️',
+  '🕊️',
+  '🌺',
+  '🌻',
+  '🌹',
+  '🍀',
+  '🌴',
+  '🏞️',
+  '🌄',
+  '🌅',
+  '🧭',
+  '🗺️',
+  '🎪',
+  '🎭',
+  '🎨',
+  '🖌️',
+  '🎬',
+  '📷',
+  '🎥',
+  '📺',
+  '📻',
+  '🎸',
+  '🥁',
+  '🎺',
+  '🎷',
+  '🎻',
+  '🎹',
+  '🎤',
+  '🎧',
+  '📱',
+  '💻',
+  '⌚',
+  '⏰',
+  '📅',
+  '🔋',
+  '🔌',
+  '💎',
+  '👑',
+  '🎩',
+  '👔',
+  '👗',
+  '🧢',
+  '👟',
+  '🎒',
+  '🧳',
+  '🎈',
+  '🎀',
+  '🏁',
+  '🚩',
+  '🎌',
+  '🏴',
+  '🏳️',
+  '🏳️‍🌈',
+  '🔴',
+  '🟠',
+  '🟡',
+  '🟢',
+  '🔵',
+  '🟣',
+  '⚫',
+  '⚪',
 ];
 
 /// Como as duas cores preenchem o fundo do marcador.
@@ -149,7 +263,9 @@ class BandeiraVisual {
       emoji: m['emoji'] as String?,
       iniciais: m['iniciais'] as String?,
       iniciaisEstilo: BandeiraIniciaisEstilo.fromJson(
-        m['iniciais_estilo'] is Map ? Map<String, dynamic>.from(m['iniciais_estilo'] as Map) : null,
+        m['iniciais_estilo'] is Map
+            ? Map<String, dynamic>.from(m['iniciais_estilo'] as Map)
+            : null,
       ),
     );
   }
@@ -185,7 +301,7 @@ class BandeiraVisual {
       layout: BandeiraFundoLayout.solidPrimary,
       emoji: bandeiraEmoji,
       iniciais: bandeiraIniciais,
-      iniciaisEstilo: BandeiraIniciaisEstilo(
+      iniciaisEstilo: const BandeiraIniciaisEstilo(
         corLetraHex: '#FFFFFF',
         negrito: true,
       ),
@@ -201,7 +317,8 @@ class BandeiraVisual {
       corSecundariaHex: '#1B5E20',
       layout: BandeiraFundoLayout.solidPrimary,
       emoji: '🚩',
-      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+      iniciaisEstilo:
+          BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
     );
   }
 
@@ -212,7 +329,8 @@ class BandeiraVisual {
       corSecundariaHex: '#4A148C',
       layout: BandeiraFundoLayout.solidPrimary,
       emoji: '🚩',
-      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+      iniciaisEstilo:
+          BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
     );
   }
 
@@ -223,7 +341,8 @@ class BandeiraVisual {
       corSecundariaHex: '#1565C0',
       layout: BandeiraFundoLayout.gradientHorizontal,
       emoji: '🚩',
-      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+      iniciaisEstilo:
+          BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
     );
   }
 
@@ -234,7 +353,8 @@ class BandeiraVisual {
       corSecundariaHex: '#1565C0',
       layout: BandeiraFundoLayout.gradientHorizontal,
       emoji: '🚩',
-      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+      iniciaisEstilo:
+          BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
     );
   }
 
@@ -245,7 +365,8 @@ class BandeiraVisual {
       corSecundariaHex: '#0D47A1',
       layout: BandeiraFundoLayout.solidPrimary,
       emoji: '🚩',
-      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+      iniciaisEstilo:
+          BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
     );
   }
 
@@ -256,7 +377,8 @@ class BandeiraVisual {
       corSecundariaHex: '#E65100',
       layout: BandeiraFundoLayout.solidPrimary,
       emoji: '🚩',
-      iniciaisEstilo: BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
+      iniciaisEstilo:
+          BandeiraIniciaisEstilo(corLetraHex: '#FFFFFF', negrito: true),
     );
   }
 
@@ -265,7 +387,9 @@ class BandeiraVisual {
     final t = h.trim();
     if (t.startsWith('#')) {
       if (t.length == 7 || t.length == 9) return t;
-      return '#${t.substring(1)}'.length == 7 ? '#${t.substring(1)}' : '#1976D2';
+      return '#${t.substring(1)}'.length == 7
+          ? '#${t.substring(1)}'
+          : '#1976D2';
     }
     if (t.length == 6) return '#$t';
     return '#1976D2';
@@ -276,8 +400,8 @@ class BandeiraVisual {
 String corParaHexRgb(Color c) {
   int ch(double x) => (x * 255.0).round().clamp(0, 255);
   return '#${ch(c.r).toRadixString(16).padLeft(2, '0')}'
-      '${ch(c.g).toRadixString(16).padLeft(2, '0')}'
-      '${ch(c.b).toRadixString(16).padLeft(2, '0')}'
+          '${ch(c.g).toRadixString(16).padLeft(2, '0')}'
+          '${ch(c.b).toRadixString(16).padLeft(2, '0')}'
       .toUpperCase();
 }
 

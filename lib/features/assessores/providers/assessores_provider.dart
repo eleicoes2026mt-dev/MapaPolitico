@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:postgrest/postgrest.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../models/assessor.dart';
 import '../../../core/supabase/supabase_provider.dart';
@@ -13,7 +12,11 @@ import '../../auth/providers/auth_provider.dart';
 final meuAssessorIdProvider = FutureProvider<String?>((ref) async {
   final userId = ref.watch(currentUserProvider)?.id;
   if (userId == null) return null;
-  final res = await supabase.from('assessores').select('id').eq('profile_id', userId).maybeSingle();
+  final res = await supabase
+      .from('assessores')
+      .select('id')
+      .eq('profile_id', userId)
+      .maybeSingle();
   return res?['id'] as String?;
 });
 
@@ -102,7 +105,8 @@ Future<void> _ensureMeuProfileRowNoCliente(User user) async {
 final meuAssessorRegistroProvider = FutureProvider<Assessor?>((ref) async {
   final id = await ref.watch(meuAssessorIdProvider.future);
   if (id == null) return null;
-  final res = await supabase.from('assessores').select().eq('id', id).maybeSingle();
+  final res =
+      await supabase.from('assessores').select().eq('id', id).maybeSingle();
   if (res == null) return null;
   return Assessor.fromJson(Map<String, dynamic>.from(res));
 });
@@ -120,20 +124,29 @@ class AtualizarMeuAssessorEnderecoParams {
   final String? complemento;
 }
 
-final atualizarMeuAssessorEnderecoProvider = Provider<Future<void> Function(AtualizarMeuAssessorEnderecoParams)>((ref) {
+final atualizarMeuAssessorEnderecoProvider =
+    Provider<Future<void> Function(AtualizarMeuAssessorEnderecoParams)>((ref) {
   final client = supabase;
   return (AtualizarMeuAssessorEnderecoParams p) async {
     final id = await ref.read(meuAssessorIdProvider.future);
     if (id == null) throw Exception('Registro de assessor não encontrado.');
     final row = <String, dynamic>{
       'cep': p.cep?.trim().isEmpty == true ? null : p.cep?.trim(),
-      'logradouro': p.logradouro?.trim().isEmpty == true ? null : p.logradouro?.trim(),
+      'logradouro':
+          p.logradouro?.trim().isEmpty == true ? null : p.logradouro?.trim(),
       'numero': p.numero?.trim().isEmpty == true ? null : p.numero?.trim(),
-      'complemento': p.complemento?.trim().isEmpty == true ? null : p.complemento?.trim(),
+      'complemento':
+          p.complemento?.trim().isEmpty == true ? null : p.complemento?.trim(),
     };
-    final res = await client.from('assessores').update(row).eq('id', id).select('id').maybeSingle();
+    final res = await client
+        .from('assessores')
+        .update(row)
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
     if (res == null) {
-      throw Exception('Não foi possível salvar o endereço. Confira permissões ou tente de novo.');
+      throw Exception(
+          'Não foi possível salvar o endereço. Confira permissões ou tente de novo.');
     }
     ref.invalidate(assessoresListProvider);
     ref.invalidate(meuAssessorRegistroProvider);
@@ -143,7 +156,9 @@ final atualizarMeuAssessorEnderecoProvider = Provider<Future<void> Function(Atua
 final assessoresListProvider = FutureProvider<List<Assessor>>((ref) async {
   final profile = await ref.watch(profileProvider.future);
   final res = await supabase.from('assessores').select().order('nome');
-  final list = (res as List).map((e) => Assessor.fromJson(e as Map<String, dynamic>)).toList();
+  final list = (res as List)
+      .map((e) => Assessor.fromJson(e as Map<String, dynamic>))
+      .toList();
   final userId = ref.watch(currentUserProvider)?.id;
   if (userId != null && profile?.role == 'candidato') {
     return list.where((a) => a.profileId != userId).toList();
@@ -183,8 +198,10 @@ Future<ConvidarAssessorResult> convidarAssessor({
     'email': email.trim().toLowerCase(),
     'grau_acesso': g,
     if (telefone != null && telefone.isNotEmpty) 'telefone': telefone.trim(),
-    if (municipioId != null && municipioId.isNotEmpty) 'municipio_id': municipioId,
-    if (linkInstagram != null && linkInstagram.trim().isNotEmpty) 'link_instagram': linkInstagram.trim(),
+    if (municipioId != null && municipioId.isNotEmpty)
+      'municipio_id': municipioId,
+    if (linkInstagram != null && linkInstagram.trim().isNotEmpty)
+      'link_instagram': linkInstagram.trim(),
   };
   // Abre direto na tela de definir senha após o clique no e-mail (path URL + Redirect URLs no Supabase).
   body['redirect_to'] = EnvConfig.webInviteRedirectTo;
@@ -210,7 +227,8 @@ Future<ConvidarAssessorResult> convidarAssessor({
       final s = (data['link_copia'] as String).trim();
       if (s.isNotEmpty) link = s;
     }
-    final msg = data['message'] is String ? (data['message'] as String).trim() : null;
+    final msg =
+        data['message'] is String ? (data['message'] as String).trim() : null;
     final ex = data['existing_user'] == true;
     return ConvidarAssessorResult(
       linkCopia: link,
@@ -230,7 +248,8 @@ Future<String?> reenviarConviteAssessor(Assessor assessor) async {
       'assessor_id': assessor.id,
       'redirect_to': EnvConfig.webInviteRedirectTo,
     };
-    final res = await supabase.functions.invoke('reenviar-convite-assessor', body: body);
+    final res = await supabase.functions
+        .invoke('reenviar-convite-assessor', body: body);
     if (res.status == 401) {
       throw Exception('Sessão expirada. Faça logout e entre novamente.');
     }
@@ -262,11 +281,14 @@ Future<void> removerAssessor(String assessorId) async {
 }
 
 /// Desativar ou reativar assessor convidado (apenas candidato). Atualiza `assessores.ativo` e `profiles.ativo`.
-Future<void> setAssessorGrauAcesso({required String assessorId, required int grauAcesso}) async {
+Future<void> setAssessorGrauAcesso(
+    {required String assessorId, required int grauAcesso}) async {
   await supabase.auth.refreshSession();
   final g = grauAcesso == 1 ? 1 : 2;
   try {
-    await supabase.from('assessores').update({'grau_acesso': g}).eq('id', assessorId);
+    await supabase
+        .from('assessores')
+        .update({'grau_acesso': g}).eq('id', assessorId);
   } on PostgrestException catch (e) {
     throw Exception(messageFromException(e));
   }
@@ -280,14 +302,16 @@ Future<void> atualizarAssessorLinkInstagram({
   await supabase.auth.refreshSession();
   try {
     await supabase.from('assessores').update({
-      'link_instagram': linkInstagram?.trim().isEmpty == true ? null : linkInstagram?.trim(),
+      'link_instagram':
+          linkInstagram?.trim().isEmpty == true ? null : linkInstagram?.trim(),
     }).eq('id', assessorId);
   } on PostgrestException catch (e) {
     throw Exception(messageFromException(e));
   }
 }
 
-Future<void> setAssessorAtivo({required String assessorId, required bool ativo}) async {
+Future<void> setAssessorAtivo(
+    {required String assessorId, required bool ativo}) async {
   await supabase.auth.refreshSession();
   try {
     await supabase.rpc(

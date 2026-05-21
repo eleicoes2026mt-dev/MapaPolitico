@@ -4,11 +4,13 @@ import '../../../core/supabase/supabase_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../data/tse_storage.dart';
 
-final tseRowsProvider = StateNotifierProvider<TseRowsNotifier, AsyncValue<List<Map<String, dynamic>>>>((ref) {
+final tseRowsProvider = StateNotifierProvider<TseRowsNotifier,
+    AsyncValue<List<Map<String, dynamic>>>>((ref) {
   return TseRowsNotifier();
 });
 
-class TseRowsNotifier extends StateNotifier<AsyncValue<List<Map<String, dynamic>>>> {
+class TseRowsNotifier
+    extends StateNotifier<AsyncValue<List<Map<String, dynamic>>>> {
   TseRowsNotifier() : super(const AsyncValue.loading()) {
     _load();
   }
@@ -42,7 +44,8 @@ class TseRowsNotifier extends StateNotifier<AsyncValue<List<Map<String, dynamic>
   }
 }
 
-final tseNmVotavelSelectedProvider = StateNotifierProvider<TseNmVotavelNotifier, AsyncValue<String?>>((ref) {
+final tseNmVotavelSelectedProvider =
+    StateNotifierProvider<TseNmVotavelNotifier, AsyncValue<String?>>((ref) {
   return TseNmVotavelNotifier();
 });
 
@@ -87,8 +90,12 @@ final tseDistinctNmVotavelProvider = Provider<AsyncValue<List<String>>>((ref) {
 
 /// Candidatos da eleição 2022 (MT) da tabela votacao_secao (view candidatos_2022_mt).
 /// Para o candidato escolher "quem sou eu" no perfil.
-final candidatos2022MtProvider = FutureProvider<List<({int sqCandidato, String nmVotavel})>>((ref) async {
-  final res = await supabase.from('candidatos_2022_mt').select('sq_candidato, nm_votavel').order('nm_votavel');
+final candidatos2022MtProvider =
+    FutureProvider<List<({int sqCandidato, String nmVotavel})>>((ref) async {
+  final res = await supabase
+      .from('candidatos_2022_mt')
+      .select('sq_candidato, nm_votavel')
+      .order('nm_votavel');
   final list = <({int sqCandidato, String nmVotavel})>[];
   for (final e in res as List) {
     final map = e as Map<String, dynamic>;
@@ -102,8 +109,10 @@ final candidatos2022MtProvider = FutureProvider<List<({int sqCandidato, String n
 /// Votos por município na eleição 2022 para um candidato (sq_candidato) via RPC.
 /// A agregação é feita no banco (SUM por nm_municipio), evitando o limite de ~1000 linhas
 /// do Supabase e garantindo o total correto (ex.: 28.248 votos) e todas as cidades no mapa.
-final votosPorMunicipioTseSupabaseProvider = FutureProvider.family<Map<String, int>, int>((ref, sqCandidato) async {
-  final res = await supabase.rpc('get_votos_por_municipio', params: {'p_sq_candidato': sqCandidato});
+final votosPorMunicipioTseSupabaseProvider =
+    FutureProvider.family<Map<String, int>, int>((ref, sqCandidato) async {
+  final res = await supabase
+      .rpc('get_votos_por_municipio', params: {'p_sq_candidato': sqCandidato});
   final map = <String, int>{};
   for (final e in res as List) {
     final row = e as Map<String, dynamic>;
@@ -140,7 +149,9 @@ final candidatoSqTse2022Provider = FutureProvider<int?>((ref) async {
 /// Locais de votação (nome, endereço e quantidade de votos) por município via RPC.
 /// Usa get_locais_votacao_por_municipio (agregação no banco + índice) para evitar timeout.
 /// Filtra pelo mesmo candidato (sq_candidato_tse_2022) do perfil, para bater com o ranking e o mapa.
-final locaisVotacaoPorMunicipioProvider = FutureProvider.family<List<({String nome, String? endereco, int votos})>, String>((ref, nomeMunicipio) async {
+final locaisVotacaoPorMunicipioProvider = FutureProvider.family<
+    List<({String nome, String? endereco, int votos})>,
+    String>((ref, nomeMunicipio) async {
   if (nomeMunicipio.trim().isEmpty) return [];
   final sq = await ref.watch(candidatoSqTse2022Provider.future);
   final res = await supabase.rpc(
@@ -151,14 +162,18 @@ final locaisVotacaoPorMunicipioProvider = FutureProvider.family<List<({String no
     },
   );
   final rows = res as List;
-  return rows.map((r) {
-    final row = r as Map<String, dynamic>;
-    final nome = row['nm_local_votacao']?.toString().trim() ?? '';
-    final enderecoRaw = row['ds_local_votacao_endereco']?.toString().trim();
-    final endereco = enderecoRaw == null || enderecoRaw.isEmpty ? null : enderecoRaw;
-    final votos = (row['qt_votos'] as num?)?.toInt() ?? 0;
-    return (nome: nome, endereco: endereco, votos: votos);
-  }).where((e) => e.nome.isNotEmpty).toList();
+  return rows
+      .map((r) {
+        final row = r as Map<String, dynamic>;
+        final nome = row['nm_local_votacao']?.toString().trim() ?? '';
+        final enderecoRaw = row['ds_local_votacao_endereco']?.toString().trim();
+        final endereco =
+            enderecoRaw == null || enderecoRaw.isEmpty ? null : enderecoRaw;
+        final votos = (row['qt_votos'] as num?)?.toInt() ?? 0;
+        return (nome: nome, endereco: endereco, votos: votos);
+      })
+      .where((e) => e.nome.isNotEmpty)
+      .toList();
 });
 
 Map<String, int> _votosTseFromCsvMap(Ref ref) {
@@ -185,7 +200,8 @@ Map<String, int> _votosTseFromCsvMap(Ref ref) {
 /// Votos por município (NM_MUNICIPIO) para exibir no mapa.
 /// [FutureProvider] linear: evita `ref.watch` condicional (assessor grau 1 não recebia TSE no ranking).
 /// Usa Supabase quando há sq do candidato (deputado ou raiz para assessor); senão CSV local.
-final votosPorMunicipioTseProvider = FutureProvider<Map<String, int>>((ref) async {
+final votosPorMunicipioTseProvider =
+    FutureProvider<Map<String, int>>((ref) async {
   final sq = await ref.watch(candidatoSqTse2022Provider.future);
   if (sq != null) {
     return ref.read(votosPorMunicipioTseSupabaseProvider(sq).future);
@@ -198,7 +214,7 @@ String? _getString(Map<String, dynamic> row, String key) {
   for (final entry in row.entries) {
     if (entry.key.toString().toUpperCase() == k) {
       final v = entry.value;
-      return v == null ? null : v.toString().trim();
+      return v?.toString().trim();
     }
   }
   return null;

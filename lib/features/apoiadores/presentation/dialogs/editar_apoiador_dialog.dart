@@ -13,9 +13,13 @@ import '../../../../models/benfeitoria.dart';
 import '../../../../models/municipio.dart';
 import '../../../benfeitorias/providers/benfeitorias_provider.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
-import '../../../votantes/providers/votantes_provider.dart' show refreshMunicipiosMTList, municipiosMTListProvider;
+import '../../../votantes/providers/votantes_provider.dart'
+    show refreshMunicipiosMTList, municipiosMTListProvider;
 import '../../providers/apoiadores_provider.dart'
-    show apoiadoresListProvider, atualizarApoiadorProvider, AtualizarApoiadorParams;
+    show
+        apoiadoresListProvider,
+        atualizarApoiadorProvider,
+        AtualizarApoiadorParams;
 import '../utils/apoiadores_form_utils.dart';
 import '../widgets/classificacao_apoiador_field.dart';
 import '../widgets/origem_apoiador_field.dart';
@@ -27,13 +31,15 @@ const _statusBenfeitoriaOpcoes = <(String, String)>[
 ];
 
 class EditarApoiadorDialog extends ConsumerStatefulWidget {
-  const EditarApoiadorDialog({super.key, required this.apoiador, required this.onSaved});
+  const EditarApoiadorDialog(
+      {super.key, required this.apoiador, required this.onSaved});
 
   final Apoiador apoiador;
   final VoidCallback onSaved;
 
   @override
-  ConsumerState<EditarApoiadorDialog> createState() => _EditarApoiadorDialogState();
+  ConsumerState<EditarApoiadorDialog> createState() =>
+      _EditarApoiadorDialogState();
 }
 
 class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
@@ -65,18 +71,27 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   void initState() {
     super.initState();
     _nomeController = TextEditingController(text: widget.apoiador.nome);
-    _telefoneController = TextEditingController(text: widget.apoiador.telefone ?? '');
+    _telefoneController =
+        TextEditingController(text: widget.apoiador.telefone ?? '');
     _emailController = TextEditingController(text: widget.apoiador.email ?? '');
-    _estimativaController = TextEditingController(text: widget.apoiador.estimativaVotos.toString());
+    _estimativaController =
+        TextEditingController(text: widget.apoiador.estimativaVotos.toString());
     _legadoController = TextEditingController(
-      text: widget.apoiador.votosPrometidosUltimaEleicao != null ? widget.apoiador.votosPrometidosUltimaEleicao.toString() : '',
+      text: widget.apoiador.votosPrometidosUltimaEleicao != null
+          ? widget.apoiador.votosPrometidosUltimaEleicao.toString()
+          : '',
     );
     _cepController = TextEditingController(text: widget.apoiador.cep ?? '');
-    _logradouroController = TextEditingController(text: widget.apoiador.logradouro ?? '');
-    _numeroController = TextEditingController(text: widget.apoiador.numero ?? '');
-    _complementoController = TextEditingController(text: widget.apoiador.complemento ?? '');
-    _origemController = TextEditingController(text: widget.apoiador.origemLugarNome ?? '');
-    _instagramController = TextEditingController(text: widget.apoiador.linkInstagram ?? '');
+    _logradouroController =
+        TextEditingController(text: widget.apoiador.logradouro ?? '');
+    _numeroController =
+        TextEditingController(text: widget.apoiador.numero ?? '');
+    _complementoController =
+        TextEditingController(text: widget.apoiador.complemento ?? '');
+    _origemController =
+        TextEditingController(text: widget.apoiador.origemLugarNome ?? '');
+    _instagramController =
+        TextEditingController(text: widget.apoiador.linkInstagram ?? '');
     _nascimentoController = TextEditingController(
       text: widget.apoiador.dataNascimento != null
           ? DateFormat('dd/MM/yyyy').format(widget.apoiador.dataNascimento!)
@@ -144,10 +159,12 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   }
 
   Future<void> _abrirCalendarioNascimento() async {
-    final dataAtual = parseDataDDMMYYYY(_nascimentoController.text) ?? DateTime(1990, 1, 1);
+    final dataAtual =
+        parseDataDDMMYYYY(_nascimentoController.text) ?? DateTime(1990, 1, 1);
     final picked = await showDatePicker(
       context: context,
-      initialDate: dataAtual.isBefore(DateTime(1900, 1, 1)) || dataAtual.isAfter(DateTime.now())
+      initialDate: dataAtual.isBefore(DateTime(1900, 1, 1)) ||
+              dataAtual.isAfter(DateTime.now())
           ? DateTime(1990, 1, 1)
           : dataAtual,
       firstDate: DateTime(1900, 1, 1),
@@ -169,13 +186,16 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   void _adicionarBenfeitoria() {
     setState(() {
       _benfForms ??= [];
-      _benfForms!.add(_BenfEditForm.nova(cidadePadraoKey: _chaveCidadePadraoBenfeitoria()));
+      _benfForms!.add(
+          _BenfEditForm.nova(cidadePadraoKey: _chaveCidadePadraoBenfeitoria()));
     });
   }
 
-  Future<void> _sincronizarBenfeitorias(String apoiadorId, String? municipioPadraoId, List<Municipio> municipios) async {
+  Future<void> _sincronizarBenfeitorias(String apoiadorId,
+      String? municipioPadraoId, List<Municipio> municipios) async {
     final forms = _benfForms ?? [];
-    final existing = await ref.read(benfeitoriasPorApoiadorProvider(apoiadorId).future);
+    final existing =
+        await ref.read(benfeitoriasPorApoiadorProvider(apoiadorId).future);
     final idsNaLista = forms.map((f) => f.id).whereType<String>().toSet();
     for (final b in existing) {
       if (!idsNaLista.contains(b.id)) {
@@ -224,18 +244,24 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
         widget.apoiador.id,
         AtualizarApoiadorParams(
           nome: _nomeController.text.trim(),
-          cidadeNome: _cidadeNome?.trim().isEmpty == true ? null : _cidadeNome?.trim(),
+          cidadeNome:
+              _cidadeNome?.trim().isEmpty == true ? null : _cidadeNome?.trim(),
           municipioId: mid,
-          telefone: _telefoneController.text.trim().isEmpty ? null : _telefoneController.text.trim(),
-          email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
+          telefone: _telefoneController.text.trim().isEmpty
+              ? null
+              : _telefoneController.text.trim(),
+          email: _emailController.text.trim().isEmpty
+              ? null
+              : _emailController.text.trim(),
           estimativaVotos: int.tryParse(_estimativaController.text) ?? 0,
           votosPrometidosUltimaEleicao: parseLegado(_legadoController.text),
           atualizarLegado: true,
           perfil: _perfil,
           atualizarPerfil: true,
           atualizarDataNascimento: widget.apoiador.tipo == 'PF',
-          dataNascimento:
-              widget.apoiador.tipo == 'PF' ? parseDataDDMMYYYY(_nascimentoController.text) : null,
+          dataNascimento: widget.apoiador.tipo == 'PF'
+              ? parseDataDDMMYYYY(_nascimentoController.text)
+              : null,
           atualizarEndereco: true,
           cep: _cepController.text.trim(),
           logradouro: _logradouroController.text.trim(),
@@ -244,7 +270,9 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           origemLugarTexto: _origemController.text,
           atualizarOrigemLugar: true,
           atualizarLinkInstagram: true,
-          linkInstagram: _instagramController.text.trim().isEmpty ? null : _instagramController.text.trim(),
+          linkInstagram: _instagramController.text.trim().isEmpty
+              ? null
+              : _instagramController.text.trim(),
         ),
       );
       await _sincronizarBenfeitorias(widget.apoiador.id, mid, municipios);
@@ -264,7 +292,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final benfAsync = ref.watch(benfeitoriasPorApoiadorProvider(widget.apoiador.id));
+    final benfAsync =
+        ref.watch(benfeitoriasPorApoiadorProvider(widget.apoiador.id));
     final munAsync = ref.watch(municipiosMTListProvider);
 
     if (!_benfInited) {
@@ -275,7 +304,9 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           if (!mounted || _benfInited) return;
           final idToKey = {for (final m in munList) m.id: m.nomeNormalizado};
           setState(() {
-            _benfForms = list.map((b) => _BenfEditForm.fromBenfeitoria(b, idToKey)).toList();
+            _benfForms = list
+                .map((b) => _BenfEditForm.fromBenfeitoria(b, idToKey))
+                .toList();
             _benfInited = true;
           });
         });
@@ -297,13 +328,16 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                   controller: _nomeController,
                   decoration: const InputDecoration(labelText: 'Nome *'),
                   textCapitalization: TextCapitalization.words,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty) ? 'Informe o nome' : null,
                 ),
                 const SizedBox(height: 16),
                 ClassificacaoApoiadorField(
                   sugestoesExtras: classificacoesSugestoesApoiador(
                     ref.watch(apoiadoresListProvider).valueOrNull ?? [],
-                  ).where((e) => !kClassificacoesApoiadorPadrao.contains(e)).toList(),
+                  )
+                      .where((e) => !kClassificacoesApoiadorPadrao.contains(e))
+                      .toList(),
                   initialPerfil: _perfil,
                   onChanged: (v) => setState(() => _perfil = v),
                 ),
@@ -321,7 +355,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _telefoneController,
-                  decoration: const InputDecoration(labelText: 'Contato', hintText: '(00) 0 0000-0000'),
+                  decoration: const InputDecoration(
+                      labelText: 'Contato', hintText: '(00) 0 0000-0000'),
                   keyboardType: TextInputType.phone,
                   inputFormatters: [TelefoneInputFormatter()],
                 ),
@@ -355,7 +390,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                     decoration: InputDecoration(
                       labelText: 'Data de nascimento',
                       hintText: 'DD/MM/AAAA',
-                      helperText: 'Usado para aniversariantes e lembretes da campanha.',
+                      helperText:
+                          'Usado para aniversariantes e lembretes da campanha.',
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.calendar_today),
                         onPressed: _abrirCalendarioNascimento,
@@ -368,11 +404,14 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _estimativaController,
-                  decoration: const InputDecoration(labelText: 'Votos estimados'),
+                  decoration:
+                      const InputDecoration(labelText: 'Votos estimados'),
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 16),
-                Text('Endereço (opcional)', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Endereço (opcional)',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _cepController,
@@ -389,7 +428,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                             ),
                           )
                         : null,
-                    helperText: 'Preenche endereço e cidade (MT) ao concluir os 8 dígitos.',
+                    helperText:
+                        'Preenche endereço e cidade (MT) ao concluir os 8 dígitos.',
                   ),
                   keyboardType: TextInputType.number,
                   inputFormatters: [CepInputFormatter()],
@@ -398,7 +438,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _logradouroController,
-                  decoration: const InputDecoration(labelText: 'Rua / logradouro'),
+                  decoration:
+                      const InputDecoration(labelText: 'Rua / logradouro'),
                   textCapitalization: TextCapitalization.words,
                 ),
                 const SizedBox(height: 8),
@@ -421,22 +462,27 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                   keyboardType: TextInputType.number,
                 ),
                 const SizedBox(height: 20),
-                Text('Benfeitorias', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Benfeitorias',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 Text(
                   'Informe o município de cada benfeitoria para somar no mapa regional. Se não escolher, usa a cidade do apoiador.',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 8),
                 if (benfAsync.isLoading || munAsync.isLoading)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                    child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2)),
                   )
                 else if (benfAsync.hasError)
                   Text(
                     'Não foi possível carregar benfeitorias.',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.error),
                   )
                 else ...[
                   Row(
@@ -463,7 +509,9 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 16),
-                  Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                  Text(_error!,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.error)),
                 ],
               ],
             ),
@@ -477,7 +525,12 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
         ),
         FilledButton(
           onPressed: _loading ? null : _salvar,
-          child: _loading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Salvar'),
+          child: _loading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Salvar'),
         ),
       ],
     );
@@ -496,7 +549,8 @@ class _BenfEditForm {
     this.cidadeKey,
   });
 
-  factory _BenfEditForm.fromBenfeitoria(Benfeitoria b, Map<String, String> municipioIdParaChave) {
+  factory _BenfEditForm.fromBenfeitoria(
+      Benfeitoria b, Map<String, String> municipioIdParaChave) {
     return _BenfEditForm(
       id: b.id,
       titulo: b.titulo,
@@ -505,7 +559,8 @@ class _BenfEditForm {
       data: b.dataRealizacao,
       descricao: b.descricao ?? '',
       status: b.status,
-      cidadeKey: b.municipioId != null ? municipioIdParaChave[b.municipioId] : null,
+      cidadeKey:
+          b.municipioId != null ? municipioIdParaChave[b.municipioId] : null,
     );
   }
 
@@ -584,13 +639,17 @@ class _BenfeitoriaEditarTile extends StatelessWidget {
                     },
                   ),
                 ),
-                IconButton(icon: const Icon(Icons.close), onPressed: onRemove, tooltip: 'Remover'),
+                IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: onRemove,
+                    tooltip: 'Remover'),
               ],
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () async {
-                final k = await showMunicipioMtPicker(context, currentNormalizedKey: form.cidadeKey);
+                final k = await showMunicipioMtPicker(context,
+                    currentNormalizedKey: form.cidadeKey);
                 if (k != null) {
                   form.cidadeKey = k;
                   onChanged();
@@ -598,15 +657,19 @@ class _BenfeitoriaEditarTile extends StatelessWidget {
               },
               icon: const Icon(Icons.place_outlined, size: 18),
               label: Text(
-                form.cidadeKey == null ? 'Município (usa cidade do apoiador se vazio)' : displayNomeCidadeMT(form.cidadeKey!),
+                form.cidadeKey == null
+                    ? 'Município (usa cidade do apoiador se vazio)'
+                    : displayNomeCidadeMT(form.cidadeKey!),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: form.tipo,
+              initialValue: form.tipo,
               decoration: const InputDecoration(labelText: 'Tipo'),
-              items: tiposBenfeitoriaLista.map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2))).toList(),
+              items: tiposBenfeitoriaLista
+                  .map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2)))
+                  .toList(),
               onChanged: (v) {
                 if (v != null) {
                   form.tipo = v;
@@ -616,9 +679,14 @@ class _BenfeitoriaEditarTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _statusBenfeitoriaOpcoes.any((e) => e.$1 == form.status) ? form.status : 'em_andamento',
+              initialValue:
+                  _statusBenfeitoriaOpcoes.any((e) => e.$1 == form.status)
+                      ? form.status
+                      : 'em_andamento',
               decoration: const InputDecoration(labelText: 'Status'),
-              items: _statusBenfeitoriaOpcoes.map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2))).toList(),
+              items: _statusBenfeitoriaOpcoes
+                  .map((t) => DropdownMenuItem(value: t.$1, child: Text(t.$2)))
+                  .toList(),
               onChanged: (v) {
                 if (v != null) {
                   form.status = v;
@@ -629,7 +697,8 @@ class _BenfeitoriaEditarTile extends StatelessWidget {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: _valorText(),
-              decoration: const InputDecoration(labelText: 'Valor (R\$)', hintText: '0.000,00'),
+              decoration: const InputDecoration(
+                  labelText: 'Valor (R\$)', hintText: '0.000,00'),
               keyboardType: TextInputType.number,
               inputFormatters: [ValorRealInputFormatter()],
               onChanged: (v) {
@@ -640,7 +709,8 @@ class _BenfeitoriaEditarTile extends StatelessWidget {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: _dataText(),
-              decoration: const InputDecoration(labelText: 'Data (DD/MM/AAAA)', hintText: 'DD/MM/AAAA'),
+              decoration: const InputDecoration(
+                  labelText: 'Data (DD/MM/AAAA)', hintText: 'DD/MM/AAAA'),
               inputFormatters: [DataNascimentoInputFormatter()],
               onChanged: (v) {
                 form.data = parseDataDDMMYYYY(v);
@@ -650,7 +720,8 @@ class _BenfeitoriaEditarTile extends StatelessWidget {
             const SizedBox(height: 8),
             TextFormField(
               initialValue: form.descricao,
-              decoration: const InputDecoration(labelText: 'Descrição (opcional)'),
+              decoration:
+                  const InputDecoration(labelText: 'Descrição (opcional)'),
               maxLines: 2,
               onChanged: (v) {
                 form.descricao = v;

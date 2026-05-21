@@ -12,7 +12,7 @@ class PerformanceTab extends ConsumerWidget {
 
     return stats.when(
       data: (s) {
-        final meta = 50000.0;
+        const meta = 50000.0;
         final cobertura = s.estimativaVotos.toDouble();
         final pct = meta > 0 ? (cobertura / meta * 100) : 0.0;
         return SingleChildScrollView(
@@ -23,26 +23,61 @@ class PerformanceTab extends ConsumerWidget {
                 spacing: 16,
                 runSpacing: 16,
                 children: [
-                  _Card(label: 'META ESTADUAL', value: '50.000', sub: 'votos alvo'),
-                  _Card(label: 'COBERTURA ATUAL', value: '${cobertura.toInt()}', sub: 'votantes + apoiadores', color: Colors.green.shade100),
-                  _Card(label: '% DA META', value: '${pct.toStringAsFixed(1)}%', sub: '', color: Colors.purple.shade100),
-                  _Card(label: 'CIDADES ALTA PERF.', value: '2', sub: 'enviar reconhecimento →', color: Colors.amber.shade100),
+                  const _Card(
+                      label: 'META ESTADUAL',
+                      value: '50.000',
+                      sub: 'votos alvo'),
+                  _Card(
+                      label: 'COBERTURA ATUAL',
+                      value: '${cobertura.toInt()}',
+                      sub: 'votantes + apoiadores',
+                      color: Colors.green.shade100),
+                  _Card(
+                      label: '% DA META',
+                      value: '${pct.toStringAsFixed(1)}%',
+                      sub: '',
+                      color: Colors.purple.shade100),
+                  _Card(
+                      label: 'CIDADES ALTA PERF.',
+                      value: '2',
+                      sub: 'enviar reconhecimento →',
+                      color: Colors.amber.shade100),
                 ],
               ),
               const SizedBox(height: 24),
-              Text('Monitoramento por Cidade', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Text('Monitoramento por Cidade',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(child: TextField(decoration: const InputDecoration(hintText: 'Buscar cidade...', prefixIcon: Icon(Icons.search)))),
+                  const Expanded(
+                      child: TextField(
+                          decoration: InputDecoration(
+                              hintText: 'Buscar cidade...',
+                              prefixIcon: Icon(Icons.search)))),
                   const SizedBox(width: 12),
-                  DropdownButton<String>(value: 'Todos os Polos', items: const [DropdownMenuItem(value: 'Todos os Polos', child: Text('Todos os Polos'))], onChanged: (_) {}),
+                  DropdownButton<String>(
+                      value: 'Todos os Polos',
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'Todos os Polos',
+                            child: Text('Todos os Polos'))
+                      ],
+                      onChanged: (_) {}),
                   const SizedBox(width: 8),
-                  DropdownButton<String>(value: 'Todos Status', items: const [DropdownMenuItem(value: 'Todos Status', child: Text('Todos Status'))], onChanged: (_) {}),
+                  DropdownButton<String>(
+                      value: 'Todos Status',
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'Todos Status', child: Text('Todos Status'))
+                      ],
+                      onChanged: (_) {}),
                 ],
               ),
               const SizedBox(height: 16),
-              const Text('Lista de cidades com performance (dados do dashboard).'),
+              const Text(
+                  'Lista de cidades com performance (dados do dashboard).'),
             ],
           ),
         );
@@ -54,7 +89,11 @@ class PerformanceTab extends ConsumerWidget {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({required this.label, required this.value, required this.sub, this.color});
+  const _Card(
+      {required this.label,
+      required this.value,
+      required this.sub,
+      this.color});
 
   final String label;
   final String value;
@@ -79,7 +118,8 @@ class _Card extends StatelessWidget {
     final theme = Theme.of(context).textTheme;
     final useContrast = color != null;
     final primary = useContrast ? _textColorOnBackground(color!) : null;
-    final secondary = useContrast ? _secondaryTextColorOnBackground(color!) : null;
+    final secondary =
+        useContrast ? _secondaryTextColorOnBackground(color!) : null;
 
     return Card(
       color: color,

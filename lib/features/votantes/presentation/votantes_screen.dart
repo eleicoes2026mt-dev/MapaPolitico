@@ -1,8 +1,11 @@
+import 'dart:math' show min;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
+import '../../../core/presentation/desktop_drag_scroll_behavior.dart';
 import '../../../core/utils/municipio_resolver.dart'
     show municipioIdParaNomeCidade, municipioIdResolvidoParaApoiador;
 import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
@@ -15,10 +18,12 @@ import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/profile.dart';
 import '../../../models/votante.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
-import '../../assessores/providers/assessores_provider.dart' show meuAssessorRegistroProvider;
+import '../../assessores/providers/assessores_provider.dart'
+    show meuAssessorRegistroProvider;
 import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart';
+import '../domain/indicacoes_rede.dart';
 import '../providers/votantes_provider.dart';
 import 'widgets/amigos_gilberto_dados_form_fields.dart';
 
@@ -30,8 +35,13 @@ class VotantesScreen extends ConsumerStatefulWidget {
 }
 
 class _VotantesScreenState extends ConsumerState<VotantesScreen> {
+  static const int _cadastrosPorPagina = 20;
+
   String _query = '';
   String _cidadeFilter = '';
+
+  /// Página atual (0-based).
+  int _paginaLista = 0;
 
   Future<void> _abrirNovoOuEditar({Votante? existente}) async {
     await showDialog<void>(
@@ -50,8 +60,12 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
           'É necessário ter município definido e a pessoa não pode estar vinculada a outro apoiador.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Promover')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Promover')),
         ],
       ),
     );
@@ -60,7 +74,9 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
       await ref.read(promoverVotanteParaApoiadorProvider)(v.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cadastro de $kAmigosGilbertoLabel promovido a apoiador.')),
+          const SnackBar(
+              content: Text(
+                  'Cadastro de $kAmigosGilbertoLabel promovido a apoiador.')),
         );
       }
     } catch (e) {
@@ -76,11 +92,15 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Excluir cadastro ($kAmigosGilbertoLabel)'),
+        title: const Text('Excluir cadastro ($kAmigosGilbertoLabel)'),
         content: Text('Remover "${v.nome}"?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Excluir')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Excluir')),
         ],
       ),
     );
@@ -89,7 +109,8 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
       await ref.read(removerVotanteProvider)(v.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Cadastro de $kAmigosGilbertoLabel removido.')),
+          const SnackBar(
+              content: Text('Cadastro de $kAmigosGilbertoLabel removido.')),
         );
       }
     } catch (e) {
@@ -110,21 +131,31 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
         profile?.role == 'assessor' ||
         profile?.role == 'apoiador' ||
         profile?.role == 'votante';
-    final podePromoverApoiador = profile?.role == 'candidato' || profile?.role == 'assessor';
-    final podeExcluirVotante =
-        podeGestao && !(profile?.cadastroViaQr ?? false);
+    final podePromoverApoiador =
+        profile?.role == 'candidato' || profile?.role == 'assessor';
+    final podeExcluirVotante = podeGestao && !(profile?.cadastroViaQr ?? false);
 
     final list = ref.watch(votantesListProvider);
     final apoiadoresAsync = ref.watch(apoiadoresListProvider);
+    final meuCadastroApoiador = profile?.role == 'apoiador'
+        ? ref.watch(meuApoiadorProvider).valueOrNull
+        : null;
     final apoiadorPorId = Map<String, String>.fromEntries(
       (apoiadoresAsync.valueOrNull ?? []).map((a) => MapEntry(a.id, a.nome)),
     );
+    final meId = meuCadastroApoiador?.id;
+    final meNome = meuCadastroApoiador?.nome.trim() ?? '';
+    if (meId != null && meId.isNotEmpty && meNome.isNotEmpty) {
+      apoiadorPorId[meId] = meNome;
+    }
 
     final votantes = list.valueOrNull ?? [];
     final votosTotal = votantes.fold<int>(0, (a, v) => a + v.qtdVotosFamilia);
     var filtered = votantes;
     if (_query.isNotEmpty) {
-      filtered = filtered.where((v) => v.nome.toLowerCase().contains(_query.toLowerCase())).toList();
+      filtered = filtered
+          .where((v) => v.nome.toLowerCase().contains(_query.toLowerCase()))
+          .toList();
     }
     if (_cidadeFilter.isNotEmpty) {
       final q = _cidadeFilter.toLowerCase();
@@ -138,7 +169,11 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
       onRefresh: () async {
         ref.invalidate(votantesListProvider);
         ref.invalidate(municipiosMTListProvider);
-        await ref.read(votantesListProvider.future).then((_) {}).onError((_, __) {});
+        ref.invalidate(meuApoiadorProvider);
+        await ref
+            .read(votantesListProvider.future)
+            .then((_) {})
+            .onError((_, __) {});
       },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -146,95 +181,144 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(kAmigosGilbertoLabel, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-              const EstadoMTBadge(compact: true),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(kAmigosGilbertoLabel,
+                    style: theme.textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                const EstadoMTBadge(compact: true),
+              ],
+            ),
+            if (profile?.role == 'apoiador') ...[
+              const SizedBox(height: 8),
+              Text(
+                'Cadastre pessoas da sua rede com cidade em MT para somarem na estimativa e aparecerem no mapa regional.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
             ],
-          ),
-          if (profile?.role == 'apoiador') ...[
-            const SizedBox(height: 8),
-            Text(
-              'Cadastre pessoas da sua rede com cidade em MT para somarem na estimativa e aparecerem no mapa regional.',
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Buscar em $kAmigosGilbertoLabel...',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (v) => setState(() {
+                          _query = v;
+                          _paginaLista = 0;
+                        }),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Filtrar por cidade...',
+                          prefixIcon: Icon(Icons.filter_list),
+                        ),
+                        onChanged: (v) => setState(() {
+                          _cidadeFilter = v;
+                          _paginaLista = 0;
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    IconButton.outlined(
+                      tooltip:
+                          'Dashboard da rede de indicações — quem indicou a quem e pirâmide',
+                      icon: const Icon(Icons.hub_rounded),
+                      onPressed: () =>
+                          context.push('/dashboard-indicacoes-amigos'),
+                    ),
+                    if (podeCadastrar)
+                      FilledButton.icon(
+                        onPressed: () => _abrirNovoOuEditar(),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Novo — $kAmigosGilbertoLabel'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Chip(label: Text('${filtered.length} cadastrados')),
+                const SizedBox(width: 8),
+                Chip(label: Text('$votosTotal votos estimados')),
+              ],
+            ),
+            const SizedBox(height: 16),
+            list.when(
+              data: (_) {
+                final totalFiltrados = filtered.length;
+                final maxPaginaIdx = totalFiltrados == 0
+                    ? 0
+                    : (totalFiltrados - 1) ~/ _cadastrosPorPagina;
+                final paginaSafe =
+                    totalFiltrados == 0 ? 0 : min(_paginaLista, maxPaginaIdx);
+                final ini = paginaSafe * _cadastrosPorPagina;
+                final fim = ini + _cadastrosPorPagina > totalFiltrados
+                    ? totalFiltrados
+                    : ini + _cadastrosPorPagina;
+                final paginaItens =
+                    filtered.sublist(ini.clamp(0, totalFiltrados), fim);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _VotantesTable(
+                      votantes: paginaItens,
+                      apoiadorPorId: apoiadorPorId,
+                      podePromoverApoiador: podePromoverApoiador,
+                      podeExcluir: podeExcluirVotante,
+                      onEdit: (v) => _abrirNovoOuEditar(existente: v),
+                      onDelete: _confirmarExcluir,
+                      onPromover: _promoverParaApoiador,
+                    ),
+                    if (totalFiltrados > _cadastrosPorPagina) ...[
+                      const SizedBox(height: 12),
+                      _PaginaListaAmigos(
+                        totalItens: totalFiltrados,
+                        porPagina: _cadastrosPorPagina,
+                        paginaAtualVisual: paginaSafe,
+                        maxPaginaIdx: maxPaginaIdx,
+                        primeiroIndiceLista: ini,
+                        ultimoIndiceListaExclusivo: fim,
+                        onAnterior: paginaSafe > 0
+                            ? () =>
+                                setState(() => _paginaLista = paginaSafe - 1)
+                            : null,
+                        onSeguinte: paginaSafe < maxPaginaIdx
+                            ? () =>
+                                setState(() => _paginaLista = paginaSafe + 1)
+                            : null,
+                      ),
+                    ],
+                  ],
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Text('Erro: $e'),
             ),
           ],
-          const SizedBox(height: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Buscar em $kAmigosGilbertoLabel...',
-                        prefixIcon: const Icon(Icons.search),
-                      ),
-                      onChanged: (v) => setState(() => _query = v),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        hintText: 'Filtrar por cidade...',
-                        prefixIcon: Icon(Icons.filter_list),
-                      ),
-                      onChanged: (v) => setState(() => _cidadeFilter = v),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  IconButton.outlined(
-                    tooltip:
-                        'Dashboard da rede de indicações — quem indicou a quem e pirâmide',
-                    icon: const Icon(Icons.hub_rounded),
-                    onPressed: () => context.push('/dashboard-indicacoes-amigos'),
-                  ),
-                  if (podeCadastrar)
-                    FilledButton.icon(
-                      onPressed: () => _abrirNovoOuEditar(),
-                      icon: const Icon(Icons.add),
-                      label: Text('Novo — $kAmigosGilbertoLabel'),
-                    ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Chip(label: Text('${filtered.length} cadastrados')),
-              const SizedBox(width: 8),
-              Chip(label: Text('$votosTotal votos estimados')),
-            ],
-          ),
-          const SizedBox(height: 16),
-          list.when(
-            data: (_) => _VotantesTable(
-              votantes: filtered,
-              apoiadorPorId: apoiadorPorId,
-              podePromoverApoiador: podePromoverApoiador,
-              podeExcluir: podeExcluirVotante,
-              onEdit: (v) => _abrirNovoOuEditar(existente: v),
-              onDelete: _confirmarExcluir,
-              onPromover: _promoverParaApoiador,
-            ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Erro: $e'),
-          ),
-        ],
+        ),
       ),
-    ),
     );
   }
 }
@@ -245,6 +329,84 @@ String _instagramCelulaVotante(String? raw) {
   if (s.length > 28) return '${s.substring(0, 25)}…';
   return s;
 }
+
+/// Paginação abaixo da tabela («20 em 20»).
+class _PaginaListaAmigos extends StatelessWidget {
+  const _PaginaListaAmigos({
+    required this.totalItens,
+    required this.porPagina,
+    required this.paginaAtualVisual,
+    required this.maxPaginaIdx,
+    required this.primeiroIndiceLista,
+    required this.ultimoIndiceListaExclusivo,
+    required this.onAnterior,
+    required this.onSeguinte,
+  });
+
+  final int totalItens;
+  final int porPagina;
+  final int paginaAtualVisual;
+  final int maxPaginaIdx;
+  final int primeiroIndiceLista;
+  final int ultimoIndiceListaExclusivo;
+  final VoidCallback? onAnterior;
+  final VoidCallback? onSeguinte;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    final de = primeiroIndiceLista + 1;
+    final ate = ultimoIndiceListaExclusivo;
+    final numPaginas = maxPaginaIdx + 1;
+    final mostraUm = ate == 0 ? '—' : '$de';
+
+    return Material(
+      color: tema.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            Text(
+              'Mostrando $mostraUm–$ate de $totalItens (até $porPagina por página)',
+              style: tema.textTheme.bodyMedium,
+            ),
+            const SizedBox(width: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton.filledTonal(
+                  tooltip: 'Página anterior',
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  onPressed: onAnterior,
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    'Página ${paginaAtualVisual + 1} de $numPaginas',
+                    style: tema.textTheme.labelLarge,
+                  ),
+                ),
+                IconButton.filledTonal(
+                  tooltip: 'Página seguinte',
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  onPressed: onSeguinte,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// «Indicação» na tabela (mesmo critério da rede): convite salvo → apoiador → candidato fallback.
+String _indicacaoCelulaVotante(Votante v, Map<String, String> apoiadorPorId) =>
+    textoIndicacaoResolvidoAmigosGilberto(v, apoiadorPorId);
 
 class _VotantesTable extends StatelessWidget {
   const _VotantesTable({
@@ -275,9 +437,13 @@ class _VotantesTable extends StatelessWidget {
         itemCount: votantes.length,
         itemBuilder: (_, i) {
           final v = votantes[i];
-          final cidade = v.cidadeDisplay.isNotEmpty ? displayNomeCidadeMT(v.cidadeDisplay) : '—';
-          final ap = v.apoiadorId != null ? (apoiadorPorId[v.apoiadorId!] ?? '—') : '—';
-          final ind = v.convitePorNome ?? '—';
+          final cidade = v.cidadeDisplay.isNotEmpty
+              ? displayNomeCidadeMT(v.cidadeDisplay)
+              : '—';
+          final ap = v.apoiadorId != null
+              ? (apoiadorPorId[v.apoiadorId!] ?? '—')
+              : '—';
+          final ind = _indicacaoCelulaVotante(v, apoiadorPorId);
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
@@ -289,15 +455,20 @@ class _VotantesTable extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (podePromoverApoiador && v.apoiadorId == null && v.municipioId != null)
+                  if (podePromoverApoiador &&
+                      v.apoiadorId == null &&
+                      v.municipioId != null)
                     IconButton(
                       icon: const Icon(Icons.upgrade),
                       tooltip: 'Promover a apoiador',
                       onPressed: () => onPromover(v),
                     ),
-                  IconButton(icon: const Icon(Icons.edit), onPressed: () => onEdit(v)),
+                  IconButton(
+                      icon: const Icon(Icons.edit), onPressed: () => onEdit(v)),
                   if (podeExcluir)
-                    IconButton(icon: const Icon(Icons.delete), onPressed: () => onDelete(v)),
+                    IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () => onDelete(v)),
                 ],
               ),
             ),
@@ -305,56 +476,74 @@ class _VotantesTable extends StatelessWidget {
         },
       );
     }
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Nome')),
-          DataColumn(label: Text('Contato')),
-          DataColumn(label: Text('Instagram')),
-          DataColumn(label: Text('Cidade')),
-          DataColumn(label: Text('Abrangência')),
-          DataColumn(label: Text('Votos')),
-          DataColumn(label: Text('Apoiador')),
-          DataColumn(label: Text('Indicação')),
-          DataColumn(label: Text('Ações')),
-        ],
-        rows: votantes.map((v) {
-          final cidade = v.cidadeDisplay.isNotEmpty ? displayNomeCidadeMT(v.cidadeDisplay) : '—';
-          final ap = v.apoiadorId != null ? (apoiadorPorId[v.apoiadorId!] ?? '—') : '—';
-          final ind = v.convitePorNome ?? '—';
-          final podePromover = podePromoverApoiador && v.apoiadorId == null && v.municipioId != null;
-          return DataRow(
-            cells: [
-              DataCell(Text(v.nome)),
-              DataCell(Text(
-                v.telefone == null || v.telefone!.isEmpty
-                    ? '—'
-                    : formatTelefoneBrFromDigits(v.telefone),
-              )),
-              DataCell(Text(_instagramCelulaVotante(v.linkInstagram))),
-              DataCell(Text(displayNomeCidadeMT(cidade))),
-              DataCell(Text(v.abrangencia)),
-              DataCell(Text('${v.qtdVotosFamilia}')),
-              DataCell(Text(ap)),
-              DataCell(Text(ind)),
-              DataCell(Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (podePromover)
-                    IconButton(
-                      icon: const Icon(Icons.upgrade, size: 20),
-                      tooltip: 'Promover a apoiador',
-                      onPressed: () => onPromover(v),
-                    ),
-                  IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => onEdit(v)),
-                  if (podeExcluir)
-                    IconButton(icon: const Icon(Icons.delete, size: 20), onPressed: () => onDelete(v)),
-                ],
-              )),
+    return Tooltip(
+      message:
+          'Pode clicar na tabela com o rato pressionado e arrastar lateralmente '
+          '(ou use a rodinha/deslize no touchpad).',
+      child: ScrollConfiguration(
+        behavior: const DesktopDragScrollBehavior(),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columns: const [
+              DataColumn(label: Text('Nome')),
+              DataColumn(label: Text('Contato')),
+              DataColumn(label: Text('Instagram')),
+              DataColumn(label: Text('Cidade')),
+              DataColumn(label: Text('Abrangência')),
+              DataColumn(label: Text('Votos')),
+              DataColumn(label: Text('Apoiador')),
+              DataColumn(label: Text('Indicação')),
+              DataColumn(label: Text('Ações')),
             ],
-          );
-        }).toList(),
+            rows: votantes.map((v) {
+              final cidade = v.cidadeDisplay.isNotEmpty
+                  ? displayNomeCidadeMT(v.cidadeDisplay)
+                  : '—';
+              final ap = v.apoiadorId != null
+                  ? (apoiadorPorId[v.apoiadorId!] ?? '—')
+                  : '—';
+              final ind = _indicacaoCelulaVotante(v, apoiadorPorId);
+              final podePromover = podePromoverApoiador &&
+                  v.apoiadorId == null &&
+                  v.municipioId != null;
+              return DataRow(
+                cells: [
+                  DataCell(Text(v.nome)),
+                  DataCell(Text(
+                    v.telefone == null || v.telefone!.isEmpty
+                        ? '—'
+                        : formatTelefoneBrFromDigits(v.telefone),
+                  )),
+                  DataCell(Text(_instagramCelulaVotante(v.linkInstagram))),
+                  DataCell(Text(displayNomeCidadeMT(cidade))),
+                  DataCell(Text(v.abrangencia)),
+                  DataCell(Text('${v.qtdVotosFamilia}')),
+                  DataCell(Text(ap)),
+                  DataCell(Text(ind)),
+                  DataCell(Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (podePromover)
+                        IconButton(
+                          icon: const Icon(Icons.upgrade, size: 20),
+                          tooltip: 'Promover a apoiador',
+                          onPressed: () => onPromover(v),
+                        ),
+                      IconButton(
+                          icon: const Icon(Icons.edit, size: 20),
+                          onPressed: () => onEdit(v)),
+                      if (podeExcluir)
+                        IconButton(
+                            icon: const Icon(Icons.delete, size: 20),
+                            onPressed: () => onDelete(v)),
+                    ],
+                  )),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }
@@ -380,14 +569,17 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
   late final TextEditingController _linkInstagram;
+
   /// Chave normalizada (lista `listCidadesMTNomesNormalizados`), igual ao cadastro de apoiadores.
   String? _cidadeNomeNormalizado;
   String? _cidadeErro;
   String _abrangencia = 'Individual';
   bool _loading = false;
+
   /// Apoiador criando votante: preenche cidade padrão uma vez a partir do cadastro.
   bool _apoiadorPadraoCidadeAplicado = false;
   bool _postFrameDefaultApoiadorAgendado = false;
+
   /// Edição: sincronizar dropdown a partir de `municipio_id` (uma vez).
   bool _postFrameSyncEdicaoAgendado = false;
 
@@ -396,7 +588,8 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     super.initState();
     final v = widget.existente;
     _nome = TextEditingController(text: v?.nome ?? '');
-    _telefone = TextEditingController(text: formatTelefoneBrFromDigits(v?.telefone));
+    _telefone =
+        TextEditingController(text: formatTelefoneBrFromDigits(v?.telefone));
     _email = TextEditingController(text: v?.email ?? '');
     _qtd = TextEditingController(text: '${v?.qtdVotosFamilia ?? 1}');
     _cep = TextEditingController(text: formatCepDisplayFromDigits(v?.cep));
@@ -432,11 +625,13 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   }
 
   Future<void> _salvar() async {
-    if (_cidadeNomeNormalizado == null || _cidadeNomeNormalizado!.trim().isEmpty) {
+    if (_cidadeNomeNormalizado == null ||
+        _cidadeNomeNormalizado!.trim().isEmpty) {
       setState(() => _cidadeErro = 'Selecione o município.');
     }
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_cidadeNomeNormalizado == null || _cidadeNomeNormalizado!.trim().isEmpty) {
+    if (_cidadeNomeNormalizado == null ||
+        _cidadeNomeNormalizado!.trim().isEmpty) {
       return;
     }
 
@@ -444,9 +639,10 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     try {
       // Tenta resolver municipio_id — mas NÃO bloqueia se não conseguir.
       final municipios = await refreshMunicipiosMTList(ref);
-      var municipioIdResolvido = municipioIdParaNomeCidade(_cidadeNomeNormalizado, municipios);
-      municipioIdResolvido ??=
-          municipioIdParaNomeCidade(displayNomeCidadeMT(_cidadeNomeNormalizado!), municipios);
+      var municipioIdResolvido =
+          municipioIdParaNomeCidade(_cidadeNomeNormalizado, municipios);
+      municipioIdResolvido ??= municipioIdParaNomeCidade(
+          displayNomeCidadeMT(_cidadeNomeNormalizado!), municipios);
 
       // Cidade em texto legível para salvar em cidade_nome.
       final cidadeTexto = displayNomeCidadeMT(_cidadeNomeNormalizado!);
@@ -459,17 +655,27 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
           widget.existente!.id,
           AtualizarVotanteParams(
             nome: _nome.text.trim(),
-            telefone: telefoneSoDigitos(_telefone.text).isEmpty ? null : telefoneSoDigitos(_telefone.text),
+            telefone: telefoneSoDigitos(_telefone.text).isEmpty
+                ? null
+                : telefoneSoDigitos(_telefone.text),
             email: _email.text.trim().isEmpty ? null : _email.text.trim(),
             municipioId: municipioIdResolvido,
             cidadeNome: cidadeTexto,
             abrangencia: _abrangencia,
             qtdVotosFamilia: qtd,
-            cep: cepSoDigitos(_cep.text).isEmpty ? null : cepSoDigitos(_cep.text),
-            logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
+            cep: cepSoDigitos(_cep.text).isEmpty
+                ? null
+                : cepSoDigitos(_cep.text),
+            logradouro: _logradouro.text.trim().isEmpty
+                ? null
+                : _logradouro.text.trim(),
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
-            complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
-            linkInstagram: _linkInstagram.text.trim().isEmpty ? null : _linkInstagram.text.trim(),
+            complemento: _complemento.text.trim().isEmpty
+                ? null
+                : _complemento.text.trim(),
+            linkInstagram: _linkInstagram.text.trim().isEmpty
+                ? null
+                : _linkInstagram.text.trim(),
             atualizarLinkInstagram: true,
           ),
         );
@@ -477,7 +683,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
         await ref.read(criarVotanteProvider)(
           NovoVotanteParams(
             nome: _nome.text.trim(),
-            telefone: telefoneSoDigitos(_telefone.text).isEmpty ? null : telefoneSoDigitos(_telefone.text),
+            telefone: telefoneSoDigitos(_telefone.text).isEmpty
+                ? null
+                : telefoneSoDigitos(_telefone.text),
             email: _email.text.trim().isEmpty ? null : _email.text.trim(),
             municipioId: municipioIdResolvido,
             cidadeNome: cidadeTexto,
@@ -485,12 +693,20 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             qtdVotosFamilia: qtd < 1 ? 1 : qtd,
             // Candidato/assessor: sem apoiador na rede; apoiador: preenchido no provider.
             apoiadorId: null,
-            cep: cepSoDigitos(_cep.text).isEmpty ? null : cepSoDigitos(_cep.text),
-            logradouro: _logradouro.text.trim().isEmpty ? null : _logradouro.text.trim(),
+            cep: cepSoDigitos(_cep.text).isEmpty
+                ? null
+                : cepSoDigitos(_cep.text),
+            logradouro: _logradouro.text.trim().isEmpty
+                ? null
+                : _logradouro.text.trim(),
             numero: _numero.text.trim().isEmpty ? null : _numero.text.trim(),
-            complemento: _complemento.text.trim().isEmpty ? null : _complemento.text.trim(),
+            complemento: _complemento.text.trim().isEmpty
+                ? null
+                : _complemento.text.trim(),
             cadastroViaQr: cadastroAvulsoQr,
-            linkInstagram: _linkInstagram.text.trim().isEmpty ? null : _linkInstagram.text.trim(),
+            linkInstagram: _linkInstagram.text.trim().isEmpty
+                ? null
+                : _linkInstagram.text.trim(),
           ),
         );
       }
@@ -540,7 +756,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
           data: (municipios) {
             final apAsync = ref.watch(meuApoiadorProvider);
             final ex = widget.existente;
-            if (ex != null && !_postFrameSyncEdicaoAgendado && _cidadeNomeNormalizado == null) {
+            if (ex != null &&
+                !_postFrameSyncEdicaoAgendado &&
+                _cidadeNomeNormalizado == null) {
               _postFrameSyncEdicaoAgendado = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
@@ -555,11 +773,15 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                   }
                 }
                 // Fallback: cidade_nome salvo
-                if (key == null && ex.cidadeNome != null && ex.cidadeNome!.trim().isNotEmpty) {
+                if (key == null &&
+                    ex.cidadeNome != null &&
+                    ex.cidadeNome!.trim().isNotEmpty) {
                   final tentKey = normalizarNomeMunicipioMT(ex.cidadeNome!);
-                  if (listCidadesMTNomesNormalizados.contains(tentKey)) key = tentKey;
+                  if (listCidadesMTNomesNormalizados.contains(tentKey))
+                    key = tentKey;
                 }
-                if (key != null && mounted) setState(() => _cidadeNomeNormalizado = key);
+                if (key != null && mounted)
+                  setState(() => _cidadeNomeNormalizado = key);
               });
             }
             if (profile?.role == 'apoiador' &&
@@ -578,15 +800,19 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                   if (mid != null && mid.isNotEmpty) {
                     for (final m in municipios) {
                       if (m.id == mid) {
-                        _cidadeNomeNormalizado = normalizarNomeMunicipioMT(m.nome);
+                        _cidadeNomeNormalizado =
+                            normalizarNomeMunicipioMT(m.nome);
                         break;
                       }
                     }
                   }
                   // Fallback: texto de cidade_nome do apoiador (funciona sem municipios no banco)
-                  if (_cidadeNomeNormalizado == null && ap?.cidadeNome != null) {
-                    final key = normalizarNomeMunicipioMT(ap!.cidadeNome!.trim());
-                    if (key.isNotEmpty && listCidadesMTNomesNormalizados.contains(key)) {
+                  if (_cidadeNomeNormalizado == null &&
+                      ap?.cidadeNome != null) {
+                    final key =
+                        normalizarNomeMunicipioMT(ap!.cidadeNome!.trim());
+                    if (key.isNotEmpty &&
+                        listCidadesMTNomesNormalizados.contains(key)) {
                       _cidadeNomeNormalizado = key;
                     }
                   }
@@ -624,7 +850,8 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                     return amigosGilbertoEmailValidatorPainel(v);
                   },
                   footerWidget: widget.existente == null && profile != null
-                      ? _VinculoCadastroNovoVotante(theme: theme, profile: profile)
+                      ? _VinculoCadastroNovoVotante(
+                          theme: theme, profile: profile)
                       : null,
                 ),
               ),
@@ -640,7 +867,10 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
         FilledButton(
           onPressed: _loading ? null : _salvar,
           child: _loading
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('Salvar'),
         ),
       ],
@@ -675,8 +905,9 @@ class _VinculoCadastroNovoVotante extends ConsumerWidget {
       case 'assessor':
         return ref.watch(meuAssessorRegistroProvider).when(
               data: (a) {
-                final nome =
-                    a?.nome.trim().isNotEmpty == true ? a!.nome : 'Seu cadastro de assessor';
+                final nome = a?.nome.trim().isNotEmpty == true
+                    ? a!.nome
+                    : 'Seu cadastro de assessor';
                 return _vinculoCadastroCard(
                   theme: theme,
                   icon: Icons.badge_outlined,
@@ -707,8 +938,9 @@ class _VinculoCadastroNovoVotante extends ConsumerWidget {
       case 'apoiador':
         return ref.watch(meuApoiadorProvider).when(
               data: (ap) {
-                final nome =
-                    ap?.nome.trim().isNotEmpty == true ? ap!.nome : 'Seu cadastro de apoiador';
+                final nome = ap?.nome.trim().isNotEmpty == true
+                    ? ap!.nome
+                    : 'Seu cadastro de apoiador';
                 return _vinculoCadastroCard(
                   theme: theme,
                   icon: Icons.volunteer_activism_outlined,
@@ -763,7 +995,8 @@ Widget _vinculoCadastroCard({
                 const SizedBox(height: 6),
                 Text(
                   destaque,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -777,11 +1010,11 @@ Widget _vinculoCadastroCard({
           ),
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Icon(Icons.lock_outline, size: 18, color: theme.colorScheme.outline),
+            child: Icon(Icons.lock_outline,
+                size: 18, color: theme.colorScheme.outline),
           ),
         ],
       ),
     ),
   );
 }
-

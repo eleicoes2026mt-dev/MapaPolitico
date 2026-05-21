@@ -209,8 +209,9 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     if (list == null) return null;
     for (final regiao in list) {
       for (final geo in regiao.polygons) {
-        if (_pointInGeoPolygon(p, geo))
+        if (_pointInGeoPolygon(p, geo)) {
           return (regiao.id, regiao.nome, regiao.cdRgint);
+        }
       }
     }
     return null;
@@ -258,8 +259,9 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
     String? corSelecionada = cdRgint != null
         ? (widget.coresCustomizadas?[cdRgint] ?? _coresPadrao[cdRgint])
         : null;
-    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada))
+    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada)) {
       corSelecionada = coresOpcoes.first;
+    }
 
     final fundidas = widget.regioesFundidas ?? [];
     final estaEmFusao = cdRgint != null &&
@@ -740,8 +742,9 @@ class _MapaRegionalWidgetState extends State<MapaRegionalWidget> {
                       final cdRgint = att['cdRgint'] as String?;
                       if (regionId != null && nome != null && mounted) {
                         if (widget.onRegionTap != null &&
-                            widget.onRegionTap!(regionId, nome, cdRgint))
+                            widget.onRegionTap!(regionId, nome, cdRgint)) {
                           return;
+                        }
                         if (widget.onSaveNomeRegiao == null) {
                           setState(() {
                             _regiaoDrillDownId = _regiaoDrillDownId == regionId

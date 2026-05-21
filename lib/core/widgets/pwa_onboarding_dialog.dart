@@ -261,11 +261,12 @@ class _PwaOnboardingDialogState extends State<_PwaOnboardingDialog> {
       // Aguarda o evento pwa-app-installed ou avança após 3s
       await Future.delayed(const Duration(seconds: 3));
     }
-    if (mounted)
+    if (mounted) {
       setState(() {
         _loading = false;
         _step = 1;
       });
+    }
   }
 
   // ── Passo 2: Notificações ─────────────────────────────────────────────────

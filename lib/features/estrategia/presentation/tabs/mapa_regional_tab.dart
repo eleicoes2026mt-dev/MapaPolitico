@@ -29,7 +29,9 @@ class _MapaRegionalTabState extends ConsumerState<MapaRegionalTab> {
 
   bool _onRegionTap(String id, String nome, String? cdRgint) {
     if (!HardwareKeyboard.instance.isControlPressed &&
-        !HardwareKeyboard.instance.isMetaPressed) return false;
+        !HardwareKeyboard.instance.isMetaPressed) {
+      return false;
+    }
     if (cdRgint == null || cdRgint.isEmpty) return true;
     final fundidas = ref.read(regioesFundidasParaMapaProvider);
     final covered = <String>{};

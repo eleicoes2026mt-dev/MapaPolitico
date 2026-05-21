@@ -280,6 +280,30 @@ Future<void> removerAssessor(String assessorId) async {
   await supabase.from('assessores').delete().eq('id', assessorId);
 }
 
+/// Rebaixa assessor (RPC). [destino] = `apoiador` ou `votante_amigos` («Amigos do Gilberto», votante sem equipa central).
+Future<String> rebaixarAssessorParaPapel({
+  required String assessorId,
+  required String destino,
+}) async {
+  await supabase.auth.refreshSession();
+  try {
+    final raw = await supabase.rpc(
+      'rebaixar_assessor_para_papel',
+      params: {
+        'p_assessor_id': assessorId,
+        'p_destino': destino,
+      },
+    );
+    final id = raw?.toString().trim();
+    if (id == null || id.isEmpty) {
+      throw Exception('Não foi possível concluir o rebaixamento.');
+    }
+    return id;
+  } on PostgrestException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}
+
 /// Desativar ou reativar assessor convidado (apenas candidato). Atualiza `assessores.ativo` e `profiles.ativo`.
 Future<void> setAssessorGrauAcesso(
     {required String assessorId, required int grauAcesso}) async {

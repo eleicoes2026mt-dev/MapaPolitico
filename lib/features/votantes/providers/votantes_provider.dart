@@ -4,6 +4,7 @@ import '../../../models/municipio.dart';
 import '../../../models/votante.dart';
 import '../../../core/supabase/municipios_seed.dart' show ensureMunicipiosMtSeeded, forceMunicipiosMtRecovery;
 import '../../../core/supabase/supabase_provider.dart';
+import '../../../core/router/profile_role_cache.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart'
     show apoiadoresListProvider, meuApoiadorIdProvider;
@@ -41,7 +42,7 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
         .from('votantes')
         .select(_kVotantesSelect)
         .eq('profile_id', uid)
-        .order('nome');
+        .order('nome', ascending: true);
     return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
   }
 
@@ -55,12 +56,12 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
                     .from('votantes')
                     .select(_kVotantesSelect)
                     .or('apoiador_id.eq.$apoiadorId,convite_por_profile_id.eq.$uid')
-                    .order('nome')
+                    .order('nome', ascending: true)
                 : await supabase
                     .from('votantes')
                     .select(_kVotantesSelect)
                     .eq('apoiador_id', apoiadorId)
-                    .order('nome');
+                    .order('nome', ascending: true);
             return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
           },
           loading: () async => [],
@@ -68,8 +69,44 @@ final votantesListProvider = FutureProvider<List<Votante>>((ref) async {
         );
   }
 
-  final res = await supabase.from('votantes').select(_kVotantesSelect).order('nome');
+  final res = await supabase
+      .from('votantes')
+      .select(_kVotantesSelect)
+      .order('nome', ascending: true);
   return (res as List).map((e) => Votante.fromJson(e as Map<String, dynamic>)).toList();
+});
+
+/// Lista usada apenas por [IndicacoesRedeDashboardScreen].
+///
+/// Perfis `votante` estão restritos pela RLS a `profile_id = auth.uid()` nas leituras
+/// normais; a sub-rede de indicações precisa também dos convidados (e níveis seguintes).
+/// Chama RPC [app_votantes_subrede_indicacoes_votante_logado] quando o papel é votante.
+final votantesIndicacaoRedeListProvider = FutureProvider<List<Votante>>((ref) async {
+  final profile = await ref.watch(profileProvider.future);
+  if (profile == null) return [];
+
+  if (profile.role != 'votante') {
+    return await ref.watch(votantesListProvider.future);
+  }
+
+  dynamic raw;
+  try {
+    raw = await supabase.rpc('app_votantes_subrede_indicacoes_votante_logado');
+  } catch (_) {
+    return await ref.watch(votantesListProvider.future);
+  }
+
+  if (raw is! List || raw.isEmpty) {
+    return await ref.watch(votantesListProvider.future);
+  }
+
+  try {
+    return raw
+        .map((e) => Votante.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  } catch (_) {
+    return await ref.watch(votantesListProvider.future);
+  }
 });
 
 /// Municípios MT — tenta seed automático client-side se a tabela estiver vazia.
@@ -224,6 +261,7 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
 
     await client.from('votantes').insert(insert);
     ref.invalidate(votantesListProvider);
+    ref.invalidate(votantesIndicacaoRedeListProvider);
   };
 });
 
@@ -292,6 +330,7 @@ final atualizarVotanteProvider = Provider<Future<void> Function(String id, Atual
       );
     }
     ref.invalidate(votantesListProvider);
+    ref.invalidate(votantesIndicacaoRedeListProvider);
   };
 });
 
@@ -300,6 +339,7 @@ final removerVotanteProvider = Provider<Future<void> Function(String id)>((ref) 
   return (String id) async {
     await client.from('votantes').delete().eq('id', id);
     ref.invalidate(votantesListProvider);
+    ref.invalidate(votantesIndicacaoRedeListProvider);
   };
 });
 
@@ -311,11 +351,43 @@ final promoverVotanteParaApoiadorProvider = Provider<Future<String> Function(Str
       params: {'p_votante_id': votanteId},
     );
     ref.invalidate(votantesListProvider);
+    ref.invalidate(votantesIndicacaoRedeListProvider);
     ref.invalidate(apoiadoresListProvider);
     ref.invalidate(benfeitoriasAggPorMunicipioProvider);
     final id = res?.toString().trim();
     if (id == null || id.isEmpty) {
       throw Exception('Não foi possível promover o votante.');
+    }
+    return id;
+  };
+});
+
+/// Promove votante a assessor na mesma campanha (RPC). Retorna [assessores.id].
+/// Mantém vínculos de rede por UUID do perfil (convites por QR/link); só remove a linha em [votantes].
+final promoverVotanteParaAssessorProvider = Provider<
+    Future<String> Function(String votanteId, {String? promotedProfileId})>((ref) {
+  return (String votanteId, {String? promotedProfileId}) async {
+    final res = await supabase.rpc(
+      'promover_votante_para_assessor',
+      params: {'p_votante_id': votanteId},
+    );
+    ref.invalidate(votantesListProvider);
+    ref.invalidate(votantesIndicacaoRedeListProvider);
+    ref.invalidate(apoiadoresListProvider);
+    ref.invalidate(assessoresListProvider);
+    ref.invalidate(benfeitoriasAggPorMunicipioProvider);
+    final pu = promotedProfileId?.trim();
+    final me = ref.read(currentUserProvider)?.id;
+    if (pu != null &&
+        pu.isNotEmpty &&
+        me != null &&
+        pu == me) {
+      clearProfileRoleCache();
+      ref.invalidate(profileProvider);
+    }
+    final id = res?.toString().trim();
+    if (id == null || id.isEmpty) {
+      throw Exception('Não foi possível promover a assessor.');
     }
     return id;
   };

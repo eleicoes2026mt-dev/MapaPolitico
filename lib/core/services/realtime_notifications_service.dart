@@ -39,6 +39,7 @@ class RealtimeNotificationsService {
     final r = _ref;
     if (r == null) return;
     r.invalidate(votantesListProvider);
+    r.invalidate(votantesIndicacaoRedeListProvider);
     r.invalidate(dashboardStatsProvider);
     r.invalidate(campanhaKpisProvider);
   }

@@ -88,6 +88,51 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
     }
   }
 
+  Future<void> _promoverParaAssessor(Votante v) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Promover a assessor'),
+        content: Text(
+          'Dar a "${v.nome}" permissões de equipa (assessor nesta campanha)? '
+          'O registro sai da lista de $kAmigosGilbertoLabel. '
+          'As indicações e convites já feitos continuam ligados ao perfil da pessoa (UUID)—os relatórios de rede são preservados. '
+          'A própria pessoa deve sair da app e voltar a entrar para ver o menu de assessor.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Promover')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(promoverVotanteParaAssessorProvider)(
+        v.id,
+        promotedProfileId: v.profileId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Promovido a assessor: convites/indicações passados mantêm-se; peça logout/login na conta dessa pessoa.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
   Future<void> _confirmarExcluir(Votante v) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -151,7 +196,7 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
 
     final votantes = list.valueOrNull ?? [];
     final votosTotal = votantes.fold<int>(0, (a, v) => a + v.qtdVotosFamilia);
-    var filtered = votantes;
+    var filtered = List<Votante>.from(votantes);
     if (_query.isNotEmpty) {
       filtered = filtered
           .where((v) => v.nome.toLowerCase().contains(_query.toLowerCase()))
@@ -164,6 +209,12 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
         return nome.contains(q);
       }).toList();
     }
+    filtered.sort(
+      (a, b) => a.nome
+          .trim()
+          .toLowerCase()
+          .compareTo(b.nome.trim().toLowerCase()),
+    );
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -289,7 +340,8 @@ class _VotantesScreenState extends ConsumerState<VotantesScreen> {
                       podeExcluir: podeExcluirVotante,
                       onEdit: (v) => _abrirNovoOuEditar(existente: v),
                       onDelete: _confirmarExcluir,
-                      onPromover: _promoverParaApoiador,
+                      onPromoverApoiador: _promoverParaApoiador,
+                      onPromoverAssessor: _promoverParaAssessor,
                     ),
                     if (totalFiltrados > _cadastrosPorPagina) ...[
                       const SizedBox(height: 12),
@@ -408,6 +460,58 @@ class _PaginaListaAmigos extends StatelessWidget {
 String _indicacaoCelulaVotante(Votante v, Map<String, String> apoiadorPorId) =>
     textoIndicacaoResolvidoAmigosGilberto(v, apoiadorPorId);
 
+enum _PromoverDestinoCadastroAmigo { apoiador, assessor }
+
+/// Menu para promover cadastro público como apoiador ou assessor da campanha.
+class _MenuPromoverCadastroAmigo extends StatelessWidget {
+  const _MenuPromoverCadastroAmigo({
+    required this.v,
+    required this.podeOpcaoApoiador,
+    required this.podeOpcaoAssessor,
+    required this.iconSize,
+    required this.onPromoverApoiador,
+    required this.onPromoverAssessor,
+  });
+
+  final Votante v;
+  /// Município definido, sem apoiador.
+  final bool podeOpcaoApoiador;
+  /// Conta ligada (`profile_id`) e e-mail.
+  final bool podeOpcaoAssessor;
+  final double iconSize;
+  final void Function(Votante) onPromoverApoiador;
+  final void Function(Votante) onPromoverAssessor;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_PromoverDestinoCadastroAmigo>(
+      tooltip: 'Promover cadastro',
+      enabled: podeOpcaoApoiador || podeOpcaoAssessor,
+      onSelected: (d) {
+        switch (d) {
+          case _PromoverDestinoCadastroAmigo.apoiador:
+            onPromoverApoiador(v);
+          case _PromoverDestinoCadastroAmigo.assessor:
+            onPromoverAssessor(v);
+        }
+      },
+      icon: Icon(Icons.workspace_premium_outlined, size: iconSize),
+      itemBuilder: (ctx) => [
+        PopupMenuItem(
+          value: _PromoverDestinoCadastroAmigo.apoiador,
+          enabled: podeOpcaoApoiador,
+          child: const Text('Promover como apoiador'),
+        ),
+        PopupMenuItem(
+          value: _PromoverDestinoCadastroAmigo.assessor,
+          enabled: podeOpcaoAssessor,
+          child: const Text('Promover como assessor'),
+        ),
+      ],
+    );
+  }
+}
+
 class _VotantesTable extends StatelessWidget {
   const _VotantesTable({
     required this.votantes,
@@ -416,7 +520,8 @@ class _VotantesTable extends StatelessWidget {
     required this.podeExcluir,
     required this.onEdit,
     required this.onDelete,
-    required this.onPromover,
+    required this.onPromoverApoiador,
+    required this.onPromoverAssessor,
   });
 
   final List<Votante> votantes;
@@ -425,11 +530,23 @@ class _VotantesTable extends StatelessWidget {
   final bool podeExcluir;
   final void Function(Votante) onEdit;
   final void Function(Votante) onDelete;
-  final void Function(Votante) onPromover;
+  final void Function(Votante) onPromoverApoiador;
+  final void Function(Votante) onPromoverAssessor;
 
   @override
   Widget build(BuildContext context) {
     final isNarrow = MediaQuery.sizeOf(context).width < 700;
+
+    ({bool base, bool apoiador, bool assessor}) promoverFlags(Votante v) {
+      final baseEl = podePromoverApoiador && v.apoiadorId == null;
+      final ap = baseEl && v.municipioId != null;
+      final as = baseEl &&
+          v.profileId != null &&
+          v.profileId!.trim().isNotEmpty &&
+          (v.email?.trim().isNotEmpty ?? false);
+      return (base: baseEl, apoiador: ap, assessor: as);
+    }
+
     if (isNarrow) {
       return ListView.builder(
         shrinkWrap: true,
@@ -437,6 +554,7 @@ class _VotantesTable extends StatelessWidget {
         itemCount: votantes.length,
         itemBuilder: (_, i) {
           final v = votantes[i];
+          final pf = promoverFlags(v);
           final cidade = v.cidadeDisplay.isNotEmpty
               ? displayNomeCidadeMT(v.cidadeDisplay)
               : '—';
@@ -455,13 +573,14 @@ class _VotantesTable extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (podePromoverApoiador &&
-                      v.apoiadorId == null &&
-                      v.municipioId != null)
-                    IconButton(
-                      icon: const Icon(Icons.upgrade),
-                      tooltip: 'Promover a apoiador',
-                      onPressed: () => onPromover(v),
+                  if (pf.base && (pf.apoiador || pf.assessor))
+                    _MenuPromoverCadastroAmigo(
+                      v: v,
+                      podeOpcaoApoiador: pf.apoiador,
+                      podeOpcaoAssessor: pf.assessor,
+                      iconSize: 24,
+                      onPromoverApoiador: onPromoverApoiador,
+                      onPromoverAssessor: onPromoverAssessor,
                     ),
                   IconButton(
                       icon: const Icon(Icons.edit), onPressed: () => onEdit(v)),
@@ -504,9 +623,7 @@ class _VotantesTable extends StatelessWidget {
                   ? (apoiadorPorId[v.apoiadorId!] ?? '—')
                   : '—';
               final ind = _indicacaoCelulaVotante(v, apoiadorPorId);
-              final podePromover = podePromoverApoiador &&
-                  v.apoiadorId == null &&
-                  v.municipioId != null;
+              final pf = promoverFlags(v);
               return DataRow(
                 cells: [
                   DataCell(Text(v.nome)),
@@ -524,11 +641,14 @@ class _VotantesTable extends StatelessWidget {
                   DataCell(Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (podePromover)
-                        IconButton(
-                          icon: const Icon(Icons.upgrade, size: 20),
-                          tooltip: 'Promover a apoiador',
-                          onPressed: () => onPromover(v),
+                      if (pf.base && (pf.apoiador || pf.assessor))
+                        _MenuPromoverCadastroAmigo(
+                          v: v,
+                          podeOpcaoApoiador: pf.apoiador,
+                          podeOpcaoAssessor: pf.assessor,
+                          iconSize: 22,
+                          onPromoverApoiador: onPromoverApoiador,
+                          onPromoverAssessor: onPromoverAssessor,
                         ),
                       IconButton(
                           icon: const Icon(Icons.edit, size: 20),
@@ -777,11 +897,13 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                     ex.cidadeNome != null &&
                     ex.cidadeNome!.trim().isNotEmpty) {
                   final tentKey = normalizarNomeMunicipioMT(ex.cidadeNome!);
-                  if (listCidadesMTNomesNormalizados.contains(tentKey))
+                  if (listCidadesMTNomesNormalizados.contains(tentKey)) {
                     key = tentKey;
+                  }
                 }
-                if (key != null && mounted)
+                if (key != null && mounted) {
                   setState(() => _cidadeNomeNormalizado = key);
+                }
               });
             }
             if (profile?.role == 'apoiador' &&

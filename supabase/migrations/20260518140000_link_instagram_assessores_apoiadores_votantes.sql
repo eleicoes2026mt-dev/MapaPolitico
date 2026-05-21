@@ -111,8 +111,12 @@ BEGIN
   END IF;
 
   IF NOT (
-    (auth.is_candidato() AND v_row.assessor_id IN (SELECT auth.assessor_ids_do_candidato()))
-    OR (auth.my_assessor_id() IS NOT NULL AND auth.my_assessor_id() = v_row.assessor_id)
+    (public.app_is_candidato()
+        AND v_row.assessor_id IN (SELECT public.app_assessor_ids_do_candidato()))
+    OR (
+      public.app_my_assessor_id() IS NOT NULL
+      AND public.app_my_assessor_id() = v_row.assessor_id
+    )
   ) THEN
     RAISE EXCEPTION 'Sem permissão para promover este votante';
   END IF;

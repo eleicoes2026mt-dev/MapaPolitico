@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/constants/amigos_gilberto.dart';
+import '../../../core/router/navigation_keys.dart';
 import '../../../core/router/profile_role_cache.dart';
 import '../../../core/widgets/confirmar_senha_deputado_dialog.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
+import '../../apoiadores/providers/apoiadores_provider.dart'
+    show apoiadoresListProvider;
+import '../../mapa/providers/benfeitorias_agg_provider.dart'
+    show benfeitoriasAggPorMunicipioProvider;
+import '../../votantes/providers/votantes_provider.dart'
+    show votantesIndicacaoRedeListProvider, votantesListProvider;
 import '../providers/assessores_provider.dart'
     show
         assessoresListProvider,
@@ -18,15 +26,19 @@ import '../providers/assessores_provider.dart'
         messageFromException,
         setAssessorAtivo,
         setAssessorGrauAcesso,
-        atualizarAssessorLinkInstagram;
+        atualizarAssessorLinkInstagram,
+        rebaixarAssessorParaPapel;
 import '../providers/gestao_campanha_provider.dart';
 import '../../configuracoes/providers/menu_access_provider.dart';
 
 /// Link de convite para enviar por WhatsApp se o e-mail do Supabase não chegar.
 Future<void> showLinkConviteAssessorDialog(BuildContext context, String link) async {
-  if (!context.mounted) return;
+  final dlgContext = shellNavigatorKey.currentContext ?? context;
+  if (!dlgContext.mounted) return;
+  final messengerCtx = shellNavigatorKey.currentContext ?? context;
   await showDialog<void>(
-    context: context,
+    context: dlgContext,
+    useRootNavigator: false,
     builder: (ctx) => AlertDialog(
       title: const Row(
         children: [
@@ -61,9 +73,11 @@ Future<void> showLinkConviteAssessorDialog(BuildContext context, String link) as
             await Clipboard.setData(ClipboardData(text: link));
             if (ctx.mounted) {
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Link copiado. Cole no WhatsApp e envie ao assessor.')),
-              );
+              if (messengerCtx.mounted) {
+                ScaffoldMessenger.of(messengerCtx).showSnackBar(
+                  const SnackBar(content: Text('Link copiado. Cole no WhatsApp e envie ao assessor.')),
+                );
+              }
             }
           },
           icon: const Icon(Icons.copy, size: 18),
@@ -85,6 +99,9 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
   String _query = '';
   bool _promovendo = false;
 
+  /// ShellRoute na web: `useRootNavigator: true` põe diálogo atrás do menu lateral.
+  BuildContext get _dialogContext => shellNavigatorKey.currentContext ?? context;
+
   @override
   void initState() {
     super.initState();
@@ -95,7 +112,8 @@ class _AssessoresScreenState extends ConsumerState<AssessoresScreen> {
 
   void _openNovoAssessorDialog(BuildContext context) {
     showDialog<void>(
-      context: context,
+      context: _dialogContext,
+      useRootNavigator: false,
       builder: (ctx) => _NovoAssessorDialog(
         onSuccess: () {
           ref.invalidate(assessoresListProvider);
@@ -425,8 +443,11 @@ class _AssessorCard extends ConsumerStatefulWidget {
 class _AssessorCardState extends ConsumerState<_AssessorCard> {
   bool _reenviando = false;
   bool _removendo = false;
+  bool _rebaixando = false;
   bool _toggleAtivo = false;
   bool _grauUpdating = false;
+
+  BuildContext get _dialogContext => shellNavigatorKey.currentContext ?? context;
 
   Future<void> _reenviarConvite() async {
     setState(() => _reenviando = true);
@@ -456,10 +477,11 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
   }
 
   Future<void> _confirmarRemover() async {
-    final senhaOk = await confirmarSenhaDeputado(context);
+    final senhaOk = await confirmarSenhaDeputado(_dialogContext);
     if (!senhaOk || !mounted) return;
     final confirm = await showDialog<bool>(
-      context: context,
+      context: _dialogContext,
+      useRootNavigator: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Remover assessor'),
         content: Text(
@@ -493,6 +515,158 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
     }
   }
 
+  Future<void> _rebaixarAssessorFluxo() async {
+    final destinoRaw = await showDialog<String>(
+      context: _dialogContext,
+      useRootNavigator: false,
+      builder: (ctx) {
+        final t = Theme.of(ctx);
+        return AlertDialog(
+        title: const Text('Rebaixar papel'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'A conta de ${widget.assessor.nome} mantém-se (mesmo e-mail/login). '
+                'Só muda o menu e as permissões na app.',
+                style: t.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx, 'apoiador'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(14),
+                  alignment: Alignment.centerLeft,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.how_to_vote_outlined, color: t.colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Tornar apoiador',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Painel de apoiadores: convida votantes/regiões, sem o menu completo da equipa.',
+                            style: t.textTheme.bodySmall?.copyWith(
+                              color: t.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx, 'votante_amigos'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(14),
+                  alignment: Alignment.centerLeft,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.diversity_2_outlined, color: t.colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Tornar $kAmigosGilbertoLabel',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Volta ao cadastro público (rede/indicações de $kAmigosGilbertoLabel), '
+                            'sem papel de equipa técnica.',
+                            style: t.textTheme.bodySmall?.copyWith(
+                              color: t.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+        ],
+      );
+      },
+    );
+
+    final destino = destinoRaw?.trim();
+    if (destino == null || destino.isEmpty || !mounted) return;
+
+    final labelAlvo =
+        destino == 'apoiador' ? 'apoiador' : '$kAmigosGilbertoLabel (votação/indicações)';
+    final ok = await showDialog<bool>(
+      context: _dialogContext,
+      useRootNavigator: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirmar'),
+        content: Text(
+          'Rebaixar ${widget.assessor.nome} para $labelAlvo? '
+          'O cadastro do assessor precisa ter e-mail e município preenchidos neste cartão. '
+          'A pessoa deve sair da app e voltar a entrar para ver as novas opções.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Rebaixar'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _rebaixando = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await rebaixarAssessorParaPapel(
+        assessorId: widget.assessor.id,
+        destino: destino,
+      );
+      if (!mounted) return;
+      clearProfileRoleCache();
+      ref.invalidate(assessoresListProvider);
+      await ref.read(assessoresListProvider.future);
+      ref.invalidate(apoiadoresListProvider);
+      ref.invalidate(votantesListProvider);
+      ref.invalidate(votantesIndicacaoRedeListProvider);
+      ref.invalidate(benfeitoriasAggPorMunicipioProvider);
+      ref.invalidate(meuAssessorRegistroProvider);
+      final meUid = ref.read(currentUserProvider)?.id;
+      if (meUid != null && meUid == widget.assessor.profileId) {
+        ref.invalidate(profileProvider);
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Rebaixado para ${destino == 'apoiador' ? 'apoiador' : kAmigosGilbertoLabel}.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(messageFromException(e))));
+    } finally {
+      if (mounted) setState(() => _rebaixando = false);
+    }
+  }
+
   Future<void> _alterarGrau(int novo) async {
     if (novo == widget.assessor.grauAcesso) return;
     setState(() => _grauUpdating = true);
@@ -515,7 +689,8 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
   Future<void> _editarLinkInstagram() async {
     final ctrl = TextEditingController(text: widget.assessor.linkInstagram ?? '');
     final ok = await showDialog<bool>(
-      context: context,
+      context: _dialogContext,
+      useRootNavigator: false,
       builder: (ctx) => AlertDialog(
         title: const Text('Instagram do assessor'),
         content: TextField(
@@ -557,7 +732,8 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
     final a = widget.assessor;
     final desativar = a.ativo;
     final ok = await showDialog<bool>(
-      context: context,
+      context: _dialogContext,
+      useRootNavigator: false,
       builder: (ctx) => AlertDialog(
         title: Text(desativar ? 'Desativar assessor' : 'Reativar assessor'),
         content: Text(
@@ -782,6 +958,18 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.email_outlined, size: 18),
                       label: const Text('Reenviar convite'),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: (_rebaixando || _removendo) ? null : _rebaixarAssessorFluxo,
+                      icon: _rebaixando
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.arrow_downward_rounded, size: 18),
+                      label: const Text('Rebaixar papel'),
                       style: TextButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         minimumSize: Size.zero,

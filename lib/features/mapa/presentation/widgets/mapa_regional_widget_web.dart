@@ -28,8 +28,9 @@ double _rankingListaSlackExtraPorItem({
   required double approxItemHeight,
   double baseVerticalMargin = 3.0,
 }) {
-  if (itemCount <= 0 || !viewportHeight.isFinite || viewportHeight <= 0)
+  if (itemCount <= 0 || !viewportHeight.isFinite || viewportHeight <= 0) {
     return 0;
+  }
   final totalBase = itemCount * (approxItemHeight + 2 * baseVerticalMargin);
   final slack = viewportHeight - totalBase;
   if (slack <= 0) return 0;
@@ -179,8 +180,9 @@ Color _colorForRegiao(
   }
   if (partKey != null) {
     final customPart = coresCustomizadas?[partKey];
-    if (customPart != null && customPart.isNotEmpty)
+    if (customPart != null && customPart.isNotEmpty) {
       return _colorFromHex(customPart);
+    }
   }
   final key = cdRgint ?? id;
   final custom = coresCustomizadas?[key];
@@ -194,8 +196,9 @@ String _tituloRegiaoRanking(String nome) {
   final t = nome.trim();
   if (t.isEmpty) return 'Região';
   final lower = t.toLowerCase();
-  if (lower.startsWith('região de ') || lower.startsWith('regiao de '))
+  if (lower.startsWith('região de ') || lower.startsWith('regiao de ')) {
     return t;
+  }
   return 'Região de $t';
 }
 
@@ -1214,8 +1217,9 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     final regiaoId = _regiaoIdFromHitValue(firstId);
     final regiao = _regioesMT?.where((r) => r.id == regiaoId).firstOrNull;
     if (regiao == null) return;
-    if (widget.onSaveNomeRegiao == null)
+    if (widget.onSaveNomeRegiao == null) {
       return; // Edição desabilitada (apenas administrador).
+    }
     final polygonIndex =
         firstId.contains('#') ? int.tryParse(firstId.split('#').last) ?? 0 : 0;
     final partKey = '${regiao.id}#$polygonIndex';
@@ -1280,8 +1284,9 @@ class _MapaRegionalWidgetWebState extends State<MapaRegionalWidget> {
     String? corSelecionada = widget.coresCustomizadas?[partKey] ??
         widget.coresCustomizadas?[cdRgint] ??
         _coresPadrao[cdRgint];
-    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada))
+    if (corSelecionada == null || !coresOpcoes.contains(corSelecionada)) {
       corSelecionada = coresOpcoes.first;
+    }
 
     final fundidas = widget.regioesFundidas ?? [];
     final estaEmFusao =

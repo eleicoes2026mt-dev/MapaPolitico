@@ -48,7 +48,7 @@ class _IndicacoesRedeDashboardScreenState
 
     final modoSubRedeSozinhaVotantePub = profile?.role == 'votante';
 
-    final async = ref.watch(votantesListProvider);
+    final async = ref.watch(votantesIndicacaoRedeListProvider);
 
     final appTitulo = modoSubRedeSozinhaVotantePub
         ? 'Minhas indicações'
@@ -63,6 +63,7 @@ class _IndicacoesRedeDashboardScreenState
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () {
               ref.invalidate(votantesListProvider);
+              ref.invalidate(votantesIndicacaoRedeListProvider);
               ref.invalidate(apoiadoresListProvider);
               ref.invalidate(meuApoiadorProvider);
             },
@@ -78,9 +79,9 @@ class _IndicacoesRedeDashboardScreenState
               return const Center(child: CircularProgressIndicator());
             }
             if (estadoCadastroMeuPerfil.hasError) {
-              return Center(
+              return const Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(24),
                   child: Text(
                     'Erro ao carregar o seu cadastro de apoiador. Toque em «Atualizar» no topo '
                     'e verifique se a conta ficou bem vinculada.',
@@ -176,10 +177,11 @@ class _IndicacoesRedeDashboardScreenState
 
           Future<void> onPull() async {
             ref.invalidate(votantesListProvider);
+            ref.invalidate(votantesIndicacaoRedeListProvider);
             ref.invalidate(apoiadoresListProvider);
             ref.invalidate(meuApoiadorProvider);
             await ref
-                .read(votantesListProvider.future)
+                .read(votantesIndicacaoRedeListProvider.future)
                 .then((_) {})
                 .onError((_, __) {});
             await ref

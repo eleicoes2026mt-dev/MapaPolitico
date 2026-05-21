@@ -176,13 +176,15 @@ class _MensagensTabState extends ConsumerState<_MensagensTab> {
     if (ok != true || !mounted) return;
     try {
       await ref.read(excluirMensagemProvider)(m.id);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Mensagem removida.')));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$e')));
+      }
     }
   }
 

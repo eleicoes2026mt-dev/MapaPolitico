@@ -1,24 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../router/navigation_keys.dart';
 import '../supabase/supabase_provider.dart';
 
-/// Pede a senha de login do candidato (conta atual) e reautentica via [signInWithPassword].
-/// Só faz sentido quando o utilizador logado é o deputado/candidato.
+/// Pede a senha de login da conta atual e reautentica via [signInWithPassword].
+/// Use [shellNavigatorKey] + `useRootNavigator: false` porque com [ShellRoute] na web
+/// o navigator raiz põe o diálogo atrás do menu.
 Future<bool> confirmarSenhaDeputado(BuildContext context) async {
+  final messengerCtx = shellNavigatorKey.currentContext ?? context;
   final email = supabase.auth.currentUser?.email;
   if (email == null || email.isEmpty) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (messengerCtx.mounted) {
+      ScaffoldMessenger.of(messengerCtx).showSnackBar(
         const SnackBar(content: Text('Sessão sem e-mail; faça login novamente.')),
       );
     }
     return false;
   }
 
+  final dialogCtx = shellNavigatorKey.currentContext ?? context;
+  if (!dialogCtx.mounted) return false;
+
   final password = await showDialog<String>(
-    context: context,
+    context: dialogCtx,
     barrierDismissible: false,
+    useRootNavigator: false,
     builder: (ctx) => const _SenhaDeputadoDialogContent(),
   );
 
@@ -28,15 +35,15 @@ Future<bool> confirmarSenhaDeputado(BuildContext context) async {
     await supabase.auth.signInWithPassword(email: email, password: password);
     return true;
   } on AuthException catch (_) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (messengerCtx.mounted) {
+      ScaffoldMessenger.of(messengerCtx).showSnackBar(
         const SnackBar(content: Text('Senha incorreta.')),
       );
     }
     return false;
   } catch (_) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (messengerCtx.mounted) {
+      ScaffoldMessenger.of(messengerCtx).showSnackBar(
         const SnackBar(content: Text('Não foi possível verificar a senha. Tente de novo.')),
       );
     }
@@ -65,13 +72,13 @@ class _SenhaDeputadoDialogContentState extends State<_SenhaDeputadoDialogContent
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Senha do deputado'),
+      title: const Text('Confirmar senha'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Digite a senha de login do candidato (esta conta) para confirmar a exclusão.',
+            'Digite a senha de login desta conta para confirmar a ação.',
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),

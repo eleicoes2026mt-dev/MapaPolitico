@@ -635,9 +635,12 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
       ),
     );
     if (ok != true || !mounted) return;
+    if (!context.mounted) return;
 
     setState(() => _rebaixando = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final scaffoldCtx =
+        shellNavigatorKey.currentContext ?? context;
+    final messenger = ScaffoldMessenger.of(scaffoldCtx);
     try {
       await rebaixarAssessorParaPapel(
         assessorId: widget.assessor.id,
@@ -656,12 +659,18 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
       if (meUid != null && meUid == widget.assessor.profileId) {
         ref.invalidate(profileProvider);
       }
+      widget.onRefresh();
       messenger.showSnackBar(
         SnackBar(content: Text('Rebaixado para ${destino == 'apoiador' ? 'apoiador' : kAmigosGilbertoLabel}.')),
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(messageFromException(e))));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(messageFromException(e)),
+          duration: const Duration(seconds: 10),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _rebaixando = false);
     }
@@ -934,38 +943,15 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      onPressed: _toggleAtivo ? null : _alternarAtivo,
-                      icon: _toggleAtivo
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : Icon(assessor.ativo ? Icons.person_off_outlined : Icons.check_circle_outline, size: 18),
-                      label: Text(assessor.ativo ? 'Desativar' : 'Reativar'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: assessor.ativo ? theme.colorScheme.error : Colors.green.shade700,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: (_reenviando || !assessor.ativo) ? null : _reenviarConvite,
-                      icon: _reenviando
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.email_outlined, size: 18),
-                      label: const Text('Reenviar convite'),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: (_rebaixando || _removendo) ? null : _rebaixarAssessorFluxo,
+                Builder(
+                  builder: (_) {
+                    final bloqueadoCandidato =
+                        widget.assessor.profilesRole?.toLowerCase() == 'candidato';
+
+                    Widget rebaixarBtn = TextButton.icon(
+                      onPressed: (_rebaixando || _removendo || bloqueadoCandidato)
+                          ? null
+                          : _rebaixarAssessorFluxo,
                       icon: _rebaixando
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.arrow_downward_rounded, size: 18),
@@ -975,21 +961,66 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _removendo ? null : _confirmarRemover,
-                      icon: _removendo
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.delete_outline, size: 18),
-                      label: const Text('Remover'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: theme.colorScheme.error,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                  ],
+                    );
+                    if (bloqueadoCandidato) {
+                      rebaixarBtn = Tooltip(
+                        message:
+                            'Esta linha está ligada ao perfil «candidato» do deputado; não pode ser rebaixada por aqui.',
+                        child: rebaixarBtn,
+                      );
+                    }
+
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _toggleAtivo ? null : _alternarAtivo,
+                          icon: _toggleAtivo
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : Icon(
+                                  assessor.ativo ? Icons.person_off_outlined : Icons.check_circle_outline,
+                                  size: 18,
+                                ),
+                          label: Text(assessor.ativo ? 'Desativar' : 'Reativar'),
+                          style: TextButton.styleFrom(
+                            foregroundColor:
+                                assessor.ativo ? theme.colorScheme.error : Colors.green.shade700,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: (_reenviando || !assessor.ativo) ? null : _reenviarConvite,
+                          icon: _reenviando
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.email_outlined, size: 18),
+                          label: const Text('Reenviar convite'),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        rebaixarBtn,
+                        TextButton.icon(
+                          onPressed: _removendo ? null : _confirmarRemover,
+                          icon: _removendo
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Remover'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: theme.colorScheme.error,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ],

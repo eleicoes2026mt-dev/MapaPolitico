@@ -43,6 +43,30 @@ String messageFromException(Object e) {
   return e.toString();
 }
 
+/// UUID devolvido por RPCs Postgres (por vezes String, lista ou mapa).
+String? coerceRpcUuid(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is String) {
+    final t = raw.trim();
+    return t.isEmpty ? null : t;
+  }
+  if (raw is List) {
+    for (final e in raw) {
+      final u = coerceRpcUuid(e);
+      if (u != null && u.isNotEmpty) return u;
+    }
+    return null;
+  }
+  if (raw is Map) {
+    for (final v in raw.values) {
+      final u = coerceRpcUuid(v);
+      if (u != null && u.isNotEmpty) return u;
+    }
+    return null;
+  }
+  return null;
+}
+
 /// Converte retorno de [SupabaseClient.rpc] (jsonb) em mapa, mesmo quando vier
 /// como `Map` genérico, JSON em string ou lista com um único objeto.
 Map<String, dynamic> _coerceRpcJsonbResult(dynamic res) {
@@ -155,7 +179,8 @@ final atualizarMeuAssessorEnderecoProvider =
 
 final assessoresListProvider = FutureProvider<List<Assessor>>((ref) async {
   final profile = await ref.watch(profileProvider.future);
-  final res = await supabase.from('assessores').select().order('nome');
+  final res =
+      await supabase.from('assessores').select('*, profiles(role)').order('nome');
   final list = (res as List)
       .map((e) => Assessor.fromJson(e as Map<String, dynamic>))
       .toList();
@@ -294,12 +319,12 @@ Future<String> rebaixarAssessorParaPapel({
         'p_destino': destino,
       },
     );
-    final id = raw?.toString().trim();
+    final id = coerceRpcUuid(raw);
     if (id == null || id.isEmpty) {
-      throw Exception('Não foi possível concluir o rebaixamento.');
+      throw Exception('Não foi possível concluir o rebaixamento (resposta inesperada do servidor).');
     }
     return id;
-  } on PostgrestException catch (e) {
+  } catch (e) {
     throw Exception(messageFromException(e));
   }
 }

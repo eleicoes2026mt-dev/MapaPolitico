@@ -1,0 +1,230 @@
+-- Alguns utilizadores ficaram com linha em votantes (Amigos, apoiador_id nulo) ligada à campanha
+-- e, ao mesmo tempo, com registo em assessores. A verificação «Já existe um cadastro…» impedia
+-- o rebaixamento sem sucesso visível. Eliminar esses «fantasmas» antes de continuar é seguro quando
+-- o fluxo garante uma linha em assessores para o mesmo profile + campanha (apenas nesta RPC).
+
+CREATE OR REPLACE FUNCTION public.rebaixar_assessor_para_papel(
+  p_assessor_id uuid,
+  p_destino text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  a_row assessores%ROWTYPE;
+  v_dest text;
+  v_camp uuid := NULL;
+  v_raiz uuid;
+  v_mun_nome text;
+  v_out uuid;
+BEGIN
+  v_dest := lower(trim(coalesce(p_destino, '')));
+  IF v_dest NOT IN ('apoiador', 'votante_amigos') THEN
+    RAISE EXCEPTION 'Destino inválido (use ''apoiador'' ou ''votante_amigos'').';
+  END IF;
+
+  IF NOT public.app_is_candidato() THEN
+    RAISE EXCEPTION 'Apenas o gestor da campanha (candidato ou assessor grau 1) pode rebaixar um assessor.';
+  END IF;
+
+  SELECT * INTO a_row FROM public.assessores WHERE id = p_assessor_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Assessor não encontrado.';
+  END IF;
+
+  IF a_row.profile_id = auth.uid() THEN
+    RAISE EXCEPTION 'Não é possível rebaixar a sua própria conta por este fluxo.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.profiles p
+    INNER JOIN public.assessores a ON a.profile_id = p.id
+    WHERE a.id = p_assessor_id
+      AND p.role = 'candidato'::app_role
+      AND COALESCE(p.ativo, true)
+  ) THEN
+    RAISE EXCEPTION 'Não é possível rebaixar o registro de equipa ligado ao candidato.';
+  END IF;
+
+  IF a_row.email IS NULL OR btrim(a_row.email::text) = '' THEN
+    RAISE EXCEPTION 'E-mail obrigatório no cadastro do assessor para rebaixar.';
+  END IF;
+
+  v_raiz := public.app_candidato_raiz_campanha();
+
+  IF v_raiz IS NOT NULL THEN
+    SELECT ax.id INTO v_camp
+    FROM public.assessores ax
+    WHERE ax.profile_id = v_raiz
+      AND COALESCE(ax.ativo, true)
+    LIMIT 1;
+  END IF;
+
+  IF v_camp IS NULL THEN
+    v_camp := public.app_assessor_id_do_candidato();
+  END IF;
+
+  IF v_camp IS NULL THEN
+    RAISE EXCEPTION 'Campanha sem linha técnica do deputado (assessor raiz); configure antes de continuar.';
+  END IF;
+
+  IF p_assessor_id = v_camp THEN
+    RAISE EXCEPTION 'Não é possível rebaixar o assessor raiz da campanha.';
+  END IF;
+
+  DELETE FROM public.votantes vv
+  WHERE vv.profile_id = a_row.profile_id
+    AND vv.assessor_id = v_camp
+    AND vv.apoiador_id IS NULL;
+
+  SELECT m.nome INTO v_mun_nome FROM public.municipios m WHERE m.id = a_row.municipio_id;
+
+  IF a_row.municipio_id IS NULL OR v_mun_nome IS NULL OR btrim(v_mun_nome) = '' THEN
+    RAISE EXCEPTION 'Defina o município completo neste cadastro antes de rebaixar (necessário para apoiador e Amigos Gilberto no mapa).';
+  END IF;
+
+  IF v_dest = 'apoiador' THEN
+    SELECT ap.id INTO v_out
+    FROM public.apoiadores ap
+    WHERE ap.profile_id = a_row.profile_id
+      AND ap.excluido_em IS NULL
+    ORDER BY ap.updated_at DESC NULLS LAST, ap.created_at DESC NULLS LAST
+    LIMIT 1;
+
+    IF v_out IS NOT NULL THEN
+      UPDATE public.apoiadores SET
+        assessor_id = v_camp,
+        nome = a_row.nome,
+        tipo = 'PF'::tipo_pessoa,
+        telefone = NULLIF(btrim(a_row.telefone), ''),
+        email = lower(NULLIF(btrim(a_row.email::text), '')),
+        municipio_id = a_row.municipio_id,
+        cidade_nome = v_mun_nome,
+        estimativa_votos = 1,
+        ativo = true,
+        votos_sozinho = true,
+        qtd_votos_familia = 0,
+        link_instagram = NULLIF(btrim(coalesce(a_row.link_instagram, '')), ''),
+        cep = NULLIF(btrim(coalesce(a_row.cep, '')), ''),
+        logradouro = NULLIF(btrim(coalesce(a_row.logradouro, '')), ''),
+        numero = NULLIF(btrim(coalesce(a_row.numero, '')), ''),
+        complemento = NULLIF(btrim(coalesce(a_row.complemento, '')), ''),
+        excluido_em = NULL,
+        updated_at = now()
+      WHERE id = v_out;
+    ELSE
+      INSERT INTO public.apoiadores (
+        profile_id,
+        assessor_id,
+        nome,
+        tipo,
+        telefone,
+        email,
+        municipio_id,
+        cidade_nome,
+        estimativa_votos,
+        ativo,
+        votos_sozinho,
+        qtd_votos_familia,
+        link_instagram,
+        cep,
+        logradouro,
+        numero,
+        complemento,
+        excluido_em
+      ) VALUES (
+        a_row.profile_id,
+        v_camp,
+        a_row.nome,
+        'PF'::tipo_pessoa,
+        NULLIF(btrim(a_row.telefone), ''),
+        lower(NULLIF(btrim(a_row.email::text), '')),
+        a_row.municipio_id,
+        v_mun_nome,
+        1,
+        true,
+        true,
+        0,
+        NULLIF(btrim(coalesce(a_row.link_instagram, '')), ''),
+        NULLIF(btrim(coalesce(a_row.cep, '')), ''),
+        NULLIF(btrim(coalesce(a_row.logradouro, '')), ''),
+        NULLIF(btrim(coalesce(a_row.numero, '')), ''),
+        NULLIF(btrim(coalesce(a_row.complemento, '')), ''),
+        NULL
+      )
+      RETURNING id INTO v_out;
+    END IF;
+  ELSE
+    INSERT INTO public.votantes (
+      profile_id,
+      assessor_id,
+      nome,
+      telefone,
+      email,
+      municipio_id,
+      cidade_nome,
+      abrangencia,
+      qtd_votos_familia,
+      cadastro_via_qr,
+      cadastrado_pelo_candidato,
+      cep,
+      logradouro,
+      numero,
+      complemento,
+      link_instagram,
+      convite_por_profile_id,
+      convite_por_nome
+    ) VALUES (
+      a_row.profile_id,
+      v_camp,
+      a_row.nome,
+      NULLIF(btrim(coalesce(a_row.telefone, '')), ''),
+      lower(NULLIF(btrim(a_row.email::text), '')),
+      a_row.municipio_id,
+      v_mun_nome,
+      'Individual'::abrangencia_voto,
+      1,
+      false,
+      true,
+      NULLIF(btrim(coalesce(a_row.cep, '')), ''),
+      NULLIF(btrim(coalesce(a_row.logradouro, '')), ''),
+      NULLIF(btrim(coalesce(a_row.numero, '')), ''),
+      NULLIF(btrim(coalesce(a_row.complemento, '')), ''),
+      NULLIF(btrim(coalesce(a_row.link_instagram, '')), ''),
+      NULL,
+      NULL
+    )
+    RETURNING id INTO v_out;
+  END IF;
+
+  UPDATE public.profiles SET
+    role = CASE WHEN v_dest = 'apoiador' THEN 'apoiador'::app_role ELSE 'votante'::app_role END,
+    full_name = COALESCE(NULLIF(btrim(full_name), ''), a_row.nome),
+    email = COALESCE(
+      NULLIF(btrim(lower(coalesce(email, '')::text)), ''),
+      lower(NULLIF(btrim(a_row.email::text), ''))
+    ),
+    phone = COALESCE(NULLIF(btrim(coalesce(a_row.telefone, '')), ''), phone),
+    invited_by = COALESCE(invited_by, v_raiz),
+    updated_at = now()
+  WHERE id = a_row.profile_id;
+
+  UPDATE public.apoiadores
+    SET assessor_id = v_camp, updated_at = now()
+  WHERE assessor_id = p_assessor_id;
+
+  UPDATE public.votantes
+    SET assessor_id = v_camp, updated_at = now()
+  WHERE assessor_id = p_assessor_id;
+
+  DELETE FROM public.assessores WHERE id = p_assessor_id;
+
+  RETURN v_out;
+END;
+$$;
+
+COMMENT ON FUNCTION public.rebaixar_assessor_para_papel(uuid, text) IS
+  'Rebaixa assessor; remove antes votantes-Amigos fantasmas mesmo profile+v_camp; v_camp = assessor do deputado por raiz; reaproveita apoiador; reparentiza filhos antes do DELETE.';

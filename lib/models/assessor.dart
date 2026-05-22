@@ -14,6 +14,8 @@ class Assessor {
   final int grauAcesso;
   /// URL ou @ do Instagram (opcional).
   final String? linkInstagram;
+  /// Papel em `profiles` quando a listagem traz embed (ex.: `profiles(role)`).
+  final String? profilesRole;
 
   const Assessor({
     required this.id,
@@ -29,9 +31,17 @@ class Assessor {
     this.complemento,
     this.grauAcesso = 2,
     this.linkInstagram,
+    this.profilesRole,
   });
 
   factory Assessor.fromJson(Map<String, dynamic> json) {
+    String? nestedRole;
+    final pr = json['profiles'];
+    if (pr is Map<String, dynamic>) {
+      nestedRole = pr['role'] as String?;
+    } else if (pr is List && pr.isNotEmpty && pr.first is Map) {
+      nestedRole = (pr.first as Map)['role'] as String?;
+    }
     return Assessor(
       id: json['id'] as String,
       profileId: json['profile_id'] as String,
@@ -46,6 +56,7 @@ class Assessor {
       complemento: json['complemento'] as String?,
       grauAcesso: (json['grau_acesso'] as num?)?.toInt() ?? 2,
       linkInstagram: json['link_instagram'] as String?,
+      profilesRole: nestedRole,
     );
   }
 

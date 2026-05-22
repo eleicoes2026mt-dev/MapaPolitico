@@ -1,18 +1,29 @@
 import 'dart:math' show min;
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/amigos_gilberto.dart';
+import '../../../core/utils/mensagem_imagem_compress.dart';
 import '../../../core/utils/whatsapp_launch.dart';
 import '../../../core/widgets/cartao_parabens_aniversario.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
 import '../../agenda/providers/agenda_provider.dart';
+import '../../apoiadores/providers/apoiadores_provider.dart'
+    show apoiadoresListProvider;
+import '../../apoiadores/presentation/utils/apoiadores_form_utils.dart'
+    show classificacoesSugestoesApoiador, kClassificacoesApoiadorPadrao;
+import '../../apoiadores/presentation/widgets/classificacao_apoiador_field.dart';
 import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart' show displayNomeCidadeMT;
@@ -20,6 +31,8 @@ import '../../votantes/providers/votantes_provider.dart'
     show municipiosMTListProvider, refreshMunicipiosMTList;
 import '../../../models/municipio.dart';
 import '../providers/mensagens_provider.dart';
+import 'widgets/mensagem_imagem_anexo.dart';
+import 'widgets/mensagem_imagem_crop_quadrado_screen.dart';
 
 /// Apoiadores e votantes: só a lista de mensagens (sem aba de aniversariantes).
 class MensagensScreen extends ConsumerWidget {
@@ -329,6 +342,7 @@ class _MensagemCard extends StatelessWidget {
     'reuniao': 'Reunião',
     'privada_assessores': 'Privada — assessores',
     'privada_apoiadores': 'Privada — apoiadores',
+    'apoiador_classificacao': 'Por classificação de apoiador',
   };
 
   static const _escopoIcon = {
@@ -339,7 +353,17 @@ class _MensagemCard extends StatelessWidget {
     'reuniao': Icons.event_outlined,
     'privada_assessores': Icons.admin_panel_settings_outlined,
     'privada_apoiadores': Icons.groups_outlined,
+    'apoiador_classificacao': Icons.label_outline,
   };
+
+  static String _linhaAbrangencia(Mensagem m) {
+    final base = _escopoLabel[m.escopo] ?? m.escopo;
+    if (m.escopo == 'apoiador_classificacao') {
+      final c = m.classificacaoApoiador?.trim();
+      if (c != null && c.isNotEmpty) return '$base — $c';
+    }
+    return base;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +403,7 @@ class _MensagemCard extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
                       Text(
-                        _escopoLabel[m.escopo] ?? m.escopo,
+                        _linhaAbrangencia(m),
                         style: theme.textTheme.labelSmall
                             ?.copyWith(color: theme.colorScheme.secondary),
                       ),
@@ -450,6 +474,10 @@ class _MensagemCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (m.imagemUrl != null && m.imagemUrl!.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              MensagemImagemAnexo(imagemUrl: m.imagemUrl!.trim()),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [
@@ -512,8 +540,58 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   final _link = TextEditingController();
   String _escopo = 'global';
   String? _municipioCidadeId;
+  String? _classificacaoApoiador;
   bool _enviarPush = false;
   bool _loading = false;
+  Uint8List? _imagemJpegAnexo;
+
+  Future<void> _escolherImagemAnexo() async {
+    try {
+      Uint8List? raw;
+      final pickMobileOrWeb =
+          kIsWeb || defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
+      if (pickMobileOrWeb) {
+        final x =
+            await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 100);
+        if (x != null) {
+          raw = await x.readAsBytes();
+        }
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'heic'],
+          withData: true,
+        );
+        raw = result?.files.single.bytes;
+      }
+      if (!mounted || raw == null || raw.isEmpty) return;
+      final recortado =
+          await MensagemImagemCropQuadradoScreen.abrir(context, raw);
+      if (!mounted || recortado == null || recortado.isEmpty) return;
+      final comprimido = comprimirImagemParaMensagem(
+        recortado,
+        recorteQuadradoCentralAutomatico: false,
+      );
+      setState(() => _imagemJpegAnexo = comprimido);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            comprimido.length < 350 * 1024
+                ? 'Imagem (${(comprimido.length / 1024).round()} KB) pronta em formato quadrado.'
+                : 'Imagem (${(comprimido.length / 1024).round()} KB) — será exibida compacta na lista.',
+          ),
+        ),
+      );
+    } on FormatException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Não foi possível escolher a imagem: $e')));
+    }
+  }
 
   @override
   void dispose() {
@@ -533,6 +611,8 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
         return 'Apenas assessores ativos com conta no app.';
       case 'privada_apoiadores':
         return 'Apenas apoiadores com login vinculado (não excluídos).';
+      case 'apoiador_classificacao':
+        return 'Apenas apoiadores com esta classificação no cadastro e conta no app.';
       default:
         return 'Notificação conforme abrangência.';
     }
@@ -546,6 +626,19 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
           const SnackBar(content: Text('Selecione o município.')));
       return;
     }
+    if (_escopo == 'apoiador_classificacao') {
+      final cls = _classificacaoApoiador?.trim();
+      if (cls == null || cls.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Escolha a classificação (a mesma usada no cadastro do apoiador, ex.: Pastor da Igreja).',
+            ),
+          ),
+        );
+        return;
+      }
+    }
     setState(() => _loading = true);
     try {
       await ref.read(criarMensagemProvider)(
@@ -557,6 +650,10 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
           municipiosIds: _escopo == 'cidade' && _municipioCidadeId != null
               ? [_municipioCidadeId!]
               : const [],
+          classificacaoApoiador: _escopo == 'apoiador_classificacao'
+              ? _classificacaoApoiador?.trim()
+              : null,
+          imagemJpegOpcional: _imagemJpegAnexo,
           enviarPush: _enviarPush,
         ),
       );
@@ -584,6 +681,7 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
     final munAsync = ref.watch(municipiosMTListProvider);
 
     final maxDialogW = min(480.0, MediaQuery.sizeOf(context).width - 48);
+    final previewLado = min(maxDialogW, kMensagemImagemListaLadoDp);
 
     return AlertDialog(
       title: const Text('Nova Mensagem'),
@@ -632,12 +730,78 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                   validator: Mensagem.erroValidacaoLink,
                 ),
                 const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Imagem (opcional)',
+                    style: theme.textTheme.labelLarge,
+                  ),
+                ),
+                Text(
+                  'Depois de escolher a foto abre um ecrã para enquadrá-la ao quadrado (arrastar e zoom). Em seguida é comprimida para o envio.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _escolherImagemAnexo,
+                      icon: const Icon(Icons.image_outlined, size: 20),
+                      label: Text(_imagemJpegAnexo != null ? 'Trocar imagem' : 'Escolher imagem'),
+                    ),
+                    if (_imagemJpegAnexo != null) ...[
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: _loading ? null : () => setState(() => _imagemJpegAnexo = null),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Remover'),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_imagemJpegAnexo != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Como ficará na mensagem',
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    child: SizedBox(
+                      height: previewLado,
+                      width: previewLado,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.5),
+                          ),
+                          child: Image.memory(
+                            _imagemJpegAnexo!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  key: ValueKey<String>('abra_$_escopo'),
                   isExpanded: true,
                   initialValue: _escopo,
-                  decoration: const InputDecoration(
-                    labelText: 'Abrangência',
-                    prefixIcon: Icon(Icons.public_outlined),
+                  menuMaxHeight: 320,
+                  decoration: InputDecoration(
+                    labelText: 'Abrangência — quem recebe',
+                    prefixIcon: const Icon(Icons.public_outlined),
+                    helperText: _escopo == 'apoiador_classificacao'
+                        ? 'Abaixo: escolha a classificação (igual ao cadastro do apoiador).'
+                        : 'Só aparece campo «Classificação» depois que você escolher «Por classificação (ex.: Pastor)» aqui.',
+                    helperMaxLines: 3,
                   ),
                   items: const [
                     DropdownMenuItem(
@@ -656,6 +820,14 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                           overflow: TextOverflow.ellipsis, maxLines: 1),
                     ),
                     DropdownMenuItem(
+                      value: 'apoiador_classificacao',
+                      child: Text(
+                        'Por classificação (ex.: Pastor da Igreja)',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    ),
+                    DropdownMenuItem(
                       value: 'cidade',
                       child: Text(
                         'Por cidade — apoiadores e $kAmigosGilbertoLabel da cidade',
@@ -667,8 +839,40 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                   onChanged: (v) => setState(() {
                     _escopo = v ?? 'global';
                     _municipioCidadeId = null;
+                    if (_escopo != 'apoiador_classificacao') {
+                      _classificacaoApoiador = null;
+                    }
                   }),
                 ),
+                if (_escopo == 'apoiador_classificacao') ...[
+                  const SizedBox(height: 12),
+                  ref.watch(apoiadoresListProvider).when(
+                        data: (list) {
+                          final extras = classificacoesSugestoesApoiador(list)
+                              .where((e) =>
+                                  !kClassificacoesApoiadorPadrao.contains(e))
+                              .toList();
+                          return ClassificacaoApoiadorField(
+                            key: const ValueKey('nova_msg_classificacao'),
+                            sugestoesExtras: extras,
+                            initialPerfil: _classificacaoApoiador,
+                            onChanged: (v) => setState(() => _classificacaoApoiador = v),
+                          );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (_, __) => Text(
+                          'Não foi possível carregar apoiadores para sugerir classificações.',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.error),
+                        ),
+                      ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Só recebem apoiadores que têm exatamente esta classificação no cadastro (e login no app).',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ],
                 if (_escopo == 'cidade') ...[
                   const SizedBox(height: 12),
                   munAsync.when(
@@ -699,6 +903,7 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                             .compareTo(b.nome.toLowerCase()));
 
                       return DropdownButtonFormField<String>(
+                        key: ValueKey<String>('mun_${_municipioCidadeId ?? "_"}'),
                         isExpanded: true,
                         initialValue: _municipioCidadeId != null &&
                                 ordenados.any((m) => m.id == _municipioCidadeId)

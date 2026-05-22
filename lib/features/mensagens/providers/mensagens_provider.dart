@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/supabase/supabase_provider.dart';
 import '../../../models/mensagem.dart';
@@ -37,8 +40,11 @@ final mensagensVisiveisParaUsuarioProvider = FutureProvider<List<Mensagem>>((ref
   if (role == 'apoiador') {
     final ap = await ref.watch(meuApoiadorProvider.future);
     final municipioId = ap?.municipioId;
+    final perfilApoiador = ap?.perfil;
     return todas
-        .where((m) => enviadaPorMim(m) || mensagemVisivelParaApoiador(m, municipioId))
+        .where((m) =>
+            enviadaPorMim(m) ||
+            mensagemVisivelParaApoiador(m, municipioId, perfilApoiador))
         .toList();
   }
   if (role == 'votante') {
@@ -53,7 +59,11 @@ final mensagensVisiveisParaUsuarioProvider = FutureProvider<List<Mensagem>>((ref
 });
 
 /// Critério alinhado a `mensagens_apoiador_read` (Supabase).
-bool mensagemVisivelParaApoiador(Mensagem m, String? municipioIdUsuario) {
+bool mensagemVisivelParaApoiador(
+  Mensagem m,
+  String? municipioIdUsuario,
+  String? perfilCadastroApoiador,
+) {
   switch (m.escopo) {
     case 'global':
     case 'polo':
@@ -65,6 +75,12 @@ bool mensagemVisivelParaApoiador(Mensagem m, String? municipioIdUsuario) {
       if (municipioIdUsuario == null || municipioIdUsuario.isEmpty) return false;
       if (m.municipiosIds.isEmpty) return false;
       return m.municipiosIds.contains(municipioIdUsuario);
+    case 'apoiador_classificacao':
+      final alvo = m.classificacaoApoiador?.trim();
+      if (alvo == null || alvo.isEmpty) return false;
+      final meu = perfilCadastroApoiador?.trim();
+      if (meu == null || meu.isEmpty) return false;
+      return meu.toLowerCase() == alvo.toLowerCase();
     case 'privada_assessores':
     default:
       return false;
@@ -90,6 +106,7 @@ bool mensagemVisivelParaVotante(Mensagem m, List<Votante> vtsDoPerfil) {
       return false;
     case 'privada_apoiadores':
     case 'privada_assessores':
+    case 'apoiador_classificacao':
     default:
       return false;
   }
@@ -146,6 +163,25 @@ Future<List<String>> profileIdsParaNovaMensagem(NovaMensagemParams p) async {
         ..addAll(_uniqProfileIds(apRows, 'profile_id'))
         ..addAll(_uniqProfileIds(rAs as List, 'profile_id'));
       return set.toList();
+    case 'apoiador_classificacao':
+      final raw = p.classificacaoApoiador?.trim();
+      if (raw == null || raw.isEmpty) return [];
+      final lower = raw.toLowerCase();
+      final rAp = await supabase
+          .from('apoiadores')
+          .select('profile_id, perfil, excluido_em')
+          .not('profile_id', 'is', null);
+      final set = <String>{};
+      for (final e in rAp as List) {
+        if (e is! Map) continue;
+        if (e['excluido_em'] != null) continue;
+        final perfil = (e['perfil'] as String?)?.trim();
+        if (perfil == null || perfil.isEmpty) continue;
+        if (perfil.toLowerCase() != lower) continue;
+        final id = e['profile_id']?.toString();
+        if (id != null && id.isNotEmpty) set.add(id);
+      }
+      return set.toList();
     case 'cidade':
       if (p.municipiosIds.isEmpty) return [];
       final ap = await supabase
@@ -169,7 +205,7 @@ Future<List<String>> profileIdsParaNovaMensagem(NovaMensagemParams p) async {
 }
 
 Future<List<String>> profileIdsParaMensagemExistente(Mensagem m) async {
-  return profileIdsParaNovaMensagem(
+    return profileIdsParaNovaMensagem(
     NovaMensagemParams(
       titulo: m.titulo,
       corpo: m.corpo,
@@ -177,6 +213,7 @@ Future<List<String>> profileIdsParaMensagemExistente(Mensagem m) async {
       escopo: m.escopo,
       poloId: m.poloId,
       municipiosIds: m.municipiosIds,
+      classificacaoApoiador: m.classificacaoApoiador,
       enviarPush: false,
     ),
   );
@@ -195,6 +232,8 @@ class NovaMensagemParams {
     this.escopo = 'global',
     this.poloId,
     this.municipiosIds = const [],
+    this.classificacaoApoiador,
+    this.imagemJpegOpcional,
     this.enviarPush = false,
   });
 
@@ -204,6 +243,10 @@ class NovaMensagemParams {
   final String escopo;
   final String? poloId;
   final List<String> municipiosIds;
+  /// Obrigatório quando [escopo] == `apoiador_classificacao` (texto = apoiadores.perfil).
+  final String? classificacaoApoiador;
+  /// JPEG já comprimido no cliente antes do upload ao Storage (`mensagens` bucket).
+  final Uint8List? imagemJpegOpcional;
   final bool enviarPush;
 }
 
@@ -219,11 +262,46 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
       'escopo': p.escopo,
       if (p.poloId != null) 'polo_id': p.poloId,
       if (p.municipiosIds.isNotEmpty) 'municipios_ids': p.municipiosIds,
+      if (p.escopo == 'apoiador_classificacao' &&
+          p.classificacaoApoiador != null &&
+          p.classificacaoApoiador!.trim().isNotEmpty)
+        'classificacao_apoiador': p.classificacaoApoiador!.trim(),
       'criado_por': userId,
     };
 
     final res = await supabase.from('mensagens').insert(row).select().single();
-    final mensagem = Mensagem.fromJson(res);
+    var mensagem = Mensagem.fromJson(res);
+
+    final jpeg = p.imagemJpegOpcional;
+    if (jpeg != null && jpeg.isNotEmpty) {
+      final uid = userId ?? '';
+      if (uid.isEmpty) {
+        await supabase.from('mensagens').delete().eq('id', mensagem.id);
+        throw Exception('Sessão inválida para enviar imagem.');
+      }
+      final storagePath = '$uid/${mensagem.id}.jpg';
+      try {
+        await supabase.storage.from('mensagens').uploadBinary(
+          storagePath,
+          jpeg,
+          fileOptions: const FileOptions(
+            upsert: true,
+            contentType: 'image/jpeg',
+          ),
+        );
+      } catch (e) {
+        await supabase.from('mensagens').delete().eq('id', mensagem.id);
+        throw Exception('Falha ao enviar a imagem da mensagem. $e');
+      }
+      final publicUrl = supabase.storage.from('mensagens').getPublicUrl(storagePath);
+      final upd = await supabase
+          .from('mensagens')
+          .update({'imagem_url': publicUrl})
+          .eq('id', mensagem.id)
+          .select()
+          .single();
+      mensagem = Mensagem.fromJson(upd);
+    }
 
     if (p.enviarPush) {
       final ids = await profileIdsParaNovaMensagem(p);
@@ -235,7 +313,11 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
       await supabase.auth.refreshSession();
       final body = <String, dynamic>{
         'title': mensagem.titulo,
-        'body': Mensagem.textoParaNotificacao(corpo: mensagem.corpo, linkUrl: mensagem.linkUrl),
+        'body': Mensagem.textoParaNotificacao(
+          corpo: mensagem.corpo,
+          linkUrl: mensagem.linkUrl,
+          imagemUrl: mensagem.imagemUrl,
+        ),
         'url': '/#/mensagens',
         'tag': 'mensagem-${mensagem.id}',
       };
@@ -280,7 +362,11 @@ final enviarPushMensagemProvider = Provider<Future<Map<String, dynamic>> Functio
     await supabase.auth.refreshSession();
     final body = <String, dynamic>{
       'title': m.titulo,
-      'body': Mensagem.textoParaNotificacao(corpo: m.corpo, linkUrl: m.linkUrl),
+      'body': Mensagem.textoParaNotificacao(
+        corpo: m.corpo,
+        linkUrl: m.linkUrl,
+        imagemUrl: m.imagemUrl,
+      ),
       'url': '/#/mensagens',
       'tag': 'mensagem-${m.id}',
     };

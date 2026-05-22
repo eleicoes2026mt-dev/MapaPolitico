@@ -43,6 +43,9 @@ dependencies:
   # Rede
   http: ^1.2.0
 
+  # Imagens (compressão / decode em Dart — web inclusive)
+  image: ^4.2.0
+
   # Formulários e storage
   image_picker: ^1.0.7
   file_picker: ^8.1.7
@@ -58,6 +61,7 @@ dependencies:
   # Web / PWA interop
   js: ^0.6.7
   whatsapp_share: ^2.0.2
+  crop_your_image: ^2.0.0
 
 dev_dependencies:
   flutter_test:

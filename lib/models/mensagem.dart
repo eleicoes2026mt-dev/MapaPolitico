@@ -4,9 +4,13 @@ class Mensagem {
   final String? corpo;
   /// Link opcional (rede social, site), repassado no push e na lista.
   final String? linkUrl;
-  /// global | polo | cidade | performance | reuniao | privada_assessores | privada_apoiadores
+  /// Imagem opcional (URL Storage), enviada com o corpo/lista e referência no push.
+  final String? imagemUrl;
+  /// global | polo | cidade | performance | reuniao | privada_assessores | privada_apoiadores | apoiador_classificacao
   final String escopo;
   final String? poloId;
+  /// Com escopo `apoiador_classificacao`: mesmo texto que `apoiadores.perfil` no cadastro.
+  final String? classificacaoApoiador;
   final List<String> municipiosIds;
   final String? statusPerformanceFiltro;
   final String? reuniaoId;
@@ -18,8 +22,10 @@ class Mensagem {
     required this.titulo,
     this.corpo,
     this.linkUrl,
+    this.imagemUrl,
     this.escopo = 'global',
     this.poloId,
+    this.classificacaoApoiador,
     this.municipiosIds = const [],
     this.statusPerformanceFiltro,
     this.reuniaoId,
@@ -34,8 +40,10 @@ class Mensagem {
       titulo: json['titulo'] as String,
       corpo: json['corpo'] as String?,
       linkUrl: json['link_url'] as String?,
+      imagemUrl: json['imagem_url'] as String?,
       escopo: json['escopo'] as String? ?? 'global',
       poloId: json['polo_id'] as String?,
+      classificacaoApoiador: json['classificacao_apoiador'] as String?,
       municipiosIds: list is List ? list.map((e) => e.toString()).toList() : [],
       statusPerformanceFiltro: json['status_performance_filtro'] as String?,
       reuniaoId: json['reuniao_id'] as String?,
@@ -45,12 +53,18 @@ class Mensagem {
   }
 
   /// Corpo da notificação push / in-app: texto + link, se houver.
-  static String textoParaNotificacao({String? corpo, String? linkUrl}) {
+  static String textoParaNotificacao({
+    String? corpo,
+    String? linkUrl,
+    String? imagemUrl,
+  }) {
     final c = corpo?.trim();
     final l = linkUrl?.trim();
+    final i = imagemUrl?.trim();
     final parts = <String>[];
     if (c != null && c.isNotEmpty) parts.add(c);
     if (l != null && l.isNotEmpty) parts.add('🔗 $l');
+    if (i != null && i.isNotEmpty) parts.add('📷 Mensagem com imagem');
     if (parts.isEmpty) return 'Nova mensagem da campanha.';
     return parts.join('\n\n');
   }

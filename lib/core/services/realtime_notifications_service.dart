@@ -134,6 +134,7 @@ class RealtimeNotificationsService {
             final corpo = Mensagem.textoParaNotificacao(
               corpo: data['corpo'] as String?,
               linkUrl: data['link_url'] as String?,
+              imagemUrl: data['imagem_url'] as String?,
             );
             _onNotificacao?.call(titulo, corpo, '/#/mensagens');
           },

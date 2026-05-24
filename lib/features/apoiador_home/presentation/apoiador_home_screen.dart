@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/widgets/estado_mt_badge.dart';
-import '../../mensagens/presentation/widgets/mensagem_imagem_anexo.dart';
+import '../../mensagens/presentation/widgets/mensagem_corpo_miniatura_layout.dart';
 import '../../../models/mensagem.dart';
 import '../../../models/visita.dart';
 import '../../agenda/providers/agenda_provider.dart';
@@ -302,31 +302,32 @@ class _MensagemCard extends StatelessWidget {
                   ),
               ],
             ),
-            if (m.corpo != null && m.corpo!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(m.corpo!, style: theme.textTheme.bodyMedium),
-            ],
-            if (m.linkUrl != null && m.linkUrl!.trim().isNotEmpty) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: () async {
-                  final u = Uri.tryParse(m.linkUrl!.trim());
-                  if (u != null && await canLaunchUrl(u)) {
-                    await launchUrl(u, mode: LaunchMode.externalApplication);
-                  }
-                },
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                label: Text(
-                  m.linkUrl!.trim(),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-            if (m.imagemUrl != null && m.imagemUrl!.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              MensagemImagemAnexo(imagemUrl: m.imagemUrl!.trim()),
-            ],
+            MensagemCorpoMiniaturaLayout(
+              theme: theme,
+              paddingTop: 8,
+              corpoTexto: m.corpo,
+              linkSlot: m.linkUrl != null && m.linkUrl!.trim().isNotEmpty
+                  ? TextButton.icon(
+                      style: TextButton.styleFrom(
+                        alignment: Alignment.centerLeft,
+                      ),
+                      onPressed: () async {
+                        final u = Uri.tryParse(m.linkUrl!.trim());
+                        if (u != null && await canLaunchUrl(u)) {
+                          await launchUrl(u,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: Text(
+                        m.linkUrl!.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  : null,
+              imagemUrl: m.imagemUrl,
+            ),
           ],
         ),
       ),

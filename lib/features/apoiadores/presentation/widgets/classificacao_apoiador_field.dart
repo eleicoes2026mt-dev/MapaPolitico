@@ -2,19 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../utils/apoiadores_form_utils.dart';
 
-/// Campo de classificação: opções pré-definidas + «Outro» com texto livre.
+/// Campo de classificação: opções pré-definidas e, se permitido, «Outro» com texto livre.
+///
+/// Só gestores da campanha ([permitirNovaClassificacaoPorTexto] = true: candidato ou
+/// assessor grau 1) podem registar etiquetas novas por texto livre.
 class ClassificacaoApoiadorField extends StatefulWidget {
   const ClassificacaoApoiadorField({
     super.key,
     required this.sugestoesExtras,
     this.initialPerfil,
     required this.onChanged,
+    this.permitirNovaClassificacaoPorTexto = false,
   });
 
   /// Valores já usados em outros apoiadores (além dos [kClassificacoesApoiadorPadrao]).
   final List<String> sugestoesExtras;
   final String? initialPerfil;
   final ValueChanged<String?> onChanged;
+
+  /// Se false: sem «Outro…» nem campo de texto; só valores já existentes na lista.
+  final bool permitirNovaClassificacaoPorTexto;
 
   @override
   State<ClassificacaoApoiadorField> createState() =>
@@ -62,12 +69,16 @@ class _ClassificacaoApoiadorFieldState
     if (ini == null || ini.isEmpty) {
       _dropdownValue = kClassificacaoNenhuma;
       _outroController = TextEditingController();
-    } else if (op.contains(ini)) {
+    } else if (!op.contains(ini)) {
+      _dropdownValue = widget.permitirNovaClassificacaoPorTexto
+          ? kClassificacaoOutroValor
+          : kClassificacaoNenhuma;
+      _outroController = widget.permitirNovaClassificacaoPorTexto
+          ? TextEditingController(text: ini)
+          : TextEditingController();
+    } else {
       _dropdownValue = ini;
       _outroController = TextEditingController();
-    } else {
-      _dropdownValue = kClassificacaoOutroValor;
-      _outroController = TextEditingController(text: ini);
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _emitir());
   }
@@ -87,15 +98,19 @@ class _ClassificacaoApoiadorFieldState
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DropdownButtonFormField<String>(
-          initialValue: _dropdownValue == kClassificacaoNenhuma ||
-                  _dropdownValue == kClassificacaoOutroValor ||
-                  op.contains(_dropdownValue)
-              ? _dropdownValue
-              : kClassificacaoOutroValor,
-          decoration: const InputDecoration(
+          initialValue:
+              _dropdownValue == kClassificacaoNenhuma ||
+                      _dropdownValue == kClassificacaoOutroValor ||
+                      op.contains(_dropdownValue)
+                  ? _dropdownValue
+                  : (widget.permitirNovaClassificacaoPorTexto
+                      ? kClassificacaoOutroValor
+                      : kClassificacaoNenhuma),
+          decoration: InputDecoration(
             labelText: 'Classificação',
-            helperText:
-                'Pode escolher uma opção ou «Outro» para digitar uma nova.',
+            helperText: widget.permitirNovaClassificacaoPorTexto
+                ? 'Pode escolher uma opção ou «Outro» para digitar uma nova.'
+                : 'Apenas classificações já usadas nesta campanha ou pré-definidas. Novos rótulos: candidato ou assessor grau 1.',
           ),
           items: [
             const DropdownMenuItem(
@@ -103,10 +118,11 @@ class _ClassificacaoApoiadorFieldState
               child: Text('Nenhuma (opcional)'),
             ),
             ...op.map((e) => DropdownMenuItem(value: e, child: Text(e))),
-            const DropdownMenuItem(
-              value: kClassificacaoOutroValor,
-              child: Text('Outro… (digitar abaixo)'),
-            ),
+            if (widget.permitirNovaClassificacaoPorTexto)
+              const DropdownMenuItem(
+                value: kClassificacaoOutroValor,
+                child: Text('Outro… (digitar abaixo)'),
+              ),
           ],
           onChanged: (v) {
             if (v == null) return;

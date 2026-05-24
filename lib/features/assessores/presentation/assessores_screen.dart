@@ -4,16 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/router/navigation_keys.dart';
 import '../../../core/router/profile_role_cache.dart';
+import '../../../core/utils/municipio_resolver.dart';
 import '../../../core/widgets/confirmar_senha_deputado_dialog.dart';
+import '../../../core/widgets/municipio_mt_picker_sheet.dart';
 import '../../../core/widgets/estado_mt_badge.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../../../models/assessor.dart';
+import '../../../models/municipio.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart'
     show apoiadoresListProvider;
 import '../../mapa/providers/benfeitorias_agg_provider.dart'
     show benfeitoriasAggPorMunicipioProvider;
-import '../../votantes/providers/votantes_provider.dart'
-    show votantesIndicacaoRedeListProvider, votantesListProvider;
+import '../../mapa/data/mt_municipios_coords.dart'
+    show displayNomeCidadeMT, normalizarNomeMunicipioMT;
 import '../providers/assessores_provider.dart'
     show
         assessoresListProvider,
@@ -27,7 +30,14 @@ import '../providers/assessores_provider.dart'
         setAssessorAtivo,
         setAssessorGrauAcesso,
         atualizarAssessorLinkInstagram,
+        atualizarAssessorMunicipio,
         rebaixarAssessorParaPapel;
+import '../../votantes/providers/votantes_provider.dart'
+    show
+        municipiosMTListProvider,
+        refreshMunicipiosMTList,
+        votantesIndicacaoRedeListProvider,
+        votantesListProvider;
 import '../providers/gestao_campanha_provider.dart';
 import '../../configuracoes/providers/menu_access_provider.dart';
 
@@ -446,8 +456,101 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
   bool _rebaixando = false;
   bool _toggleAtivo = false;
   bool _grauUpdating = false;
+  bool _municipioSaving = false;
 
   BuildContext get _dialogContext => shellNavigatorKey.currentContext ?? context;
+
+  bool _assessorTemMunicipioValidoParaRebaixar(Assessor a) {
+    final mid = a.municipioId?.trim();
+    if (mid == null || mid.isEmpty) return false;
+    final munList = ref.read(municipiosMTListProvider).valueOrNull;
+    if (munList != null &&
+        munList.isNotEmpty &&
+        !munList.any((m) => m.id == mid)) {
+      return false;
+    }
+    return true;
+  }
+
+  String? _municipioNomeNoCartao(Assessor a) {
+    final mid = a.municipioId?.trim();
+    if (mid == null || mid.isEmpty) return null;
+    final munList = ref.watch(municipiosMTListProvider).valueOrNull;
+    if (munList == null) return null;
+    for (final m in munList) {
+      if (m.id == mid) {
+        return displayNomeCidadeMT(normalizarNomeMunicipioMT(m.nome));
+      }
+    }
+    return null;
+  }
+
+  Future<bool> _definirOuAlterarMunicipioCartao() async {
+    List<Municipio> municipios = ref.read(municipiosMTListProvider).valueOrNull ?? [];
+    if (municipios.isEmpty) {
+      try {
+        municipios = await refreshMunicipiosMTList(ref);
+      } catch (_) {}
+    }
+    if (!mounted) return false;
+    if (municipios.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível carregar o cadastro de municípios. Tente atualizar a página.'),
+        ),
+      );
+      return false;
+    }
+
+    String? currentKey;
+    final mid = widget.assessor.municipioId?.trim();
+    if (mid != null && mid.isNotEmpty) {
+      for (final m in municipios) {
+        if (m.id == mid) {
+          currentKey = normalizarNomeMunicipioMT(m.nome);
+          break;
+        }
+      }
+    }
+
+    final k = await showMunicipioMtPicker(
+      _dialogContext,
+      currentNormalizedKey: currentKey,
+    );
+    if (k == null || !mounted) return false;
+
+    final resolvedId =
+        municipioIdParaNomeCidade(displayNomeCidadeMT(k), municipios);
+    if (resolvedId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este município não existe na base do servidor. Atualize o cadastro de cidades e tente de novo.'),
+        ),
+      );
+      return false;
+    }
+
+    setState(() => _municipioSaving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await atualizarAssessorMunicipio(
+        assessorId: widget.assessor.id,
+        municipioId: resolvedId,
+      );
+      if (!mounted) return false;
+      widget.onRefresh();
+      messenger.showSnackBar(const SnackBar(content: Text('Município salvo no cadastro do assessor.')));
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      messenger.showSnackBar(
+        SnackBar(content: Text(messageFromException(e))),
+      );
+      return false;
+    } finally {
+      if (mounted) setState(() => _municipioSaving = false);
+    }
+  }
 
   Future<void> _reenviarConvite() async {
     setState(() => _reenviando = true);
@@ -516,6 +619,51 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
   }
 
   Future<void> _rebaixarAssessorFluxo() async {
+    if (!_assessorTemMunicipioValidoParaRebaixar(widget.assessor)) {
+      final ir = await showDialog<bool>(
+        context: _dialogContext,
+        useRootNavigator: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Município obrigatório'),
+          content: Text(
+            'Para rebaixar ${widget.assessor.nome}, defina primeiro o município (MT) neste cadastro. '
+            'O servidor só conclui a mudança de papel quando o município existe na base.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Escolher município'),
+            ),
+          ],
+        ),
+      );
+      if (ir != true || !mounted) return;
+      final salvou = await _definirOuAlterarMunicipioCartao();
+      if (!salvou || !mounted) return;
+      await ref.read(assessoresListProvider.future);
+      if (!mounted) return;
+      final atualizado = () {
+        final list = ref.read(assessoresListProvider).valueOrNull ?? [];
+        for (final a in list) {
+          if (a.id == widget.assessor.id) return a;
+        }
+        return widget.assessor;
+      }();
+      if (!_assessorTemMunicipioValidoParaRebaixar(atualizado)) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(shellNavigatorKey.currentContext ?? context).showSnackBar(
+          const SnackBar(content: Text('Ainda falta um município válido. Salve novamente ou escolha outra cidade.')),
+        );
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
     final destinoRaw = await showDialog<String>(
       context: _dialogContext,
       useRootNavigator: false,
@@ -918,6 +1066,59 @@ class _AssessorCardState extends ConsumerState<_AssessorCard> {
                 const SizedBox(height: 14),
                 Divider(height: 1, color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5)),
                 const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.place_outlined, size: 18, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Município (MT)',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _municipioNomeNoCartao(assessor) ??
+                                (_assessorTemMunicipioValidoParaRebaixar(assessor)
+                                    ? '—'
+                                    : 'Não definido — obrigatório para rebaixar'),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color:
+                                  _assessorTemMunicipioValidoParaRebaixar(assessor)
+                                      ? null
+                                      : theme.colorScheme.error,
+                              fontWeight:
+                                  _assessorTemMunicipioValidoParaRebaixar(assessor) ? null : FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed:
+                          _municipioSaving ? null : () => _definirOuAlterarMunicipioCartao(),
+                      child: _municipioSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              assessor.municipioId != null &&
+                                      assessor.municipioId!.trim().isNotEmpty &&
+                                      _assessorTemMunicipioValidoParaRebaixar(assessor)
+                                  ? 'Alterar'
+                                  : 'Definir',
+                            ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     const Text('Grau: '),

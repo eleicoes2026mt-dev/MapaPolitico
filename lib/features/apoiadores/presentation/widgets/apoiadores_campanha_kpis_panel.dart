@@ -14,7 +14,7 @@ class ApoiadoresCampanhaKpisPanel extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
-        initiallyExpanded: true,
+        initiallyExpanded: false,
         title: Text(
           'Indicadores por assessor',
           style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),

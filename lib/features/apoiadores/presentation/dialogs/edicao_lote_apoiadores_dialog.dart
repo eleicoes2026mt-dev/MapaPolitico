@@ -12,11 +12,15 @@ class EdicaoLoteApoiadoresDialog extends ConsumerStatefulWidget {
     super.key,
     required this.apoiadorIds,
     required this.classificacoesSugestoes,
+    required this.permitirClassificacaoTextoLivre,
     required this.onSaved,
   });
 
   final List<String> apoiadorIds;
+  /// Opções válidas quando [permitirClassificacaoTextoLivre] é false (dropdown apenas).
   final List<String> classificacoesSugestoes;
+  /// Apenas candidato ou assessor grau 1 digitam texto livre; outros usam apenas a lista.
+  final bool permitirClassificacaoTextoLivre;
   final VoidCallback onSaved;
 
   @override
@@ -30,8 +34,17 @@ class _EdicaoLoteApoiadoresDialogState
   bool _alterarProcedencia = false;
   bool _removerProcedencia = false;
   final _classificacaoController = TextEditingController();
+  late String _classificacaoDropdownValor;
   final _origemController = TextEditingController();
   bool _salvando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final op = [...widget.classificacoesSugestoes.toSet()]
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    _classificacaoDropdownValor = op.isNotEmpty ? op.first : '';
+  }
 
   @override
   void dispose() {
@@ -71,7 +84,9 @@ class _EdicaoLoteApoiadoresDialogState
           id,
           AtualizarApoiadorParams(
             atualizarPerfil: _alterarClassificacao,
-            perfil: _classificacaoController.text,
+            perfil: widget.permitirClassificacaoTextoLivre
+                ? _classificacaoController.text
+                : _classificacaoDropdownValor,
             atualizarOrigemLugar: _alterarProcedencia,
             origemLugarTexto: _removerProcedencia ? '' : _origemController.text,
           ),
@@ -98,6 +113,8 @@ class _EdicaoLoteApoiadoresDialogState
     final theme = Theme.of(context);
     final n = widget.apoiadorIds.length;
     final chips = widget.classificacoesSugestoes.take(10).toList();
+    final opcoesClassificacaoOrdenadas = [...widget.classificacoesSugestoes.toSet()]
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     return AlertDialog(
       title: Text('Edição em lote ($n)'),
@@ -126,40 +143,97 @@ class _EdicaoLoteApoiadoresDialogState
                     : (v) => setState(() => _alterarClassificacao = v),
               ),
               if (_alterarClassificacao) ...[
-                TextFormField(
-                  controller: _classificacaoController,
-                  enabled: !_salvando,
-                  decoration: const InputDecoration(
-                    labelText: 'Classificação',
-                    border: OutlineInputBorder(),
-                    hintText: 'Deixe em branco para remover',
-                  ),
-                ),
-                if (chips.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Sugestões',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                if (widget.permitirClassificacaoTextoLivre) ...[
+                  TextFormField(
+                    controller: _classificacaoController,
+                    enabled: !_salvando,
+                    decoration: const InputDecoration(
+                      labelText: 'Classificação',
+                      border: OutlineInputBorder(),
+                      hintText: 'Deixe em branco para remover',
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: chips
-                        .map(
-                          (s) => ActionChip(
-                            label: Text(s),
-                            onPressed: _salvando
-                                ? null
-                                : () => setState(
-                                      () => _classificacaoController.text = s,
-                                    ),
-                          ),
-                        )
-                        .toList(),
+                  if (chips.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Sugestões',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: chips
+                          .map(
+                            (s) => ActionChip(
+                              label: Text(s),
+                              onPressed: _salvando
+                                  ? null
+                                  : () => setState(
+                                        () => _classificacaoController.text = s,
+                                      ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ] else ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Só classificações já existentes nesta campanha. Para criar etiquetas novas, use conta de candidato ou assessor grau 1.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
+                  if (opcoesClassificacaoOrdenadas.isEmpty)
+                    Text(
+                      'Ainda não há classificações na base (defina primeiro em algum cadastro ou peça ao gestor da campanha).',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    )
+                  else ...[
+                    Builder(
+                      builder: (ctx) {
+                        final effectiveValor =
+                            opcoesClassificacaoOrdenadas.contains(
+                                        _classificacaoDropdownValor) ||
+                                    _classificacaoDropdownValor.isEmpty
+                                ? _classificacaoDropdownValor
+                                : opcoesClassificacaoOrdenadas.first;
+                        return DropdownButtonFormField<String>(
+                          key: ValueKey(effectiveValor),
+                          initialValue: effectiveValor,
+                          decoration: const InputDecoration(
+                            labelText: 'Classificação',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: '',
+                              child: Text('Remover classificação'),
+                            ),
+                            ...opcoesClassificacaoOrdenadas.map(
+                              (s) => DropdownMenuItem<String>(
+                                value: s,
+                                child: Text(s),
+                              ),
+                            ),
+                          ],
+                          onChanged: _salvando
+                              ? null
+                              : (v) {
+                                  if (v == null) return;
+                                  setState(() => _classificacaoDropdownValor = v);
+                                },
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ],
               const SizedBox(height: 8),

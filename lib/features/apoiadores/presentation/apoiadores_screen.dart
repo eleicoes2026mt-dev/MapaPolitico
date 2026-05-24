@@ -151,6 +151,8 @@ class _ApoiadoresScreenState extends ConsumerState<ApoiadoresScreen> {
       builder: (ctx) => EdicaoLoteApoiadoresDialog(
         apoiadorIds: ids,
         classificacoesSugestoes: classificacoesSugestoes,
+        permitirClassificacaoTextoLivre:
+            ref.read(podeGestaoCampanhaCompletaProvider),
         onSaved: () {
           _refreshApoiadoresCampanha();
           if (!mounted) return;

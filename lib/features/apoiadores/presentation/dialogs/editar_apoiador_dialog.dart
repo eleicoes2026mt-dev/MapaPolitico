@@ -11,6 +11,7 @@ import '../../../../core/widgets/municipio_mt_picker_sheet.dart';
 import '../../../../models/apoiador.dart';
 import '../../../../models/benfeitoria.dart';
 import '../../../../models/municipio.dart';
+import '../../../assessores/providers/gestao_campanha_provider.dart';
 import '../../../benfeitorias/providers/benfeitorias_provider.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
 import '../../../votantes/providers/votantes_provider.dart'
@@ -339,6 +340,8 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                       .where((e) => !kClassificacoesApoiadorPadrao.contains(e))
                       .toList(),
                   initialPerfil: _perfil,
+                  permitirNovaClassificacaoPorTexto:
+                      ref.watch(podeGestaoCampanhaCompletaProvider),
                   onChanged: (v) => setState(() => _perfil = v),
                 ),
                 const SizedBox(height: 16),

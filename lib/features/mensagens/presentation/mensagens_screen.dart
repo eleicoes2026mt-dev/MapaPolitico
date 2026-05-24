@@ -31,6 +31,7 @@ import '../../votantes/providers/votantes_provider.dart'
     show municipiosMTListProvider, refreshMunicipiosMTList;
 import '../../../models/municipio.dart';
 import '../providers/mensagens_provider.dart';
+import 'widgets/mensagem_corpo_miniatura_layout.dart';
 import 'widgets/mensagem_imagem_anexo.dart';
 import 'widgets/mensagem_imagem_crop_quadrado_screen.dart';
 
@@ -438,46 +439,45 @@ class _MensagemCard extends StatelessWidget {
                   ),
               ],
             ),
-            if (m.corpo != null && m.corpo!.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(m.corpo!, style: theme.textTheme.bodyMedium),
-            ],
-            if (m.linkUrl != null && m.linkUrl!.trim().isNotEmpty) ...[
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () async {
-                  final u = Uri.tryParse(m.linkUrl!.trim());
-                  if (u != null && await canLaunchUrl(u)) {
-                    await launchUrl(u, mode: LaunchMode.externalApplication);
-                  }
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.link_rounded,
-                          size: 18, color: theme.colorScheme.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          m.linkUrl!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.primary,
-                            decoration: TextDecoration.underline,
-                            decorationColor: theme.colorScheme.primary,
-                          ),
+            MensagemCorpoMiniaturaLayout(
+              theme: theme,
+              corpoTexto: m.corpo,
+              linkSlot: m.linkUrl != null && m.linkUrl!.trim().isNotEmpty
+                  ? InkWell(
+                      onTap: () async {
+                        final u = Uri.tryParse(m.linkUrl!.trim());
+                        if (u != null && await canLaunchUrl(u)) {
+                          await launchUrl(u,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.link_rounded,
+                                size: 18,
+                                color: theme.colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                m.linkUrl!,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.primary,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            if (m.imagemUrl != null && m.imagemUrl!.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              MensagemImagemAnexo(imagemUrl: m.imagemUrl!.trim()),
-            ],
+                    )
+                  : null,
+              imagemUrl: m.imagemUrl,
+            ),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -679,6 +679,8 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final munAsync = ref.watch(municipiosMTListProvider);
+    final podeNovaClassificacaoMsg =
+        ref.watch(podeGestaoCampanhaCompletaProvider);
 
     final maxDialogW = min(480.0, MediaQuery.sizeOf(context).width - 48);
     final previewLado = min(maxDialogW, kMensagemImagemListaLadoDp);
@@ -856,7 +858,10 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                             key: const ValueKey('nova_msg_classificacao'),
                             sugestoesExtras: extras,
                             initialPerfil: _classificacaoApoiador,
-                            onChanged: (v) => setState(() => _classificacaoApoiador = v),
+                            permitirNovaClassificacaoPorTexto:
+                                podeNovaClassificacaoMsg,
+                            onChanged: (v) =>
+                                setState(() => _classificacaoApoiador = v),
                           );
                         },
                         loading: () => const LinearProgressIndicator(),

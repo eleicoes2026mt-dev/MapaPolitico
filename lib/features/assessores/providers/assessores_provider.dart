@@ -359,6 +359,29 @@ Future<void> atualizarAssessorLinkInstagram({
   }
 }
 
+/// Município MT (FK [municipios]) — obrigatório antes de [rebaixarAssessorParaPapel].
+Future<void> atualizarAssessorMunicipio({
+  required String assessorId,
+  required String municipioId,
+}) async {
+  await supabase.auth.refreshSession();
+  final mid = municipioId.trim();
+  if (mid.isEmpty) {
+    throw Exception('Selecione um município válido.');
+  }
+  try {
+    final res = await supabase
+        .from('assessores')
+        .update({'municipio_id': mid}).eq('id', assessorId).select('id').maybeSingle();
+    if (res == null) {
+      throw Exception(
+          'Não foi possível salvar o município (permissões ou dados). Tente novamente.');
+    }
+  } on PostgrestException catch (e) {
+    throw Exception(messageFromException(e));
+  }
+}
+
 Future<void> setAssessorAtivo(
     {required String assessorId, required bool ativo}) async {
   await supabase.auth.refreshSession();

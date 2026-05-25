@@ -460,6 +460,18 @@ class _PaginaListaAmigos extends StatelessWidget {
 String _indicacaoCelulaVotante(Votante v, Map<String, String> apoiadorPorId) =>
     textoIndicacaoResolvidoAmigosGilberto(v, apoiadorPorId);
 
+/// «Apoiador»: nome na rede de amigos quando há `apoiador_id`; senão o nome de quem registrou (`convite_por_nome`).
+String _apoiadorCelulaVotante(Votante v, Map<String, String> apoiadorPorId) {
+  final aid = v.apoiadorId?.trim();
+  if (aid != null && aid.isNotEmpty) {
+    final n = apoiadorPorId[aid]?.trim();
+    if (n != null && n.isNotEmpty) return n;
+  }
+  final conv = v.convitePorNome?.trim();
+  if (conv != null && conv.isNotEmpty) return conv;
+  return '—';
+}
+
 enum _PromoverDestinoCadastroAmigo { apoiador, assessor }
 
 /// Menu para promover cadastro público como apoiador ou assessor da campanha.
@@ -558,9 +570,7 @@ class _VotantesTable extends StatelessWidget {
           final cidade = v.cidadeDisplay.isNotEmpty
               ? displayNomeCidadeMT(v.cidadeDisplay)
               : '—';
-          final ap = v.apoiadorId != null
-              ? (apoiadorPorId[v.apoiadorId!] ?? '—')
-              : '—';
+          final ap = _apoiadorCelulaVotante(v, apoiadorPorId);
           final ind = _indicacaoCelulaVotante(v, apoiadorPorId);
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
@@ -619,9 +629,7 @@ class _VotantesTable extends StatelessWidget {
               final cidade = v.cidadeDisplay.isNotEmpty
                   ? displayNomeCidadeMT(v.cidadeDisplay)
                   : '—';
-              final ap = v.apoiadorId != null
-                  ? (apoiadorPorId[v.apoiadorId!] ?? '—')
-                  : '—';
+              final ap = _apoiadorCelulaVotante(v, apoiadorPorId);
               final ind = _indicacaoCelulaVotante(v, apoiadorPorId);
               final pf = promoverFlags(v);
               return DataRow(
@@ -689,6 +697,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
   late final TextEditingController _linkInstagram;
+  late final TextEditingController _indicacao;
 
   /// Chave normalizada (lista `listCidadesMTNomesNormalizados`), igual ao cadastro de apoiadores.
   String? _cidadeNomeNormalizado;
@@ -702,6 +711,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
 
   /// Edição: sincronizar dropdown a partir de `municipio_id` (uma vez).
   bool _postFrameSyncEdicaoAgendado = false;
+
+  /// Edição: pré-preencher indicação (candidato) — uma vez, após lista de apoiadores.
+  bool _postFrameSyncIndicacaoAgendado = false;
 
   @override
   void initState() {
@@ -717,6 +729,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _numero = TextEditingController(text: v?.numero ?? '');
     _complemento = TextEditingController(text: v?.complemento ?? '');
     _linkInstagram = TextEditingController(text: v?.linkInstagram ?? '');
+    _indicacao = TextEditingController();
     // Prioridade: nome do join > cidade_nome salvo > vazio
     final cidadeInicial = v?.municipioNome?.trim().isNotEmpty == true
         ? v!.municipioNome!
@@ -741,6 +754,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _numero.dispose();
     _complemento.dispose();
     _linkInstagram.dispose();
+    _indicacao.dispose();
     super.dispose();
   }
 
@@ -770,6 +784,8 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
       final qtd = int.tryParse(_qtd.text.trim()) ?? 1;
       final profile = ref.read(profileProvider).valueOrNull;
       final cadastroAvulsoQr = profile?.cadastroViaQr == true;
+      final candidatoPodeAlterarIndicacao =
+          profile?.role == 'candidato' && widget.existente != null;
       if (widget.existente != null) {
         await ref.read(atualizarVotanteProvider)(
           widget.existente!.id,
@@ -797,6 +813,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                 ? null
                 : _linkInstagram.text.trim(),
             atualizarLinkInstagram: true,
+            atualizarConviteIndicacao: candidatoPodeAlterarIndicacao,
+            convitePorNome:
+                candidatoPodeAlterarIndicacao ? _indicacao.text : null,
           ),
         );
       } else {
@@ -811,7 +830,8 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
             cidadeNome: cidadeTexto,
             abrangencia: _abrangencia,
             qtdVotosFamilia: qtd < 1 ? 1 : qtd,
-            // Candidato/assessor: sem apoiador na rede; apoiador: preenchido no provider.
+            // `apoiador_id` só quando o papel é apoiador (provider); indicação e coluna «Apoiador»
+            // usam `convite_por_*` preenchido pelo provider com quem submeteu o formulário.
             apoiadorId: null,
             cep: cepSoDigitos(_cep.text).isEmpty
                 ? null
@@ -941,40 +961,84 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                 });
               });
             }
+            final listaApoiadoresAsync = ref.watch(apoiadoresListProvider);
+            if (profile?.role == 'candidato' &&
+                ex != null &&
+                !_postFrameSyncIndicacaoAgendado &&
+                (listaApoiadoresAsync.hasValue ||
+                    listaApoiadoresAsync.hasError)) {
+              _postFrameSyncIndicacaoAgendado = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                final snap = widget.existente;
+                if (snap == null) return;
+                final apois = listaApoiadoresAsync.valueOrNull ?? [];
+                final apMap = Map<String, String>.fromEntries(
+                  apois.map((a) => MapEntry(a.id, a.nome)),
+                );
+                _indicacao.text =
+                    textoIndicacaoResolvidoAmigosGilberto(snap, apMap);
+              });
+            }
+            final mostrarCampoIndicacaoCandidato =
+                profile?.role == 'candidato' && ex != null;
             return SingleChildScrollView(
               child: Form(
                 key: _formKey,
-                child: AmigosGilbertoDadosFormFields(
-                  nome: _nome,
-                  telefone: _telefone,
-                  email: _email,
-                  qtd: _qtd,
-                  linkInstagram: _linkInstagram,
-                  cep: _cep,
-                  logradouro: _logradouro,
-                  numero: _numero,
-                  complemento: _complemento,
-                  selectedCidadeKey: _cidadeNomeNormalizado,
-                  cidadeErro: _cidadeErro,
-                  onCidadeSelected: (k) => setState(() {
-                    if (k != null && k.trim().isNotEmpty) {
-                      _cidadeNomeNormalizado = k;
-                      _cidadeErro = null;
-                    }
-                  }),
-                  abrangencia: _abrangencia,
-                  onAbrangenciaChanged: (novo) => setState(() {
-                    _abrangencia = novo;
-                    if (novo == 'Individual') _qtd.text = '1';
-                  }),
-                  emailValidator: (v) {
-                    if (widget.existente != null) return null;
-                    return amigosGilbertoEmailValidatorPainel(v);
-                  },
-                  footerWidget: widget.existente == null && profile != null
-                      ? _VinculoCadastroNovoVotante(
-                          theme: theme, profile: profile)
-                      : null,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AmigosGilbertoDadosFormFields(
+                      nome: _nome,
+                      telefone: _telefone,
+                      email: _email,
+                      qtd: _qtd,
+                      linkInstagram: _linkInstagram,
+                      cep: _cep,
+                      logradouro: _logradouro,
+                      numero: _numero,
+                      complemento: _complemento,
+                      selectedCidadeKey: _cidadeNomeNormalizado,
+                      cidadeErro: _cidadeErro,
+                      onCidadeSelected: (k) => setState(() {
+                        if (k != null && k.trim().isNotEmpty) {
+                          _cidadeNomeNormalizado = k;
+                          _cidadeErro = null;
+                        }
+                      }),
+                      abrangencia: _abrangencia,
+                      onAbrangenciaChanged: (novo) => setState(() {
+                        _abrangencia = novo;
+                        if (novo == 'Individual') _qtd.text = '1';
+                      }),
+                      emailValidator: (v) {
+                        if (widget.existente != null) return null;
+                        return amigosGilbertoEmailValidatorPainel(v);
+                      },
+                      footerWidget:
+                          widget.existente == null && profile != null
+                              ? _VinculoCadastroNovoVotante(
+                                  theme: theme,
+                                  profile: profile,
+                                )
+                              : null,
+                    ),
+                    if (mostrarCampoIndicacaoCandidato) ...[
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _indicacao,
+                        decoration: const InputDecoration(
+                          labelText: 'Indicação',
+                          helperText:
+                              'Nome nas colunas Indicação e Apoiador nesta lista. '
+                              'Vazio: volta ao nome do apoiador (se existir) ou ao padrão da campanha.',
+                          alignLabelWithHint: true,
+                        ),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             );

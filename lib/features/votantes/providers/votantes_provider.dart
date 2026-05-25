@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/amigos_gilberto.dart';
 import '../../../models/municipio.dart';
+import '../../../models/profile.dart';
 import '../../../models/votante.dart';
 import '../../../core/supabase/municipios_seed.dart' show ensureMunicipiosMtSeeded, forceMunicipiosMtRecovery;
 import '../../../core/supabase/supabase_provider.dart';
@@ -13,6 +14,19 @@ import '../../assessores/providers/assessores_provider.dart'
     show assessoresListProvider, meuAssessorIdProvider;
 
 const _kVotantesSelect = '*, municipios(nome)';
+
+/// Nome em [votantes.convite_por_nome]: quem fez o registo no painel (indicação e coluna «Apoiador»).
+String? _nomeRegistradorParaConvite(Profile? profile) {
+  if (profile == null) return null;
+  final n = profile.fullName?.trim();
+  if (n != null && n.isNotEmpty) return n;
+  final e = profile.email?.trim();
+  if (e != null && e.isNotEmpty && e.contains('@')) {
+    final local = e.split('@').first.trim();
+    if (local.isNotEmpty) return local;
+  }
+  return null;
+}
 
 List<Municipio> _municipiosFromRpc(dynamic raw) {
   if (raw is! List) return [];
@@ -259,6 +273,12 @@ final criarVotanteProvider = Provider<Future<void> Function(NovoVotanteParams)>(
       'link_instagram': params.linkInstagram?.trim().isEmpty == true ? null : params.linkInstagram?.trim(),
     };
 
+    final nomeConvite = _nomeRegistradorParaConvite(profile);
+    if (nomeConvite != null && nomeConvite.isNotEmpty) {
+      insert['convite_por_profile_id'] = userId;
+      insert['convite_por_nome'] = nomeConvite;
+    }
+
     await client.from('votantes').insert(insert);
     ref.invalidate(votantesListProvider);
     ref.invalidate(votantesIndicacaoRedeListProvider);
@@ -282,6 +302,8 @@ class AtualizarVotanteParams {
     this.atualizarLegado = false,
     this.linkInstagram,
     this.atualizarLinkInstagram = false,
+    this.convitePorNome,
+    this.atualizarConviteIndicacao = false,
   });
   final String? nome;
   final String? telefone;
@@ -299,6 +321,10 @@ class AtualizarVotanteParams {
   final String? linkInstagram;
   /// Se true, grava [linkInstagram] (string vazia → null no banco).
   final bool atualizarLinkInstagram;
+  /// Só pelo candidato: texto da coluna Indicação/Apoiador (lista); vazio ⇒ null na base.
+  final String? convitePorNome;
+  /// Quando true, grava [convite_por_nome] e define `convite_por_profile_id` a null (indicação manual).
+  final bool atualizarConviteIndicacao;
 }
 
 final atualizarVotanteProvider = Provider<Future<void> Function(String id, AtualizarVotanteParams)>((ref) {
@@ -319,6 +345,11 @@ final atualizarVotanteProvider = Provider<Future<void> Function(String id, Atual
     if (p.atualizarLegado) row['votos_prometidos_ultima_eleicao'] = p.votosPrometidosUltimaEleicao;
     if (p.atualizarLinkInstagram) {
       row['link_instagram'] = p.linkInstagram?.trim().isEmpty == true ? null : p.linkInstagram?.trim();
+    }
+    if (p.atualizarConviteIndicacao) {
+      final t = p.convitePorNome?.trim();
+      row['convite_por_nome'] = (t == null || t.isEmpty) ? null : t;
+      row['convite_por_profile_id'] = null;
     }
     if (row.isEmpty) return;
     final updated = await client.from('votantes').update(row).eq('id', id).select('id').maybeSingle();

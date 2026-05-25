@@ -19,7 +19,7 @@ import '../../../models/profile.dart';
 import '../../../models/votante.dart';
 import '../../apoiadores/providers/apoiadores_provider.dart';
 import '../../assessores/providers/assessores_provider.dart'
-    show meuAssessorRegistroProvider;
+    show assessoresListProvider, meuAssessorRegistroProvider;
 import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../mapa/data/mt_municipios_coords.dart';
@@ -964,15 +964,31 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
               });
             }
             final listaApoiadoresAsync = ref.watch(apoiadoresListProvider);
+            final listaAssessoresAsync = ref.watch(assessoresListProvider);
+            final listaVotantesAsync   = ref.watch(votantesListProvider);
             // Dropdown de indicação — monta opções ao primeiro build com dados.
             final mostrarDropdownIndicacao =
                 profile?.role == 'candidato' && ex != null;
+            final dropdownPronto = mostrarDropdownIndicacao &&
+                listaApoiadoresAsync.hasValue &&
+                listaAssessoresAsync.hasValue &&
+                listaVotantesAsync.hasValue;
             List<String> opcoesIndicacao = [];
-            if (mostrarDropdownIndicacao && listaApoiadoresAsync.hasValue) {
-              final apois = listaApoiadoresAsync.valueOrNull ?? [];
+            if (dropdownPronto) {
+              final apois    = listaApoiadoresAsync.valueOrNull ?? [];
+              final assess   = listaAssessoresAsync.valueOrNull ?? [];
+              final votantes = listaVotantesAsync.valueOrNull   ?? [];
+              final nomes = <String>{
+                ...apois.map((a) => a.nome.trim()),
+                ...assess.map((a) => a.nome.trim()),
+                ...votantes
+                    .where((v) => v.nome.trim().isNotEmpty &&
+                        v.id != (widget.existente?.id ?? ''))
+                    .map((v) => v.nome.trim()),
+              }..remove('');
               opcoesIndicacao = [
                 kIndicacaoListaFallbackCandidato,
-                ...apois.map((a) => a.nome).toSet().toList()..sort(),
+                ...nomes.toList()..sort(),
               ];
               if (!_postFrameSyncIndicacaoAgendado) {
                 _postFrameSyncIndicacaoAgendado = true;
@@ -986,9 +1002,10 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                   final resolvidoAtual =
                       textoIndicacaoResolvidoAmigosGilberto(snap, apMap);
                   setState(() {
-                    _indicacaoSelecionada = opcoesIndicacao.contains(resolvidoAtual)
-                        ? resolvidoAtual
-                        : kIndicacaoListaFallbackCandidato;
+                    _indicacaoSelecionada =
+                        opcoesIndicacao.contains(resolvidoAtual)
+                            ? resolvidoAtual
+                            : kIndicacaoListaFallbackCandidato;
                   });
                 });
               }
@@ -1037,10 +1054,10 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                     ),
                     if (mostrarDropdownIndicacao) ...[
                       const SizedBox(height: 16),
-                      listaApoiadoresAsync.when(
-                        loading: () => const LinearProgressIndicator(),
-                        error: (_, __) => const SizedBox.shrink(),
-                        data: (_) => InputDecorator(
+                      if (!dropdownPronto)
+                        const LinearProgressIndicator()
+                      else
+                        InputDecorator(
                           decoration: const InputDecoration(
                             labelText: 'Indicação',
                             helperText:
@@ -1071,7 +1088,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                             ),
                           ),
                         ),
-                      ),
                     ],
                   ],
                 ),

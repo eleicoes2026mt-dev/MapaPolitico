@@ -697,7 +697,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
   late final TextEditingController _numero;
   late final TextEditingController _complemento;
   late final TextEditingController _linkInstagram;
-  late final TextEditingController _indicacao;
+
+  /// Indicação escolhida no dropdown (candidato editando). null = padrão da campanha.
+  String? _indicacaoSelecionada;
 
   /// Chave normalizada (lista `listCidadesMTNomesNormalizados`), igual ao cadastro de apoiadores.
   String? _cidadeNomeNormalizado;
@@ -729,7 +731,7 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _numero = TextEditingController(text: v?.numero ?? '');
     _complemento = TextEditingController(text: v?.complemento ?? '');
     _linkInstagram = TextEditingController(text: v?.linkInstagram ?? '');
-    _indicacao = TextEditingController();
+    // Indicação: pré-selecionada via convite_por_nome (preenchida depois via postFrameCallback).
     // Prioridade: nome do join > cidade_nome salvo > vazio
     final cidadeInicial = v?.municipioNome?.trim().isNotEmpty == true
         ? v!.municipioNome!
@@ -754,7 +756,6 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
     _numero.dispose();
     _complemento.dispose();
     _linkInstagram.dispose();
-    _indicacao.dispose();
     super.dispose();
   }
 
@@ -814,8 +815,9 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                 : _linkInstagram.text.trim(),
             atualizarLinkInstagram: true,
             atualizarConviteIndicacao: candidatoPodeAlterarIndicacao,
-            convitePorNome:
-                candidatoPodeAlterarIndicacao ? _indicacao.text : null,
+            convitePorNome: candidatoPodeAlterarIndicacao
+                ? _indicacaoSelecionada
+                : null,
           ),
         );
       } else {
@@ -962,26 +964,35 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
               });
             }
             final listaApoiadoresAsync = ref.watch(apoiadoresListProvider);
-            if (profile?.role == 'candidato' &&
-                ex != null &&
-                !_postFrameSyncIndicacaoAgendado &&
-                (listaApoiadoresAsync.hasValue ||
-                    listaApoiadoresAsync.hasError)) {
-              _postFrameSyncIndicacaoAgendado = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                final snap = widget.existente;
-                if (snap == null) return;
-                final apois = listaApoiadoresAsync.valueOrNull ?? [];
-                final apMap = Map<String, String>.fromEntries(
-                  apois.map((a) => MapEntry(a.id, a.nome)),
-                );
-                _indicacao.text =
-                    textoIndicacaoResolvidoAmigosGilberto(snap, apMap);
-              });
-            }
-            final mostrarCampoIndicacaoCandidato =
+            // Dropdown de indicação — monta opções ao primeiro build com dados.
+            final mostrarDropdownIndicacao =
                 profile?.role == 'candidato' && ex != null;
+            List<String> opcoesIndicacao = [];
+            if (mostrarDropdownIndicacao && listaApoiadoresAsync.hasValue) {
+              final apois = listaApoiadoresAsync.valueOrNull ?? [];
+              opcoesIndicacao = [
+                kIndicacaoListaFallbackCandidato,
+                ...apois.map((a) => a.nome).toSet().toList()..sort(),
+              ];
+              if (!_postFrameSyncIndicacaoAgendado) {
+                _postFrameSyncIndicacaoAgendado = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  final snap = widget.existente;
+                  if (snap == null) return;
+                  final apMap = Map<String, String>.fromEntries(
+                    apois.map((a) => MapEntry(a.id, a.nome)),
+                  );
+                  final resolvidoAtual =
+                      textoIndicacaoResolvidoAmigosGilberto(snap, apMap);
+                  setState(() {
+                    _indicacaoSelecionada = opcoesIndicacao.contains(resolvidoAtual)
+                        ? resolvidoAtual
+                        : kIndicacaoListaFallbackCandidato;
+                  });
+                });
+              }
+            }
             return SingleChildScrollView(
               child: Form(
                 key: _formKey,
@@ -1024,18 +1035,42 @@ class _VotanteFormDialogState extends ConsumerState<_VotanteFormDialog> {
                                 )
                               : null,
                     ),
-                    if (mostrarCampoIndicacaoCandidato) ...[
+                    if (mostrarDropdownIndicacao) ...[
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _indicacao,
-                        decoration: const InputDecoration(
-                          labelText: 'Indicação',
-                          helperText:
-                              'Nome nas colunas Indicação e Apoiador nesta lista. '
-                              'Vazio: volta ao nome do apoiador (se existir) ou ao padrão da campanha.',
-                          alignLabelWithHint: true,
+                      listaApoiadoresAsync.when(
+                        loading: () => const LinearProgressIndicator(),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (_) => InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Indicação',
+                            helperText:
+                                'Nome nas colunas «Indicação» e «Apoiador» desta lista.',
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: opcoesIndicacao.contains(_indicacaoSelecionada)
+                                  ? _indicacaoSelecionada
+                                  : (opcoesIndicacao.isNotEmpty
+                                      ? kIndicacaoListaFallbackCandidato
+                                      : null),
+                              isExpanded: true,
+                              isDense: true,
+                              items: opcoesIndicacao
+                                  .map(
+                                    (n) => DropdownMenuItem<String>(
+                                      value: n,
+                                      child: Text(n),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => _indicacaoSelecionada = v);
+                                }
+                              },
+                            ),
+                          ),
                         ),
-                        maxLines: 2,
                       ),
                     ],
                   ],

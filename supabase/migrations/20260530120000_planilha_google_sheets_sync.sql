@@ -53,7 +53,8 @@ BEGIN
   END IF;
 
   -- Apoiador soft-deleted: não envia linha nova (sync completo limpa depois).
-  IF TG_TABLE_NAME = 'apoiadores' AND TG_OP = 'UPDATE' AND NEW.excluido_em IS NOT NULL THEN
+  IF TG_TABLE_NAME = 'apoiadores' AND TG_OP = 'UPDATE'
+     AND (to_jsonb(NEW)->>'excluido_em') IS NOT NULL THEN
     RETURN NEW;
   END IF;
 

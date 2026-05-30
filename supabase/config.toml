@@ -50,3 +50,5 @@ verify_jwt = false
 #   supabase functions deploy send-push --no-verify-jwt
 [functions.send-push]
 verify_jwt = false
+[functions.sync-contatos-planilha]
+verify_jwt = false

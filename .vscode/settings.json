@@ -1,4 +1,5 @@
 {
   "dart.projectSearchDepth": 5,
-  "dart.flutterProjectSearchDepth": 5
+  "dart.flutterProjectSearchDepth": 5,
+  "cmake.sourceDirectory": "C:/Users/fabianoeugenio/Desktop/MapaPolitico/windows"
 }

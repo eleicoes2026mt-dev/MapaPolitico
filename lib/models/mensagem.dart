@@ -6,6 +6,8 @@ class Mensagem {
   final String? linkUrl;
   /// Imagem opcional (URL Storage), enviada com o corpo/lista e referência no push.
   final String? imagemUrl;
+  /// PDF opcional (URL Storage mensagens/<uid>/<id>.pdf).
+  final String? pdfUrl;
   /// global | polo | cidade | performance | reuniao | privada_assessores | privada_apoiadores | apoiador_classificacao
   final String escopo;
   final String? poloId;
@@ -23,6 +25,7 @@ class Mensagem {
     this.corpo,
     this.linkUrl,
     this.imagemUrl,
+    this.pdfUrl,
     this.escopo = 'global',
     this.poloId,
     this.classificacaoApoiador,
@@ -41,6 +44,7 @@ class Mensagem {
       corpo: json['corpo'] as String?,
       linkUrl: json['link_url'] as String?,
       imagemUrl: json['imagem_url'] as String?,
+      pdfUrl: json['pdf_url'] as String?,
       escopo: json['escopo'] as String? ?? 'global',
       poloId: json['polo_id'] as String?,
       classificacaoApoiador: json['classificacao_apoiador'] as String?,

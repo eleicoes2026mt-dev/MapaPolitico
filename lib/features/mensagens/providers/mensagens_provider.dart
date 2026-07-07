@@ -234,6 +234,8 @@ class NovaMensagemParams {
     this.municipiosIds = const [],
     this.classificacaoApoiador,
     this.imagemJpegOpcional,
+    this.pdfBytesOpcional,
+    this.pdfNomeArquivo,
     this.enviarPush = false,
   });
 
@@ -247,6 +249,10 @@ class NovaMensagemParams {
   final String? classificacaoApoiador;
   /// JPEG já comprimido no cliente antes do upload ao Storage (`mensagens` bucket).
   final Uint8List? imagemJpegOpcional;
+  /// Bytes do PDF a anexar (opcional).
+  final Uint8List? pdfBytesOpcional;
+  /// Nome original do arquivo PDF (para exibição, ex.: «edital.pdf»).
+  final String? pdfNomeArquivo;
   final bool enviarPush;
 }
 
@@ -272,13 +278,14 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
     final res = await supabase.from('mensagens').insert(row).select().single();
     var mensagem = Mensagem.fromJson(res);
 
+    final uid = userId ?? '';
+    if (uid.isEmpty && (p.imagemJpegOpcional != null || p.pdfBytesOpcional != null)) {
+      await supabase.from('mensagens').delete().eq('id', mensagem.id);
+      throw Exception('Sessão inválida para enviar arquivo.');
+    }
+
     final jpeg = p.imagemJpegOpcional;
     if (jpeg != null && jpeg.isNotEmpty) {
-      final uid = userId ?? '';
-      if (uid.isEmpty) {
-        await supabase.from('mensagens').delete().eq('id', mensagem.id);
-        throw Exception('Sessão inválida para enviar imagem.');
-      }
       final storagePath = '$uid/${mensagem.id}.jpg';
       try {
         await supabase.storage.from('mensagens').uploadBinary(
@@ -297,6 +304,32 @@ final criarMensagemProvider = Provider<Future<Mensagem> Function(NovaMensagemPar
       final upd = await supabase
           .from('mensagens')
           .update({'imagem_url': publicUrl})
+          .eq('id', mensagem.id)
+          .select()
+          .single();
+      mensagem = Mensagem.fromJson(upd);
+    }
+
+    final pdfBytes = p.pdfBytesOpcional;
+    if (pdfBytes != null && pdfBytes.isNotEmpty) {
+      final storagePath = '$uid/${mensagem.id}.pdf';
+      try {
+        await supabase.storage.from('mensagens').uploadBinary(
+          storagePath,
+          pdfBytes,
+          fileOptions: const FileOptions(
+            upsert: true,
+            contentType: 'application/pdf',
+          ),
+        );
+      } catch (e) {
+        await supabase.from('mensagens').delete().eq('id', mensagem.id);
+        throw Exception('Falha ao enviar o PDF da mensagem. $e');
+      }
+      final publicUrl = supabase.storage.from('mensagens').getPublicUrl(storagePath);
+      final upd = await supabase
+          .from('mensagens')
+          .update({'pdf_url': publicUrl})
           .eq('id', mensagem.id)
           .select()
           .single();

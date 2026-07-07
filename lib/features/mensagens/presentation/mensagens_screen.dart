@@ -478,6 +478,38 @@ class _MensagemCard extends StatelessWidget {
                   : null,
               imagemUrl: m.imagemUrl,
             ),
+            if (m.pdfUrl != null && m.pdfUrl!.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () async {
+                  final uri = Uri.tryParse(m.pdfUrl!.trim());
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.picture_as_pdf_outlined,
+                          size: 18, color: theme.colorScheme.error),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Abrir PDF',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                          decoration: TextDecoration.underline,
+                          decorationColor: theme.colorScheme.error,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [
@@ -544,6 +576,34 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
   bool _enviarPush = false;
   bool _loading = false;
   Uint8List? _imagemJpegAnexo;
+  Uint8List? _pdfAnexoBytes;
+  String? _pdfAnexoNome;
+
+  Future<void> _escolherPdfAnexo() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf'],
+        withData: true,
+      );
+      if (!mounted || result == null) return;
+      final bytes = result.files.single.bytes;
+      final nome = result.files.single.name;
+      if (bytes == null || bytes.isEmpty) return;
+      setState(() {
+        _pdfAnexoBytes = bytes;
+        _pdfAnexoNome = nome;
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF «$nome» (${(bytes.length / 1024).round()} KB) pronto para envio.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Não foi possível escolher o PDF: $e')));
+    }
+  }
 
   Future<void> _escolherImagemAnexo() async {
     try {
@@ -654,6 +714,8 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
               ? _classificacaoApoiador?.trim()
               : null,
           imagemJpegOpcional: _imagemJpegAnexo,
+          pdfBytesOpcional: _pdfAnexoBytes,
+          pdfNomeArquivo: _pdfAnexoNome,
           enviarPush: _enviarPush,
         ),
       );
@@ -791,6 +853,60 @@ class _NovaMensagemDialogState extends ConsumerState<_NovaMensagemDialog> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'PDF (opcional)',
+                    style: theme.textTheme.labelLarge,
+                  ),
+                ),
+                Text(
+                  'Anexe um documento PDF — aparecerá como link «Abrir PDF» na mensagem.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _loading ? null : _escolherPdfAnexo,
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                      label: Text(_pdfAnexoBytes != null ? 'Trocar PDF' : 'Escolher PDF'),
+                    ),
+                    if (_pdfAnexoBytes != null) ...[
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: _loading
+                            ? null
+                            : () => setState(() {
+                                  _pdfAnexoBytes = null;
+                                  _pdfAnexoNome = null;
+                                }),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Remover'),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_pdfAnexoBytes != null && _pdfAnexoNome != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf_outlined,
+                            size: 18, color: theme.colorScheme.error),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '$_pdfAnexoNome  •  ${(_pdfAnexoBytes!.length / 1024).round()} KB',
+                            style: theme.textTheme.bodySmall,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   key: ValueKey<String>('abra_$_escopo'),

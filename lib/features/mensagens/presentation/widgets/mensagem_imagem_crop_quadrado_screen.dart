@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 
 /// Ecrã de enquadramento: máscara **quadrado** fixo; utilizador faz zoom e arrasta a foto.
 class MensagemImagemCropQuadradoScreen extends StatefulWidget {
-  const MensagemImagemCropQuadradoScreen({super.key, required this.bytesOriginais});
+  const MensagemImagemCropQuadradoScreen(
+      {super.key, required this.bytesOriginais});
 
   final Uint8List bytesOriginais;
 
@@ -85,10 +86,11 @@ class _MensagemImagemCropQuadradoScreenState
                     size: 0.9,
                     aspectRatio: 1,
                   ),
-                  baseColor:
-                      theme.brightness == Brightness.dark ? const Color(0xFF181818) : Colors.white,
-                  maskColor:
-                      Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.55 : 0.45),
+                  baseColor: theme.brightness == Brightness.dark
+                      ? const Color(0xFF181818)
+                      : Colors.white,
+                  maskColor: Colors.black.withValues(
+                      alpha: theme.brightness == Brightness.dark ? 0.55 : 0.45),
                   onCropped: _onCropped,
                   radius: 4,
                 ),

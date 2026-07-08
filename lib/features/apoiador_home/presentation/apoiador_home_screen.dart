@@ -328,6 +328,39 @@ class _MensagemCard extends StatelessWidget {
                   : null,
               imagemUrl: m.imagemUrl,
             ),
+            if (m.pdfUrl != null && m.pdfUrl!.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () async {
+                    final uri = Uri.tryParse(m.pdfUrl!.trim());
+                    if (uri != null && await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.picture_as_pdf_outlined,
+                            size: 18, color: theme.colorScheme.error),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Abrir PDF',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
+                            decoration: TextDecoration.underline,
+                            decorationColor: theme.colorScheme.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),

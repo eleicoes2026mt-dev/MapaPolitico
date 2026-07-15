@@ -47,6 +47,10 @@ class Apoiador {
   final String? origemLugarNome;
   /// URL ou @ do Instagram (opcional).
   final String? linkInstagram;
+  /// Categoria do negócio (ex.: Igreja, Comércio, Escola, Sindicato…).
+  final String? tipoNegocio;
+  /// Nome do estabelecimento/organização (ex.: Igreja Batista Central).
+  final String? nomeNegocio;
 
   const Apoiador({
     required this.id,
@@ -90,6 +94,8 @@ class Apoiador {
     this.origemLugarId,
     this.origemLugarNome,
     this.linkInstagram,
+    this.tipoNegocio,
+    this.nomeNegocio,
   });
 
   factory Apoiador.fromJson(Map<String, dynamic> json) {
@@ -145,6 +151,8 @@ class Apoiador {
       origemLugarId: json['origem_lugar_id'] as String?,
       origemLugarNome: origemNome,
       linkInstagram: json['link_instagram'] as String?,
+      tipoNegocio: json['tipo_negocio'] as String?,
+      nomeNegocio: json['nome_negocio'] as String?,
     );
   }
 
@@ -189,6 +197,8 @@ class Apoiador {
         'bandeira_visual': bandeiraVisualJson,
         'origem_lugar_id': origemLugarId,
         'link_instagram': linkInstagram,
+        'tipo_negocio': tipoNegocio,
+        'nome_negocio': nomeNegocio,
       };
 
   /// Configuração da bandeira: JSON novo ou campos legados.

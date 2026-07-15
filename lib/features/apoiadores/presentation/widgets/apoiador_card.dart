@@ -451,6 +451,24 @@ class _ApoiadorCardState extends ConsumerState<ApoiadorCard> {
                   ],
                 ),
               ],
+              if (apoiador.tipoNegocio != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.store_outlined, size: 18, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        apoiador.nomeNegocio != null && apoiador.nomeNegocio!.trim().isNotEmpty
+                            ? '${apoiador.tipoNegocio}: ${apoiador.nomeNegocio!.trim()}'
+                            : apoiador.tipoNegocio!,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 4),
               Row(
                 children: [

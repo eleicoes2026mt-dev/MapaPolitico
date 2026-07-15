@@ -22,6 +22,7 @@ import '../providers/perfil_provider.dart';
 import '../providers/partidos_provider.dart';
 import '../../../models/partido.dart';
 import '../../../core/constants/amigos_gilberto.dart';
+import '../../../core/constants/tipos_negocio.dart';
 
 /// Cargos (dropdown) conforme solicitado.
 const List<String> cargosOpcoes = [
@@ -573,6 +574,20 @@ class _MeuPerfilScreenState extends ConsumerState<MeuPerfilScreen> {
                     ),
                     const SizedBox(height: 6),
                     if (role == 'apoiador') ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        'Seu negócio (opcional)',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Se você representa uma organização, indique o tipo e o nome. Fica visível para a equipe da campanha.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 10),
+                      const _NegocioApoiadorForm(),
                       const SizedBox(height: 24),
                       Text(
                         'Marcador no mapa',
@@ -1306,6 +1321,147 @@ class _EnderecoAssessorFormBodyState
           'Independente do botão "Salvar perfil" acima.',
           style: theme.textTheme.bodySmall
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Negócio do apoiador ───────────────────────────────────────────────────────
+
+class _NegocioApoiadorForm extends ConsumerWidget {
+  const _NegocioApoiadorForm();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ref.watch(meuApoiadorProvider).when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 8),
+        child: LinearProgressIndicator(minHeight: 2),
+      ),
+      error: (e, _) => const SizedBox.shrink(),
+      data: (ap) {
+        if (ap == null) return const SizedBox.shrink();
+        return _NegocioApoiadorFormBody(apoiador: ap);
+      },
+    );
+  }
+}
+
+class _NegocioApoiadorFormBody extends ConsumerStatefulWidget {
+  const _NegocioApoiadorFormBody({required this.apoiador});
+  final Apoiador apoiador;
+
+  @override
+  ConsumerState<_NegocioApoiadorFormBody> createState() =>
+      _NegocioApoiadorFormBodyState();
+}
+
+class _NegocioApoiadorFormBodyState
+    extends ConsumerState<_NegocioApoiadorFormBody> {
+  String? _tipoSelecionado;
+  late final TextEditingController _nomeNegocio;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tipoSelecionado = widget.apoiador.tipoNegocio;
+    _nomeNegocio =
+        TextEditingController(text: widget.apoiador.nomeNegocio ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _NegocioApoiadorFormBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.apoiador.id != widget.apoiador.id) {
+      _tipoSelecionado = widget.apoiador.tipoNegocio;
+      _nomeNegocio.text = widget.apoiador.nomeNegocio ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _nomeNegocio.dispose();
+    super.dispose();
+  }
+
+  Future<void> _salvar() async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(atualizarApoiadorProvider)(
+        widget.apoiador.id,
+        AtualizarApoiadorParams(
+          tipoNegocio: _tipoSelecionado,
+          nomeNegocio: _nomeNegocio.text,
+          atualizarNegocio: true,
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Negocio salvo.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          value: kTiposNegocio.contains(_tipoSelecionado)
+              ? _tipoSelecionado
+              : null,
+          decoration: const InputDecoration(
+            labelText: 'Tipo de negocio',
+            prefixIcon: Icon(Icons.store_outlined),
+          ),
+          items: [
+            const DropdownMenuItem<String>(
+              value: null,
+              child: Text('Nenhum'),
+            ),
+            ...kTiposNegocio.map(
+              (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
+            ),
+          ],
+          onChanged: (v) => setState(() {
+            _tipoSelecionado = v;
+            if (v == null) _nomeNegocio.clear();
+          }),
+        ),
+        if (_tipoSelecionado != null) ...[
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _nomeNegocio,
+            decoration: InputDecoration(
+              labelText: 'Nome - $_tipoSelecionado',
+              hintText: 'Ex.: Igreja Batista Central, Mercado Boa Sorte...',
+              prefixIcon: const Icon(Icons.label_outline),
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+        ],
+        const SizedBox(height: 12),
+        OutlinedButton(
+          onPressed: _saving ? null : _salvar,
+          child: _saving
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Salvar negocio'),
         ),
       ],
     );

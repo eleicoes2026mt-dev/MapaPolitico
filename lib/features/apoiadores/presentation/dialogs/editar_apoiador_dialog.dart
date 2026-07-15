@@ -11,6 +11,7 @@ import '../../../../core/widgets/municipio_mt_picker_sheet.dart';
 import '../../../../models/apoiador.dart';
 import '../../../../models/benfeitoria.dart';
 import '../../../../models/municipio.dart';
+import '../../../../core/constants/tipos_negocio.dart';
 import '../../../assessores/providers/gestao_campanha_provider.dart';
 import '../../../benfeitorias/providers/benfeitorias_provider.dart';
 import '../../../mapa/data/mt_municipios_coords.dart';
@@ -56,7 +57,9 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
   late final TextEditingController _origemController;
   late final TextEditingController _instagramController;
   late final TextEditingController _nascimentoController;
+  late final TextEditingController _nomeNegocioController;
   late String? _cidadeNome;
+  String? _tipoNegocio;
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
   String? _error;
@@ -98,6 +101,9 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           ? DateFormat('dd/MM/yyyy').format(widget.apoiador.dataNascimento!)
           : '',
     );
+    _nomeNegocioController =
+        TextEditingController(text: widget.apoiador.nomeNegocio ?? '');
+    _tipoNegocio = widget.apoiador.tipoNegocio;
     _cidadeNome = widget.apoiador.cidadeNome;
     _perfil = widget.apoiador.perfil;
   }
@@ -156,6 +162,7 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
     _origemController.dispose();
     _instagramController.dispose();
     _nascimentoController.dispose();
+    _nomeNegocioController.dispose();
     super.dispose();
   }
 
@@ -274,6 +281,11 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
           linkInstagram: _instagramController.text.trim().isEmpty
               ? null
               : _instagramController.text.trim(),
+          atualizarNegocio: true,
+          tipoNegocio: _tipoNegocio,
+          nomeNegocio: _nomeNegocioController.text.trim().isEmpty
+              ? null
+              : _nomeNegocioController.text.trim(),
         ),
       );
       await _sincronizarBenfeitorias(widget.apoiador.id, mid, municipios);
@@ -411,6 +423,45 @@ class _EditarApoiadorDialogState extends ConsumerState<EditarApoiadorDialog> {
                       const InputDecoration(labelText: 'Votos estimados'),
                   keyboardType: TextInputType.number,
                 ),
+                const SizedBox(height: 16),
+                Text('Negócio (opcional)',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: kTiposNegocio.contains(_tipoNegocio)
+                      ? _tipoNegocio
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Tipo de negócio',
+                    prefixIcon: Icon(Icons.store_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: null,
+                      child: Text('— Nenhum —'),
+                    ),
+                    ...kTiposNegocio.map(
+                      (t) => DropdownMenuItem<String>(value: t, child: Text(t)),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _tipoNegocio = v;
+                    if (v == null) _nomeNegocioController.clear();
+                  }),
+                ),
+                if (_tipoNegocio != null) ...[
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _nomeNegocioController,
+                    decoration: InputDecoration(
+                      labelText: 'Nome — $_tipoNegocio',
+                      hintText: 'Ex.: Igreja Batista Central, Mercado Boa Sorte…',
+                      prefixIcon: const Icon(Icons.label_outline),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text('Endereço (opcional)',
                     style: theme.textTheme.titleSmall

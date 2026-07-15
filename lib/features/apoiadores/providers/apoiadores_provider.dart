@@ -326,6 +326,9 @@ class AtualizarApoiadorParams {
     this.atualizarOrigemLugar = false,
     this.linkInstagram,
     this.atualizarLinkInstagram = false,
+    this.tipoNegocio,
+    this.nomeNegocio,
+    this.atualizarNegocio = false,
   });
   final String? nome;
   final String? cidadeNome;
@@ -363,6 +366,11 @@ class AtualizarApoiadorParams {
   final bool atualizarOrigemLugar;
   final String? linkInstagram;
   final bool atualizarLinkInstagram;
+  /// Categoria do negócio (ex.: Igreja, Comércio). Use com [atualizarNegocio].
+  final String? tipoNegocio;
+  /// Nome do estabelecimento (ex.: Igreja Batista Central). Use com [atualizarNegocio].
+  final String? nomeNegocio;
+  final bool atualizarNegocio;
 }
 
 final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiadorId, AtualizarApoiadorParams params)>((ref) {
@@ -397,6 +405,10 @@ final atualizarApoiadorProvider = Provider<Future<void> Function(String apoiador
     }
     if (params.atualizarLinkInstagram) {
       row['link_instagram'] = params.linkInstagram?.trim().isEmpty == true ? null : params.linkInstagram?.trim();
+    }
+    if (params.atualizarNegocio) {
+      row['tipo_negocio'] = params.tipoNegocio?.trim().isEmpty == true ? null : params.tipoNegocio?.trim();
+      row['nome_negocio'] = params.nomeNegocio?.trim().isEmpty == true ? null : params.nomeNegocio?.trim();
     }
     if (params.atualizarEndereco) {
       row['cep'] = params.cep?.trim().isEmpty == true ? null : params.cep?.trim();

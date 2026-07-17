@@ -54,6 +54,11 @@ String _traduzirErroServidor(String raw) {
     return 'Limite de envio de e-mails atingido. Aguarde alguns minutos e tente novamente.\n'
         'Se o problema persistir, configure um servidor SMTP personalizado no Supabase (Auth → Settings → SMTP).';
   }
+  if (lower.contains('error sending invite email') || lower.contains('error sending email') || lower.contains('failed to send')) {
+    return 'Falha ao enviar o e-mail de convite. Verifique as configurações de SMTP no Supabase '
+        '(Auth → Settings → SMTP Settings) — o Host pode estar em branco ou as credenciais incorretas.\n'
+        'Alternativa: desative o SMTP personalizado para usar o e-mail padrão do Supabase.';
+  }
   if (lower.contains('email not confirmed')) {
     return 'E-mail ainda não confirmado. Peça ao usuário que verifique a caixa de entrada (inclusive spam).';
   }

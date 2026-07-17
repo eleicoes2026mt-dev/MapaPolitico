@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/amigos_gilberto.dart';
 import '../../../core/router/navigation_keys.dart';
 import '../../../core/router/profile_role_cache.dart';
@@ -273,6 +276,9 @@ class _NovoAssessorDialog extends ConsumerStatefulWidget {
 }
 
 class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
+  static const _kRateLimitKey = 'email_invite_rate_limit_hit_at';
+  static const _kCooldownMinutes = 60;
+
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
   final _emailController = TextEditingController();
@@ -282,8 +288,61 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
   String? _error;
   int _grauAcesso = 2;
 
+  Timer? _countdownTimer;
+  Duration _remaining = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarCooldown();
+  }
+
+  Future<void> _carregarCooldown() async {
+    final prefs = await SharedPreferences.getInstance();
+    final ms = prefs.getInt(_kRateLimitKey);
+    if (ms == null) return;
+    final hitAt = DateTime.fromMillisecondsSinceEpoch(ms);
+    final fim = hitAt.add(const Duration(minutes: _kCooldownMinutes));
+    final agora = DateTime.now();
+    if (agora.isBefore(fim)) {
+      _remaining = fim.difference(agora);
+      _iniciarTimer();
+    } else {
+      await prefs.remove(_kRateLimitKey);
+    }
+  }
+
+  void _iniciarTimer() {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) {
+        _countdownTimer?.cancel();
+        return;
+      }
+      setState(() {
+        if (_remaining.inSeconds > 0) {
+          _remaining -= const Duration(seconds: 1);
+        } else {
+          _countdownTimer?.cancel();
+          _remaining = Duration.zero;
+          _error = null;
+        }
+      });
+    });
+  }
+
+  bool get _emCooldown => _remaining.inSeconds > 0;
+
+  String get _tempoRestante {
+    final m = _remaining.inMinutes;
+    final s = _remaining.inSeconds % 60;
+    if (m > 0) return '${m}min ${s.toString().padLeft(2, '0')}s';
+    return '${s}s';
+  }
+
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _nomeController.dispose();
     _emailController.dispose();
     _instagramController.dispose();
@@ -327,9 +386,22 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
       }
     } catch (e) {
       if (!mounted) return;
+      final msg = messageFromException(e);
+      // Se for rate limit, salvar timestamp para o cooldown visual.
+      final isRateLimit = msg.toLowerCase().contains('limite de envio') ||
+          msg.toLowerCase().contains('rate limit') ||
+          msg.toLowerCase().contains('too many');
+      if (isRateLimit) {
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setInt(
+              _kRateLimitKey, DateTime.now().millisecondsSinceEpoch);
+        });
+        _remaining = const Duration(minutes: _kCooldownMinutes);
+        _iniciarTimer();
+      }
       setState(() {
         _loading = false;
-        _error = messageFromException(e);
+        _error = msg;
       });
     }
   }
@@ -417,6 +489,43 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
                 const SizedBox(height: 12),
                 Text(_error!, style: TextStyle(color: theme.colorScheme.error, fontSize: 12)),
               ],
+              if (_emCooldown) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.errorContainer.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: theme.colorScheme.error.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.timer_outlined,
+                          size: 18, color: theme.colorScheme.error),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text.rich(
+                          TextSpan(children: [
+                            const TextSpan(text: 'Liberado em '),
+                            TextSpan(
+                              text: _tempoRestante,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.error,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
+                              ),
+                            ),
+                          ]),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -427,7 +536,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
           child: const Text('Cancelar'),
         ),
         FilledButton(
-          onPressed: _loading ? null : _submit,
+          onPressed: (_loading || _emCooldown) ? null : _submit,
           child: _loading ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Enviar convite'),
         ),
       ],

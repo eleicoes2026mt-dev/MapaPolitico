@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/widgets/pwa_install_banner.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../assessores/providers/gestao_campanha_provider.dart';
 import '../../mapa/providers/mapa_visual_prefs_provider.dart';
 import '../providers/movimentacao_logs_provider.dart';
+import '../providers/admin_usuarios_provider.dart';
 
 /// Configurações da campanha: preferências e utilitários (ex.: movimentação Supabase para o candidato).
 class ConfiguracoesScreen extends ConsumerWidget {
@@ -15,6 +17,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final profile = ref.watch(profileProvider).valueOrNull;
     final mostrarRegistoMovimentacao = profile?.role == 'candidato';
+    final gestaoCompleta = ref.watch(podeGestaoCampanhaCompletaProvider);
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -34,6 +37,10 @@ class ConfiguracoesScreen extends ConsumerWidget {
           const PwaInstallBanner(),
           const SizedBox(height: 24),
           const _MapaRegionalPrefsCard(),
+          if (gestaoCompleta) ...[
+            const SizedBox(height: 24),
+            const _GerenciarUsuariosCard(),
+          ],
           if (mostrarRegistoMovimentacao) ...[
             const SizedBox(height: 24),
             const _RegistroMovimentacaoSupabaseCard(),
@@ -41,6 +48,266 @@ class ConfiguracoesScreen extends ConsumerWidget {
         ],
       ),
     ),
+    );
+  }
+}
+
+// ── Gerenciar Usuários (candidato + assessor grau 1) ─────────────────────────
+
+class _GerenciarUsuariosCard extends ConsumerStatefulWidget {
+  const _GerenciarUsuariosCard();
+
+  @override
+  ConsumerState<_GerenciarUsuariosCard> createState() =>
+      _GerenciarUsuariosCardState();
+}
+
+class _GerenciarUsuariosCardState
+    extends ConsumerState<_GerenciarUsuariosCard> {
+  final _buscaCtrl = TextEditingController();
+  List<AdminUsuario>? _resultados;
+  bool _carregando = false;
+  String? _erro;
+
+  @override
+  void dispose() {
+    _buscaCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _buscar() async {
+    setState(() {
+      _carregando = true;
+      _erro = null;
+    });
+    try {
+      final fn = ref.read(adminBuscarUsuariosProvider);
+      final lista = await fn(_buscaCtrl.text.trim());
+      if (mounted) setState(() => _resultados = lista);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _erro = e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted) setState(() => _carregando = false);
+    }
+  }
+
+  Future<void> _confirmarExclusao(BuildContext ctx, AdminUsuario u) async {
+    final confirma = await showDialog<bool>(
+      context: ctx,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Excluir usuário'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Tem certeza que deseja excluir este usuário do sistema?'),
+            const SizedBox(height: 12),
+            Text('Nome: ${u.nome}',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            if (u.email != null) Text('E-mail: ${u.email}'),
+            Text('Função: ${u.papelLabel}'),
+            const SizedBox(height: 12),
+            Text(
+              'Esta ação é irreversível. Todos os dados do usuário serão removidos.',
+              style: TextStyle(
+                color: Theme.of(dialogCtx).colorScheme.error,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogCtx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirma != true || !mounted) return;
+
+    setState(() => _carregando = true);
+    try {
+      final fn = ref.read(adminDeletarUsuarioProvider);
+      await fn(u.uid);
+      if (mounted) {
+        setState(() {
+          _resultados?.removeWhere((x) => x.uid == u.uid);
+          _carregando = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Usuário "${u.nome}" excluído com sucesso.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _carregando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final fmt = DateFormat('dd/MM/yyyy HH:mm');
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header
+            Row(
+              children: [
+                Icon(Icons.manage_accounts_outlined,
+                    color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Gerenciar usuários (autenticação)',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Busque por nome ou e-mail para localizar um cadastro e excluí-lo do sistema. '
+              'A exclusão remove o acesso à plataforma de forma permanente.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Campo de busca
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _buscaCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome ou e-mail',
+                      hintText: 'Deixe em branco para listar todos',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onSubmitted: (_) => _buscar(),
+                    textInputAction: TextInputAction.search,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.tonalIcon(
+                  onPressed: _carregando ? null : _buscar,
+                  icon: _carregando
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.search, size: 18),
+                  label: const Text('Buscar'),
+                ),
+              ],
+            ),
+
+            // ── Erro
+            if (_erro != null) ...[
+              const SizedBox(height: 10),
+              Text(_erro!,
+                  style: TextStyle(
+                      color: theme.colorScheme.error, fontSize: 12)),
+            ],
+
+            // ── Resultados
+            if (_resultados != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                '${_resultados!.length} resultado(s)',
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 8),
+              if (_resultados!.isEmpty)
+                Text(
+                  'Nenhum usuário encontrado.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 400),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: _resultados!.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (ctx, i) {
+                      final u = _resultados![i];
+                      return ListTile(
+                        dense: true,
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 4),
+                        leading: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: u.ativo
+                              ? theme.colorScheme.primaryContainer
+                              : theme.colorScheme.errorContainer,
+                          child: Text(
+                            u.nome.isNotEmpty ? u.nome[0].toUpperCase() : '?',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: u.ativo
+                                  ? theme.colorScheme.onPrimaryContainer
+                                  : theme.colorScheme.onErrorContainer,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          u.nome,
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${u.email ?? 'sem e-mail'}  •  ${u.papelLabel}'
+                          '${u.ativo ? '' : '  •  inativo'}'
+                          '\nCadastro: ${fmt.format(u.criadoEm)}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        isThreeLine: true,
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              color: theme.colorScheme.error),
+                          tooltip: 'Excluir usuário',
+                          onPressed: () => _confirmarExclusao(ctx, u),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

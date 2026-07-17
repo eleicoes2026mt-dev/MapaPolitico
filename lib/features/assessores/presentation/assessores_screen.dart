@@ -329,7 +329,7 @@ class _NovoAssessorDialogState extends ConsumerState<_NovoAssessorDialog> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e is Exception ? e.toString().replaceFirst('Exception: ', '') : e.toString();
+        _error = messageFromException(e);
       });
     }
   }

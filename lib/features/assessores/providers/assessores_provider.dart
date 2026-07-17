@@ -24,23 +24,43 @@ final meuAssessorIdProvider = FutureProvider<String?>((ref) async {
 String messageFromException(Object e) {
   if (e is FunctionException) {
     final d = e.details;
+    String raw = '';
     if (d is Map && d.containsKey('error')) {
       final msg = d['error'];
-      if (msg is String) return msg;
+      if (msg is String) raw = msg;
+    } else if (d != null) {
+      raw = d.toString();
     }
-    if (d != null) return d.toString();
+    if (raw.isEmpty) raw = e.toString();
+    return _traduzirErroServidor(raw);
   }
   // PostgREST (RPC/tabela): função ausente, RLS, coluna inexistente, etc.
   try {
     final dynamic x = e;
     final m = x.message;
-    if (m is String && m.trim().isNotEmpty) return m.trim();
+    if (m is String && m.trim().isNotEmpty) return _traduzirErroServidor(m.trim());
     final c = x.code;
     final details = x.details;
     if (c != null && details != null) return '$c: $details';
   } catch (_) {}
-  if (e is Exception) return e.toString().replaceFirst('Exception: ', '');
-  return e.toString();
+  if (e is Exception) return _traduzirErroServidor(e.toString().replaceFirst('Exception: ', ''));
+  return _traduzirErroServidor(e.toString());
+}
+
+/// Substitui padrões técnicos do servidor por mensagens em português amigáveis.
+String _traduzirErroServidor(String raw) {
+  final lower = raw.toLowerCase();
+  if (lower.contains('rate limit') || lower.contains('rate_limit') || lower.contains('too many requests')) {
+    return 'Limite de envio de e-mails atingido. Aguarde alguns minutos e tente novamente.\n'
+        'Se o problema persistir, configure um servidor SMTP personalizado no Supabase (Auth → Settings → SMTP).';
+  }
+  if (lower.contains('email not confirmed')) {
+    return 'E-mail ainda não confirmado. Peça ao usuário que verifique a caixa de entrada (inclusive spam).';
+  }
+  if (lower.contains('invalid email')) {
+    return 'Endereço de e-mail inválido. Verifique se está correto.';
+  }
+  return raw;
 }
 
 /// UUID devolvido por RPCs Postgres (por vezes String, lista ou mapa).
@@ -230,7 +250,12 @@ Future<ConvidarAssessorResult> convidarAssessor({
   };
   // Abre direto na tela de definir senha após o clique no e-mail (path URL + Redirect URLs no Supabase).
   body['redirect_to'] = EnvConfig.webInviteRedirectTo;
-  final res = await supabase.functions.invoke('convidar-assessor', body: body);
+  late final dynamic res;
+  try {
+    res = await supabase.functions.invoke('convidar-assessor', body: body);
+  } on FunctionException catch (e) {
+    throw Exception(messageFromException(e));
+  }
   if (res.status == 401) {
     throw Exception(
       'Sessão expirada. Faça logout, entre novamente e tente enviar o convite.',
@@ -273,8 +298,12 @@ Future<String?> reenviarConviteAssessor(Assessor assessor) async {
       'assessor_id': assessor.id,
       'redirect_to': EnvConfig.webInviteRedirectTo,
     };
-    final res = await supabase.functions
-        .invoke('reenviar-convite-assessor', body: body);
+    late final dynamic res;
+    try {
+      res = await supabase.functions.invoke('reenviar-convite-assessor', body: body);
+    } on FunctionException catch (e) {
+      throw Exception(messageFromException(e));
+    }
     if (res.status == 401) {
       throw Exception('Sessão expirada. Faça logout e entre novamente.');
     }
